@@ -53,25 +53,6 @@ class ChatCompletionAdapter(ABC, BaseModel):
         raise NotImplementedError
 
 
-class TextCompletionAdapter(ABC, BaseModel):
-    class Config:
-        arbitrary_types_allowed = True
-
-    @abstractmethod
-    async def predict(
-        self, consumer: Consumer, params: ModelParameters, prompt: str
-    ) -> None:
-        pass
-
-    async def count_prompt_tokens(
-        self, params: ModelParameters, prompt: str
-    ) -> int:
-        raise NotImplementedError
-
-    async def count_completion_tokens(self, string: str) -> int:
-        raise NotImplementedError
-
-
 def default_preprocess_messages(
     messages: List[Message],
 ) -> ListProjection[Message]:

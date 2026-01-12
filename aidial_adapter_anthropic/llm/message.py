@@ -325,7 +325,6 @@ ToolMessage = Union[
 
 
 def parse_dial_message(msg: DialMessage) -> BaseMessage | ToolMessage:
-
     message = (
         SystemMessage.from_message(msg)
         or HumanRegularMessage.from_message(msg)
