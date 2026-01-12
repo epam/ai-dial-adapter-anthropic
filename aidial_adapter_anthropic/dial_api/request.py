@@ -82,6 +82,9 @@ class ModelParameters(BaseModel):
             configuration=configuration,
         )
 
+    def add_stop_sequences(self, stop: List[str]) -> "ModelParameters":
+        return self.copy(update={"stop": [*self.stop, *stop]})
+
     @property
     def tools_mode(self) -> ToolsMode | None:
         if self.tool_config is not None:
