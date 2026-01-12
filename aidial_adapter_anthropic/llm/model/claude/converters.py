@@ -35,13 +35,13 @@ from aidial_adapter_anthropic.llm.message import (
 from aidial_adapter_anthropic.llm.model.attachment_processor import (
     AttachmentProcessors,
 )
-from aidial_adapter_anthropic.llm.model.claude.v3.blocks import (
+from aidial_adapter_anthropic.llm.model.claude.blocks import (
     create_text_block,
     create_tool_result_block,
     create_tool_use_block,
 )
-from aidial_adapter_anthropic.llm.model.claude.v3.config import Configuration
-from aidial_adapter_anthropic.llm.model.claude.v3.state import (
+from aidial_adapter_anthropic.llm.model.claude.config import Configuration
+from aidial_adapter_anthropic.llm.model.claude.state import (
     get_message_content_from_state,
 )
 from aidial_adapter_anthropic.llm.tools.tools_config import (

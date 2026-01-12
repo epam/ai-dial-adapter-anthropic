@@ -1,4 +1,4 @@
-import aidial_adapter_anthropic.llm.model.claude.v3.adapter as claude_v3
+import aidial_adapter_anthropic.llm.model.claude.adapter as claude_v3
 from aidial_adapter_anthropic.bedrock import create_anthropic_client
 from aidial_adapter_anthropic.llm.chat_model import ChatCompletionAdapter
 from aidial_adapter_anthropic.upstream_config import UpstreamConfig
@@ -13,6 +13,7 @@ async def get_bedrock_adapter(
         deployment,
         api_key,
         client,
+        1536,
         supports_thinking=True,
         supports_documents=True,
     )

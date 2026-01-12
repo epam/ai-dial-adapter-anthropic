@@ -89,33 +89,32 @@ from aidial_adapter_anthropic.llm.message import parse_dial_message
 from aidial_adapter_anthropic.llm.model.attachment_processor import (
     AttachmentProcessors,
 )
-from aidial_adapter_anthropic.llm.model.claude.v3.blocks import (
+from aidial_adapter_anthropic.llm.model.claude.blocks import (
     IMAGE_ATTACHMENT_PROCESSOR,
     PDF_ATTACHMENT_PROCESSOR,
     TEXT_ATTACHMENT_PROCESSOR,
     create_text_block,
 )
-from aidial_adapter_anthropic.llm.model.claude.v3.config import (
+from aidial_adapter_anthropic.llm.model.claude.config import (
     ClaudeConfiguration,
     ClaudeConfigurationWithThinking,
 )
-from aidial_adapter_anthropic.llm.model.claude.v3.converters import (
+from aidial_adapter_anthropic.llm.model.claude.converters import (
     to_claude_messages,
     to_claude_tool_config,
     to_dial_finish_reason,
     to_dial_usage,
 )
-from aidial_adapter_anthropic.llm.model.claude.v3.params import ClaudeParameters
-from aidial_adapter_anthropic.llm.model.claude.v3.state import MessageState
-from aidial_adapter_anthropic.llm.model.claude.v3.tokenizer import (
+from aidial_adapter_anthropic.llm.model.claude.params import ClaudeParameters
+from aidial_adapter_anthropic.llm.model.claude.state import MessageState
+from aidial_adapter_anthropic.llm.model.claude.tokenizer import (
     create_tokenizer,
     tokenize_text,
 )
-from aidial_adapter_anthropic.llm.model.claude.v3.tools import (
+from aidial_adapter_anthropic.llm.model.claude.tools import (
     function_to_tool_messages,
     process_tools_block,
 )
-from aidial_adapter_anthropic.llm.model.conf import CLAUDE_DEFAULT_MAX_TOKENS
 from aidial_adapter_anthropic.llm.tools.tools_config import ToolsMode
 from aidial_adapter_anthropic.llm.truncate_prompt import (
     DiscardedMessages,
@@ -156,6 +155,7 @@ async def create_adapter(
     deployment: str,
     api_key: str,
     client: AsyncAnthropicBedrock | AsyncAnthropic,
+    default_max_tokens: int,
     supports_thinking: bool,
     supports_documents: bool,
 ) -> ChatCompletionAdapter:
@@ -165,6 +165,7 @@ async def create_adapter(
         deployment=deployment,
         storage=storage,
         client=client,
+        default_max_tokens=default_max_tokens,
         supports_documents=supports_documents,
         supports_thinking=supports_thinking,
     )
@@ -180,6 +181,7 @@ class Adapter(ChatCompletionAdapter):
     storage: Optional[FileStorage]
     client: AsyncAnthropicBedrock | AsyncAnthropic
 
+    default_max_tokens: int
     supports_thinking: bool
     supports_documents: bool
 
@@ -238,8 +240,7 @@ class Adapter(ChatCompletionAdapter):
             # modifications as well as forced tool use.
             temperature = omit
 
-        if (max_tokens := params.max_tokens) is None:
-            max_tokens = CLAUDE_DEFAULT_MAX_TOKENS
+        max_tokens = params.max_tokens or self.default_max_tokens
 
         claude_params = ClaudeParameters(
             max_tokens=max_tokens,

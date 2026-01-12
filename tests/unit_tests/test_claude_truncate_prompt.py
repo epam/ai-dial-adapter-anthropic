@@ -9,7 +9,7 @@ from aidial_sdk.exceptions import HTTPException as DialException
 from aidial_adapter_anthropic.bedrock import create_anthropic_client
 from aidial_adapter_anthropic.dial_api.request import ModelParameters
 from aidial_adapter_anthropic.llm.chat_model import ChatCompletionAdapter
-from aidial_adapter_anthropic.llm.model.claude.v3.adapter import create_adapter
+from aidial_adapter_anthropic.llm.model.claude.adapter import create_adapter
 from aidial_adapter_anthropic.llm.tools.tools_config import (
     ToolsConfig,
     ToolsMode,
@@ -26,6 +26,7 @@ async def model():
     return await create_adapter(
         deployment="test-anthropic-deployment",
         api_key="test-anthropic-api-key",
+        default_max_tokens=1024,
         client=client,
         supports_thinking=True,
         supports_documents=True,
@@ -74,7 +75,7 @@ _PNG_IMAGE_50_50_TOKENS = math.ceil((50 * 50) / 750.0)
 @pytest.fixture
 def mock_tokenize_text():
     with patch(
-        "aidial_adapter_anthropic.llm.model.claude.v3.tokenizer.tokenize_text"
+        "aidial_adapter_anthropic.llm.model.claude.tokenizer.tokenize_text"
     ) as mock:
 
         def _tokenize(txt: str):
