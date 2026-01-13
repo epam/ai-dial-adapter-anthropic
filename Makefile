@@ -8,7 +8,7 @@ POETRY ?= $(VENV_DIR)/bin/poetry
 POETRY_VERSION ?= 2.1.1
 ARGS ?=
 
-.PHONY: all init_env install build serve clean lint format test integration_tests docker_serve
+.PHONY: all init_env install build clean lint format test
 
 all: build
 
@@ -23,9 +23,6 @@ install: init_env
 build: install
 	$(POETRY) build
 
-serve: install
-	$(POETRY) run uvicorn "aidial_adapter_anthropic._server.app:app" --reload --host "0.0.0.0" --port $(PORT) --workers=1 --env-file ./.env
-
 clean:
 	$(POETRY) run python -m scripts.clean
 	$(POETRY) env remove --all
@@ -38,10 +35,3 @@ format: install
 
 test: install
 	$(POETRY) run -- nox -s test -- $(ARGS)
-
-integration_tests: install
-	$(POETRY) run -- nox -s integration_tests -- $(ARGS)
-
-docker_serve:
-	$(DOCKER) build --platform $(PLATFORM) -t $(IMAGE_NAME):dev .
-	$(DOCKER) run --platform $(PLATFORM) --env-file ./.env --rm -p $(PORT):5000 $(IMAGE_NAME):dev

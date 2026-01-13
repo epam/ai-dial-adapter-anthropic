@@ -2,29 +2,25 @@ import math
 from typing import List
 from unittest.mock import patch
 
+import anthropic
 import pytest
 from aidial_sdk.chat_completion import Function, Message, Tool
 from aidial_sdk.exceptions import HTTPException as DialException
 
 from aidial_adapter_anthropic.adapter.base import ChatCompletionAdapter
 from aidial_adapter_anthropic.adapter.truncate_prompt import DiscardedMessages
-from aidial_adapter_anthropic.anthropic_client import create_anthropic_client
 from aidial_adapter_anthropic.claude.adapter import create_adapter
 from aidial_adapter_anthropic.dial.request import ModelParameters
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
-from aidial_adapter_anthropic.upstream_config import AWSUpstreamConfig
 from tests.utils.messages import ai, sys, user, user_with_image
 
 
 @pytest.fixture
 async def model():
-    upstream_config = AWSUpstreamConfig(region="us-east-1")
-    client = await create_anthropic_client(upstream_config)
-
     return await create_adapter(
         deployment="test-anthropic-deployment",
         api_key="test-anthropic-api-key",
-        client=client,
+        client=anthropic.AsyncAnthropic(),
         default_max_tokens=1024,
         supports_thinking=True,
         supports_documents=True,
