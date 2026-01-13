@@ -6,7 +6,7 @@ from anthropic.types.beta import BetaContentBlock as ContentBlock
 from anthropic.types.beta import BetaContentBlockParam as ContentBlockParam
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic.llm.message import (
+from aidial_adapter_anthropic.dial._message import (
     AIRegularMessage,
     AIToolCallMessage,
 )

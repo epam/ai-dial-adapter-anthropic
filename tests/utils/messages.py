@@ -1,6 +1,6 @@
 from aidial_sdk.chat_completion import Attachment, CustomContent, Message
 
-from aidial_adapter_anthropic.llm.message import (
+from aidial_adapter_anthropic.dial._message import (
     AIRegularMessage,
     HumanRegularMessage,
     SystemMessage,

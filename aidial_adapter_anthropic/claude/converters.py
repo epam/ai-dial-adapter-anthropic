@@ -22,9 +22,17 @@ from anthropic.types.beta import BetaToolParam as ToolParam
 from anthropic.types.beta import BetaUsage as Usage
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic.dial_api.token_usage import TokenUsage
-from aidial_adapter_anthropic.llm.errors import ValidationError
-from aidial_adapter_anthropic.llm.message import (
+from aidial_adapter_anthropic._utils.list import group_by
+from aidial_adapter_anthropic._utils.list_projection import ListProjection
+from aidial_adapter_anthropic.adapter.errors import ValidationError
+from aidial_adapter_anthropic.claude.blocks import (
+    create_text_block,
+    create_tool_result_block,
+    create_tool_use_block,
+)
+from aidial_adapter_anthropic.claude.config import Configuration
+from aidial_adapter_anthropic.claude.state import get_message_content_from_state
+from aidial_adapter_anthropic.dial._message import (
     AIRegularMessage,
     AIToolCallMessage,
     BaseMessage,
@@ -32,24 +40,9 @@ from aidial_adapter_anthropic.llm.message import (
     HumanToolResultMessage,
     SystemMessage,
 )
-from aidial_adapter_anthropic.llm.model.attachment_processor import (
-    AttachmentProcessors,
-)
-from aidial_adapter_anthropic.llm.model.claude.blocks import (
-    create_text_block,
-    create_tool_result_block,
-    create_tool_use_block,
-)
-from aidial_adapter_anthropic.llm.model.claude.config import Configuration
-from aidial_adapter_anthropic.llm.model.claude.state import (
-    get_message_content_from_state,
-)
-from aidial_adapter_anthropic.llm.tools.tools_config import (
-    ToolsConfig,
-    ToolsMode,
-)
-from aidial_adapter_anthropic.utils.list import group_by
-from aidial_adapter_anthropic.utils.list_projection import ListProjection
+from aidial_adapter_anthropic.dial.attachments import AttachmentProcessors
+from aidial_adapter_anthropic.dial.token_usage import TokenUsage
+from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 
 _claude_cache_breakpoint = CacheControlEphemeralParam(type="ephemeral")
 

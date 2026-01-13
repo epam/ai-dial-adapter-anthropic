@@ -7,7 +7,7 @@ from typing import Any, Callable, Coroutine, ParamSpec, Tuple, TypeVar
 
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic.utils.datetime import ensure_utc, now_utc
+from aidial_adapter_anthropic._utils.datetime import ensure_utc, now_utc
 
 log = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ from aidial_sdk.exceptions import (
 )
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic.utils.list import (
+from aidial_adapter_anthropic._utils.list import (
     omit_by_indices,
     select_by_indices,
 )

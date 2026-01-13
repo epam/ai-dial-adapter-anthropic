@@ -27,28 +27,47 @@ from aidial_sdk.deployment.truncate_prompt import (
 )
 from typing_extensions import override
 
-from aidial_adapter_anthropic.dial_api.request import ModelParameters
-from aidial_adapter_anthropic.llm.chat_model import ChatCompletionAdapter
-from aidial_adapter_anthropic.llm.consumer import ChoiceConsumer
-from aidial_adapter_anthropic.llm.errors import UserError, ValidationError
-from aidial_adapter_anthropic.llm.model.adapter import get_bedrock_adapter
-from aidial_adapter_anthropic.server.exceptions import (
+from aidial_adapter_anthropic._server.exceptions import (
     dial_exception_decorator,
     not_implemented_handler,
 )
-from aidial_adapter_anthropic.upstream_config import parse_upstream_config
+from aidial_adapter_anthropic.adapter.base import ChatCompletionAdapter
+from aidial_adapter_anthropic.adapter.errors import UserError, ValidationError
+from aidial_adapter_anthropic.anthropic_client import create_anthropic_client
+from aidial_adapter_anthropic.claude.adapter import create_adapter
+from aidial_adapter_anthropic.dial.consumer import ChoiceConsumer
+from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.upstream_config import (
+    UpstreamConfig,
+    parse_upstream_config,
+)
 
 log = logging.getLogger(__name__)
 
 
-class BedrockChatCompletion(ChatCompletion):
+class AnthropicChatCompletion(ChatCompletion):
     def _get_deployment(self, request: FromRequestDeploymentMixin) -> str:
         return request.original_request.path_params["deployment_id"]
+
+    @staticmethod
+    async def _get_adapter(
+        *, deployment: str, api_key: str, upstream_config: UpstreamConfig
+    ) -> ChatCompletionAdapter:
+        client = await create_anthropic_client(upstream_config)
+
+        return await create_adapter(
+            deployment,
+            api_key,
+            client,
+            1536,
+            supports_thinking=True,
+            supports_documents=True,
+        )
 
     async def _get_model(
         self, request: FromRequestDeploymentMixin
     ) -> ChatCompletionAdapter:
-        return await get_bedrock_adapter(
+        return await self._get_adapter(
             deployment=self._get_deployment(request),
             api_key=request.api_key,
             upstream_config=await parse_upstream_config(request),

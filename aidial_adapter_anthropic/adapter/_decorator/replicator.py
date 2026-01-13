@@ -3,12 +3,12 @@ from typing import List
 
 from aidial_sdk.chat_completion import Message
 
-from aidial_adapter_anthropic.dial_api.request import ModelParameters
-from aidial_adapter_anthropic.llm.consumer import Consumer
-from aidial_adapter_anthropic.llm.decorator.base import (
+from aidial_adapter_anthropic.adapter._decorator.base import (
     ChatCompletionDecorator,
     ChatCompletionTransformer,
 )
+from aidial_adapter_anthropic.dial.consumer import Consumer
+from aidial_adapter_anthropic.dial.request import ModelParameters
 
 
 def replicator_decorator() -> ChatCompletionTransformer:

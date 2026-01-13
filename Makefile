@@ -24,7 +24,7 @@ build: install
 	$(POETRY) build
 
 serve: install
-	$(POETRY) run uvicorn "aidial_adapter_anthropic.app:app" --reload --host "0.0.0.0" --port $(PORT) --workers=1 --env-file ./.env
+	$(POETRY) run uvicorn "aidial_adapter_anthropic._server.app:app" --reload --host "0.0.0.0" --port $(PORT) --workers=1 --env-file ./.env
 
 clean:
 	$(POETRY) run python -m scripts.clean

@@ -2,11 +2,11 @@ from typing import List, Optional
 
 from aidial_sdk.chat_completion import Message
 
-from aidial_adapter_anthropic.llm.chat_model import (
+from aidial_adapter_anthropic.adapter.base import (
     keep_last_and_system_messages,
     trivial_partitioner,
 )
-from aidial_adapter_anthropic.llm.truncate_prompt import (
+from aidial_adapter_anthropic.adapter.truncate_prompt import (
     DiscardedMessages,
     TruncatePromptError,
     _partition_indexer,

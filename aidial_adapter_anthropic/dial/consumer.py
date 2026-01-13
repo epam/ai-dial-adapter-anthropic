@@ -14,9 +14,9 @@ from aidial_sdk.chat_completion import (
     ToolCall,
 )
 
-from aidial_adapter_anthropic.dial_api.token_usage import TokenUsage
-from aidial_adapter_anthropic.llm.lazy_stage import LazyStage
-from aidial_adapter_anthropic.llm.truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.adapter.truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.dial.lazy_stage import LazyStage
+from aidial_adapter_anthropic.dial.token_usage import TokenUsage
 
 
 class _ArgumentConsumer(Protocol):

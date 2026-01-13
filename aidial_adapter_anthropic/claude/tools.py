@@ -5,9 +5,8 @@ from typing import assert_never
 from aidial_sdk.chat_completion import FunctionCall, ToolCall
 from anthropic.types.beta import BetaToolUseBlock as ToolUseBlock
 
-from aidial_adapter_anthropic.llm.consumer import Consumer, ToolUseMessage
-from aidial_adapter_anthropic.llm.errors import ValidationError
-from aidial_adapter_anthropic.llm.message import (
+from aidial_adapter_anthropic.adapter.errors import ValidationError
+from aidial_adapter_anthropic.dial._message import (
     AIFunctionCallMessage,
     AIRegularMessage,
     AIToolCallMessage,
@@ -18,7 +17,8 @@ from aidial_adapter_anthropic.llm.message import (
     SystemMessage,
     ToolMessage,
 )
-from aidial_adapter_anthropic.llm.tools.tools_config import ToolsMode
+from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
+from aidial_adapter_anthropic.dial.tools import ToolsMode
 
 log = logging.getLogger(__name__)
 

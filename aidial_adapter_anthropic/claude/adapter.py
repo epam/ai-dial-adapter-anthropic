@@ -63,65 +63,63 @@ from anthropic.types.beta import (
     BetaWebSearchToolResultBlock as WebSearchToolResultBlock,
 )
 
-from aidial_adapter_anthropic.dial_api.request import (
-    ModelParameters as DialParameters,
+from aidial_adapter_anthropic._utils.json import json_dumps_short
+from aidial_adapter_anthropic._utils.list_projection import ListProjection
+from aidial_adapter_anthropic.adapter._decorator.base import compose_decorators
+from aidial_adapter_anthropic.adapter._decorator.preprocess import (
+    preprocess_messages_decorator,
 )
-from aidial_adapter_anthropic.dial_api.storage import (
-    FileStorage,
-    create_file_storage,
+from aidial_adapter_anthropic.adapter._decorator.replicator import (
+    replicator_decorator,
 )
-from aidial_adapter_anthropic.llm.chat_model import (
+from aidial_adapter_anthropic.adapter.base import (
     ChatCompletionAdapter,
     default_preprocess_messages,
     keep_last,
     turn_based_partitioner,
 )
-from aidial_adapter_anthropic.llm.consumer import Consumer, ToolUseMessage
-from aidial_adapter_anthropic.llm.decorator.base import compose_decorators
-from aidial_adapter_anthropic.llm.decorator.preprocess_messages import (
-    preprocess_messages_decorator,
+from aidial_adapter_anthropic.adapter.errors import ValidationError
+from aidial_adapter_anthropic.adapter.truncate_prompt import (
+    DiscardedMessages,
+    truncate_prompt,
 )
-from aidial_adapter_anthropic.llm.decorator.replicator import (
-    replicator_decorator,
-)
-from aidial_adapter_anthropic.llm.errors import ValidationError
-from aidial_adapter_anthropic.llm.message import parse_dial_message
-from aidial_adapter_anthropic.llm.model.attachment_processor import (
-    AttachmentProcessors,
-)
-from aidial_adapter_anthropic.llm.model.claude.blocks import (
+from aidial_adapter_anthropic.claude.blocks import (
     IMAGE_ATTACHMENT_PROCESSOR,
     PDF_ATTACHMENT_PROCESSOR,
     TEXT_ATTACHMENT_PROCESSOR,
     create_text_block,
 )
-from aidial_adapter_anthropic.llm.model.claude.config import (
+from aidial_adapter_anthropic.claude.config import (
     ClaudeConfiguration,
     ClaudeConfigurationWithThinking,
 )
-from aidial_adapter_anthropic.llm.model.claude.converters import (
+from aidial_adapter_anthropic.claude.converters import (
     to_claude_messages,
     to_claude_tool_config,
     to_dial_finish_reason,
     to_dial_usage,
 )
-from aidial_adapter_anthropic.llm.model.claude.params import ClaudeParameters
-from aidial_adapter_anthropic.llm.model.claude.state import MessageState
-from aidial_adapter_anthropic.llm.model.claude.tokenizer import (
+from aidial_adapter_anthropic.claude.params import ClaudeParameters
+from aidial_adapter_anthropic.claude.state import MessageState
+from aidial_adapter_anthropic.claude.tokenizer import (
     create_tokenizer,
     tokenize_text,
 )
-from aidial_adapter_anthropic.llm.model.claude.tools import (
+from aidial_adapter_anthropic.claude.tools import (
     function_to_tool_messages,
     process_tools_block,
 )
-from aidial_adapter_anthropic.llm.tools.tools_config import ToolsMode
-from aidial_adapter_anthropic.llm.truncate_prompt import (
-    DiscardedMessages,
-    truncate_prompt,
+from aidial_adapter_anthropic.dial._message import parse_dial_message
+from aidial_adapter_anthropic.dial._storage import (
+    FileStorage,
+    create_file_storage,
 )
-from aidial_adapter_anthropic.utils.json import json_dumps_short
-from aidial_adapter_anthropic.utils.list_projection import ListProjection
+from aidial_adapter_anthropic.dial.attachments import AttachmentProcessors
+from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
+from aidial_adapter_anthropic.dial.request import (
+    ModelParameters as DialParameters,
+)
+from aidial_adapter_anthropic.dial.tools import ToolsMode
 
 log = logging.getLogger(__name__)
 

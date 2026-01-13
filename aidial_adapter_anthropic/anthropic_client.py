@@ -6,12 +6,12 @@ import anthropic
 import httpx
 from anthropic import AsyncAnthropic, AsyncAnthropicBedrock
 
+from aidial_adapter_anthropic._utils.cache import ttl_cache
+from aidial_adapter_anthropic._utils.env import get_env_int
 from aidial_adapter_anthropic.upstream_config import (
     ApiKeyUpstreamConfig,
     UpstreamConfig,
 )
-from aidial_adapter_anthropic.utils.cache import ttl_cache
-from aidial_adapter_anthropic.utils.env import get_env_int
 
 Body = dict
 Headers = Mapping[str, str]

@@ -3,10 +3,10 @@ from typing import Callable, List
 from aidial_sdk.chat_completion import Message
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic.dial_api.request import ModelParameters
-from aidial_adapter_anthropic.llm.chat_model import ChatCompletionAdapter
-from aidial_adapter_anthropic.llm.consumer import Consumer
-from aidial_adapter_anthropic.llm.truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.adapter.base import ChatCompletionAdapter
+from aidial_adapter_anthropic.adapter.truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.dial.consumer import Consumer
+from aidial_adapter_anthropic.dial.request import ModelParameters
 
 
 class ChatCompletionDecorator(ChatCompletionAdapter):

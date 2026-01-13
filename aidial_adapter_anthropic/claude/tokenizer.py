@@ -79,8 +79,8 @@ from anthropic.types.beta import (
 from anthropic.types.beta.beta_image_block_param import Source
 from PIL import Image
 
-from aidial_adapter_anthropic.llm.model.claude.params import ClaudeParameters
-from aidial_adapter_anthropic.llm.tokenize import default_tokenize_string
+from aidial_adapter_anthropic.adapter.tokenize import default_tokenize_string
+from aidial_adapter_anthropic.claude.params import ClaudeParameters
 
 log = logging.getLogger(__name__)
 

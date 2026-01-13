@@ -2,14 +2,14 @@ from typing import Callable, List
 
 from aidial_sdk.chat_completion import Message
 
-from aidial_adapter_anthropic.dial_api.request import ModelParameters
-from aidial_adapter_anthropic.llm.consumer import Consumer
-from aidial_adapter_anthropic.llm.decorator.base import (
+from aidial_adapter_anthropic._utils.list_projection import ListProjection
+from aidial_adapter_anthropic.adapter._decorator.base import (
     ChatCompletionDecorator,
     ChatCompletionTransformer,
 )
-from aidial_adapter_anthropic.llm.truncate_prompt import DiscardedMessages
-from aidial_adapter_anthropic.utils.list_projection import ListProjection
+from aidial_adapter_anthropic.adapter.truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.dial.consumer import Consumer
+from aidial_adapter_anthropic.dial.request import ModelParameters
 
 
 def preprocess_messages_decorator(

@@ -34,7 +34,7 @@ from aidial_sdk.exceptions import (
 from anthropic import APIStatusError
 from botocore.exceptions import ClientError
 
-from aidial_adapter_anthropic.llm.errors import UserError, ValidationError
+from aidial_adapter_anthropic.adapter.errors import UserError, ValidationError
 
 _log = logging.getLogger(__name__)
 

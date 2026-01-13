@@ -4,15 +4,15 @@ from typing import Any, List, Set, Tuple, Type
 from aidial_sdk.chat_completion import Message
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic.dial_api.request import (
+from aidial_adapter_anthropic._utils.list_projection import ListProjection
+from aidial_adapter_anthropic.adapter.errors import ValidationError
+from aidial_adapter_anthropic.adapter.truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.dial.consumer import Consumer
+from aidial_adapter_anthropic.dial.request import (
     ModelParameters,
     collect_text_content,
     is_system_role,
 )
-from aidial_adapter_anthropic.llm.consumer import Consumer
-from aidial_adapter_anthropic.llm.errors import ValidationError
-from aidial_adapter_anthropic.llm.truncate_prompt import DiscardedMessages
-from aidial_adapter_anthropic.utils.list_projection import ListProjection
 
 
 class ChatCompletionAdapter(ABC, BaseModel):

@@ -7,15 +7,15 @@ import boto3
 from aidial_sdk.deployment.from_request_mixin import FromRequestDeploymentMixin
 from pydantic import BaseModel, Field
 
-from aidial_adapter_anthropic.utils.concurrency import make_async
-from aidial_adapter_anthropic.utils.env import get_aws_default_region
+from aidial_adapter_anthropic._utils.concurrency import make_async
+from aidial_adapter_anthropic._utils.env import get_aws_default_region
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 _UPSTREAM_CONFIG_HEADER_NAME = "x-upstream-extra-data"
 
 
-class ClientCredentialArgs(BaseModel):
+class AWSClientCredentialArgs(BaseModel):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     aws_session_token: str | None = None
@@ -26,8 +26,10 @@ class AWSClientCredentials(BaseModel):
     aws_secret_access_key: str
     aws_session_token: str | None = None
 
-    def get_credentials(self) -> Tuple[datetime | None, ClientCredentialArgs]:
-        return None, ClientCredentialArgs(
+    def get_credentials(
+        self,
+    ) -> Tuple[datetime | None, AWSClientCredentialArgs]:
+        return None, AWSClientCredentialArgs(
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key,
             aws_session_token=self.aws_session_token,
@@ -39,7 +41,7 @@ class AWSAssumeRoleCredentials(BaseModel):
 
     async def get_credentials(
         self, region: str
-    ) -> Tuple[datetime, ClientCredentialArgs]:
+    ) -> Tuple[datetime, AWSClientCredentialArgs]:
         sts_client = await make_async(
             lambda: boto3.Session().client("sts", region_name=region)
         )
@@ -51,21 +53,21 @@ class AWSAssumeRoleCredentials(BaseModel):
 
         creds = response["Credentials"]
 
-        return creds["Expiration"], ClientCredentialArgs(
+        return creds["Expiration"], AWSClientCredentialArgs(
             aws_access_key_id=creds["AccessKeyId"],
             aws_secret_access_key=creds["SecretAccessKey"],
             aws_session_token=creds["SessionToken"],
         )
 
 
-class CloudUpstreamConfig(BaseModel):
+class AWSUpstreamConfig(BaseModel):
     region: str
     credentials: AWSClientCredentials | AWSAssumeRoleCredentials | None = None
 
     @classmethod
     async def from_request(
         cls, request: FromRequestDeploymentMixin
-    ) -> "CloudUpstreamConfig":
+    ) -> "AWSUpstreamConfig":
         conf = request.headers.get(_UPSTREAM_CONFIG_HEADER_NAME)
         upstream_config = (
             UpstreamConfigData.parse_raw(conf) if conf else UpstreamConfigData()
@@ -78,9 +80,9 @@ class CloudUpstreamConfig(BaseModel):
 
     async def get_credentials(
         self,
-    ) -> Tuple[datetime | None, ClientCredentialArgs]:
+    ) -> Tuple[datetime | None, AWSClientCredentialArgs]:
         if self.credentials is None:
-            return (None, ClientCredentialArgs())
+            return (None, AWSClientCredentialArgs())
         if isinstance(self.credentials, AWSClientCredentials):
             return self.credentials.get_credentials()
         return await self.credentials.get_credentials(self.region)
@@ -99,18 +101,18 @@ class ApiKeyUpstreamConfig(BaseModel):
         return None if key is None else cls(api_key=key)
 
 
-UpstreamConfig = ApiKeyUpstreamConfig | CloudUpstreamConfig
+UpstreamConfig = ApiKeyUpstreamConfig | AWSUpstreamConfig
 
 
 async def parse_upstream_config(
     request: FromRequestDeploymentMixin,
 ) -> UpstreamConfig:
     if (conf := ApiKeyUpstreamConfig.from_request(request)) is not None:
-        log.debug("accessing deployment via platform api-key")
+        _log.debug("accessing deployment via platform api-key")
         return conf
 
-    log.debug("accessing deployment via cloud creds")
-    return await CloudUpstreamConfig.from_request(request)
+    _log.debug("accessing deployment via cloud creds")
+    return await AWSUpstreamConfig.from_request(request)
 
 
 class UpstreamConfigData(BaseModel):
@@ -137,26 +139,3 @@ class UpstreamConfigData(BaseModel):
             )
 
         return None
-
-
-class OverrideNameUpstreamConfig(BaseModel):
-    class Config:
-        allow_population_by_field_name = True
-
-    compatible_model_id: str | None = None
-
-
-def get_compatible_model_id(request: FromRequestDeploymentMixin) -> str | None:
-    if (extra := request.headers.get(_UPSTREAM_CONFIG_HEADER_NAME)) is None:
-        return None
-
-    try:
-        conf = OverrideNameUpstreamConfig.parse_raw(extra)
-    except Exception as e:
-        log.error(
-            f"Request header {_UPSTREAM_CONFIG_HEADER_NAME!r} doesn't contain"
-            f" valid override name configuration: {e}"
-        )
-        return None
-
-    return None if conf is None else conf.compatible_model_id

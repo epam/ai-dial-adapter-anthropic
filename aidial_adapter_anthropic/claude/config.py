@@ -4,7 +4,7 @@ from anthropic.types.anthropic_beta_param import AnthropicBetaParam
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
 from pydantic import Field
 
-from aidial_adapter_anthropic.utils.pydantic import ExtraForbidModel
+from aidial_adapter_anthropic._utils.pydantic import ExtraForbidModel
 
 
 class ThinkingConfigEnabled(ExtraForbidModel):

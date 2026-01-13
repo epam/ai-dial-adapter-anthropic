@@ -20,17 +20,17 @@ from aidial_sdk.chat_completion import (
 )
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic.dial_api.resource import (
+from aidial_adapter_anthropic._utils.resource import Resource
+from aidial_adapter_anthropic._utils.stream import aiter_to_list
+from aidial_adapter_anthropic.adapter.errors import UserError, ValidationError
+from aidial_adapter_anthropic.dial._message import BaseMessage, SystemMessage
+from aidial_adapter_anthropic.dial._resource import (
     AttachmentResource,
     DialResource,
     UnsupportedContentType,
     URLResource,
 )
-from aidial_adapter_anthropic.dial_api.storage import FileStorage
-from aidial_adapter_anthropic.llm.errors import UserError, ValidationError
-from aidial_adapter_anthropic.llm.message import BaseMessage, SystemMessage
-from aidial_adapter_anthropic.utils.resource import Resource
-from aidial_adapter_anthropic.utils.stream import aiter_to_list
+from aidial_adapter_anthropic.dial._storage import FileStorage
 
 _T = TypeVar("_T", covariant=True)
 _Config = TypeVar("_Config", bound=BaseModel, contravariant=True)
@@ -148,7 +148,7 @@ class AttachmentProcessors(BaseModel, Generic[_T, _Config]):
         except UnsupportedContentType as e:
             raise UserError(
                 f"Unsupported media type: {e.type}",
-                get_usage_message(self.get_file_exts(e.supported_types)),
+                _get_usage_message(self.get_file_exts(e.supported_types)),
             )
 
     async def _handle_resource(self, resource: Resource) -> _T:
@@ -158,7 +158,7 @@ class AttachmentProcessors(BaseModel, Generic[_T, _Config]):
 
         raise UserError(
             f"Unsupported media type: {resource.type}",
-            get_usage_message(self.get_file_exts(self.supported_mime_types)),
+            _get_usage_message(self.get_file_exts(self.supported_mime_types)),
         )
 
     async def _handle_dial_resource(self, dial_resource: DialResource) -> _T:
@@ -174,7 +174,7 @@ class AttachmentProcessors(BaseModel, Generic[_T, _Config]):
         ]
 
 
-def get_usage_message(supported_exts: List[str]) -> str:
+def _get_usage_message(supported_exts: List[str]) -> str:
     document_hint = ""
     if "pdf" in supported_exts:
         document_hint = '- "Summarize the document" for a PDF document'
