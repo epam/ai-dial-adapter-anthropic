@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "purpose": ["debug-test"]
+    },
+    {
+      "name": "make test",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "envFile": "${workspaceFolder}/.env",
+      "args": [
+        "-k", "test-name", "-n0", "-vv", "--capture=no"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+  ]
+}
