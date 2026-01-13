@@ -15,8 +15,8 @@ def format_with_args(session: nox.Session, *args):
 def lint(session: nox.Session):
     """Runs linters and fixers"""
     try:
-        session.run("poetry", "install", external=True)
-        session.run("poetry", "check", "--lock", "--strict", external=True)
+        session.run("poetry", "install", "--all-extras", external=True)
+        session.run("poetry", "check", "--lock", external=True)
         session.run("pyright", SRC)
         session.run("flake8", SRC)
         format_with_args(session, SRC, "--check")
@@ -33,16 +33,8 @@ def format(session: nox.Session):
     format_with_args(session, SRC)
 
 
-def run_tests(session: nox.Session, *args):
+@nox.session(python=["3.11", "3.12", "3.13"])
+def test(session: nox.Session) -> None:
+    """Runs tests"""
     session.run("poetry", "install", external=True)
-    session.run("pytest", *args, *session.posargs)
-
-
-@nox.session
-def test(session: nox.Session):
-    run_tests(session, "tests/unit_tests/")
-
-
-@nox.session
-def integration_tests(session: nox.Session):
-    run_tests(session, "tests/integration_tests/")
+    session.run("pytest", *session.posargs)

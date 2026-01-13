@@ -1,30 +1,25 @@
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
 [project]
 name = "aidial-adapter-anthropic"
 version = "0.1.0"
-description = "DIAL adapter for Anthropic API"
+description = "Package implementing adapter from DIAL Chat Completions API to Anthropic API"
 authors = [{ name = "EPAM RAIL", email = "SpecialEPM-DIALDevTeam@epam.com" }]
 license = "Apache-2.0"
 readme = "README.md"
 keywords = ["ai"]
 classifiers = ["Topic :: Software Development :: Libraries :: Python Modules"]
 requires-python = ">=3.11,<4.0"
-dynamic = ["dependencies"]
+dependencies = [
+  "aidial-sdk (>=0.28.0,<1)",
+  "anthropic[bedrock] (>=0.71.0,<1)",
+  "pydantic (>=1.10.17,<3)",
+  "pillow (>=10.4.0,<11)",
+  "aiohttp (>=3.13.3,<4)",
+]
 
 [project.urls]
 Homepage = "https://epam-rail.com"
 Documentation = "https://epam-rail.com/dial_api"
 Repository = "https://github.com/epam/ai-dial-adapter-anthropic/"
-
-[tool.poetry.dependencies]
-aidial-sdk = { version = "0.28.0" }
-anthropic = { version = "0.71.0", extras = ["bedrock"] }
-pydantic = "1.10.17"
-pillow = "10.4.0"
-aiohttp = "3.13.3"
 
 [tool.poetry.group.test.dependencies]
 pytest-asyncio = "0.21.1"
