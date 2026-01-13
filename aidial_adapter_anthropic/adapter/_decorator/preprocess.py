@@ -2,7 +2,7 @@ from typing import Callable, List
 
 from aidial_sdk.chat_completion import Message
 
-from aidial_adapter_anthropic._utils.list_projection import ListProjection
+from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter._decorator.base import (
     ChatCompletionDecorator,
     ChatCompletionTransformer,

@@ -1,4 +1,17 @@
-from typing import Any, Callable, Container, List, TypeVar
+from dataclasses import dataclass, field
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Container,
+    Generic,
+    Iterable,
+    List,
+    Self,
+    Set,
+    Tuple,
+    TypeVar,
+)
 
 _T = TypeVar("_T")
 _V = TypeVar("_V")
@@ -37,3 +50,35 @@ def group_by(
         yield prev_val
 
     return list(_gen())
+
+
+@dataclass
+class ListProjection(Generic[_T]):
+    """
+    The class represents a transformation of the original list which may
+    include merge, removal and addition of the original list elements.
+
+    Each derivative element is mapped onto a subset of original elements.
+    The subsets must be disjoint.
+    """
+
+    list: List[Tuple[_T, Set[int]]] = field(default_factory=list)
+
+    @property
+    def raw_list(self) -> List[_T]:
+        return [msg for msg, _ in self.list]
+
+    def to_original_indices(self, indices: Iterable[int]) -> Set[int]:
+        return {
+            orig_index
+            for index in indices
+            for orig_index in self.list[index][1]
+        }
+
+    def append(self, elem: _T, idx: int) -> Self:
+        self.list.append((elem, {idx}))
+        return self
+
+
+async def aiter_to_list(iterator: AsyncIterator[_T]) -> List[_T]:
+    return [item async for item in iterator]

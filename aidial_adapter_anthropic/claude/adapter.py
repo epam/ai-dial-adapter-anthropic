@@ -64,7 +64,7 @@ from anthropic.types.beta import (
 )
 
 from aidial_adapter_anthropic._utils.json import json_dumps_short
-from aidial_adapter_anthropic._utils.list_projection import ListProjection
+from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter._decorator.base import compose_decorators
 from aidial_adapter_anthropic.adapter._decorator.preprocess import (
     preprocess_messages_decorator,

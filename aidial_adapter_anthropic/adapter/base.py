@@ -4,7 +4,7 @@ from typing import Any, List, Set, Tuple, Type
 from aidial_sdk.chat_completion import Message
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic._utils.list_projection import ListProjection
+from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter.errors import ValidationError
 from aidial_adapter_anthropic.adapter.truncate_prompt import DiscardedMessages
 from aidial_adapter_anthropic.dial.consumer import Consumer

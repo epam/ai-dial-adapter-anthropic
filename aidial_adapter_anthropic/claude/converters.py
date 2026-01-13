@@ -22,8 +22,7 @@ from anthropic.types.beta import BetaToolParam as ToolParam
 from anthropic.types.beta import BetaUsage as Usage
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic._utils.list import group_by
-from aidial_adapter_anthropic._utils.list_projection import ListProjection
+from aidial_adapter_anthropic._utils.list import ListProjection, group_by
 from aidial_adapter_anthropic.adapter.errors import ValidationError
 from aidial_adapter_anthropic.claude.blocks import (
     create_text_block,
