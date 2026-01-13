@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, root_validator, validator
 
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic._utils.text import truncate_string
-from aidial_adapter_anthropic.dial._storage import FileStorage, download_file
+from aidial_adapter_anthropic.dial.storage import FileStorage, download_file
 
 
 class ValidationError(Exception):

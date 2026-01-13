@@ -110,14 +110,14 @@ from aidial_adapter_anthropic.claude.tools import (
     process_tools_block,
 )
 from aidial_adapter_anthropic.dial._message import parse_dial_message
-from aidial_adapter_anthropic.dial._storage import (
-    FileStorage,
-    create_file_storage,
-)
 from aidial_adapter_anthropic.dial.attachments import AttachmentProcessors
 from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
 from aidial_adapter_anthropic.dial.request import (
     ModelParameters as DialParameters,
+)
+from aidial_adapter_anthropic.dial.storage import (
+    FileStorage,
+    create_file_storage,
 )
 from aidial_adapter_anthropic.dial.tools import ToolsMode
 

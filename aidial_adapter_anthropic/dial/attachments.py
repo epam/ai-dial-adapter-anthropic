@@ -24,13 +24,13 @@ from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic._utils.stream import aiter_to_list
 from aidial_adapter_anthropic.adapter.errors import UserError, ValidationError
 from aidial_adapter_anthropic.dial._message import BaseMessage, SystemMessage
-from aidial_adapter_anthropic.dial._resource import (
+from aidial_adapter_anthropic.dial.resource import (
     AttachmentResource,
     DialResource,
     UnsupportedContentType,
     URLResource,
 )
-from aidial_adapter_anthropic.dial._storage import FileStorage
+from aidial_adapter_anthropic.dial.storage import FileStorage
 
 _T = TypeVar("_T", covariant=True)
 _Config = TypeVar("_Config", bound=BaseModel, contravariant=True)
