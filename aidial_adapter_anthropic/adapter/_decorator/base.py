@@ -3,8 +3,8 @@ from typing import Callable, List
 from aidial_sdk.chat_completion import Message
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic.adapter.base import ChatCompletionAdapter
-from aidial_adapter_anthropic.adapter.truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.adapter._base import ChatCompletionAdapter
+from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
 from aidial_adapter_anthropic.dial.consumer import Consumer
 from aidial_adapter_anthropic.dial.request import ModelParameters
 

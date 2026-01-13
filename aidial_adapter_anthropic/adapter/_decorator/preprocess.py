@@ -7,7 +7,7 @@ from aidial_adapter_anthropic.adapter._decorator.base import (
     ChatCompletionDecorator,
     ChatCompletionTransformer,
 )
-from aidial_adapter_anthropic.adapter.truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
 from aidial_adapter_anthropic.dial.consumer import Consumer
 from aidial_adapter_anthropic.dial.request import ModelParameters
 

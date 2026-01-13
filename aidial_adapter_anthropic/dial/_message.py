@@ -17,7 +17,7 @@ from aidial_sdk.chat_completion import (
 )
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic.adapter.errors import ValidationError
+from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.dial.request import (
     collect_text_content,
     is_plain_text_content,

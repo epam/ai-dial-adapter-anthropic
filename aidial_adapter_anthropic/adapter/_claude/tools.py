@@ -5,7 +5,7 @@ from typing import assert_never
 from aidial_sdk.chat_completion import FunctionCall, ToolCall
 from anthropic.types.beta import BetaToolUseBlock as ToolUseBlock
 
-from aidial_adapter_anthropic.adapter.errors import ValidationError
+from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.dial._message import (
     AIFunctionCallMessage,
     AIRegularMessage,

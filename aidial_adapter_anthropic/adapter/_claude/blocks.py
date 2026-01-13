@@ -25,8 +25,8 @@ from anthropic.types.beta.beta_base64_image_source_param import (
 )
 
 from aidial_adapter_anthropic._utils.resource import Resource
+from aidial_adapter_anthropic.dial._attachments import AttachmentProcessor
 from aidial_adapter_anthropic.dial._message import HumanToolResultMessage
-from aidial_adapter_anthropic.dial.attachments import AttachmentProcessor
 
 
 def create_text_block(text: str) -> TextBlockParam:

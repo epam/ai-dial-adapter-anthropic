@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from aidial_adapter_anthropic._utils.list import aiter_to_list
 from aidial_adapter_anthropic._utils.resource import Resource
-from aidial_adapter_anthropic.adapter.errors import UserError, ValidationError
+from aidial_adapter_anthropic.adapter._errors import UserError, ValidationError
 from aidial_adapter_anthropic.dial._message import BaseMessage, SystemMessage
 from aidial_adapter_anthropic.dial.resource import (
     AttachmentResource,

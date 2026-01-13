@@ -22,7 +22,7 @@ from aidial_sdk.exceptions import RequestValidationError
 from pydantic import BaseModel
 from pydantic.v1 import ValidationError as PydanticValidationError
 
-from aidial_adapter_anthropic.adapter.errors import ValidationError
+from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.dial.tools import (
     ToolsConfig,
     ToolsMode,

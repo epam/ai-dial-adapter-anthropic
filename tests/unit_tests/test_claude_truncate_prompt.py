@@ -7,9 +7,9 @@ import pytest
 from aidial_sdk.chat_completion import Function, Message, Tool
 from aidial_sdk.exceptions import HTTPException as DialException
 
-from aidial_adapter_anthropic.adapter.base import ChatCompletionAdapter
-from aidial_adapter_anthropic.adapter.truncate_prompt import DiscardedMessages
-from aidial_adapter_anthropic.claude.adapter import create_adapter
+from aidial_adapter_anthropic.adapter import ChatCompletionAdapter
+from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.adapter.claude import create_adapter
 from aidial_adapter_anthropic.dial.request import ModelParameters
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 from tests.utils.messages import ai, sys, user, user_with_image
@@ -69,7 +69,7 @@ _PNG_IMAGE_50_50_TOKENS = math.ceil((50 * 50) / 750.0)
 @pytest.fixture
 def mock_tokenize_text():
     with patch(
-        "aidial_adapter_anthropic.claude.tokenizer.tokenize_text"
+        "aidial_adapter_anthropic.adapter._claude.tokenizer.tokenize_text"
     ) as mock:
 
         def _tokenize(txt: str):

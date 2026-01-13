@@ -23,14 +23,17 @@ from anthropic.types.beta import BetaUsage as Usage
 from pydantic import BaseModel
 
 from aidial_adapter_anthropic._utils.list import ListProjection, group_by
-from aidial_adapter_anthropic.adapter.errors import ValidationError
-from aidial_adapter_anthropic.claude.blocks import (
+from aidial_adapter_anthropic.adapter._claude.blocks import (
     create_text_block,
     create_tool_result_block,
     create_tool_use_block,
 )
-from aidial_adapter_anthropic.claude.config import Configuration
-from aidial_adapter_anthropic.claude.state import get_message_content_from_state
+from aidial_adapter_anthropic.adapter._claude.config import Configuration
+from aidial_adapter_anthropic.adapter._claude.state import (
+    get_message_content_from_state,
+)
+from aidial_adapter_anthropic.adapter._errors import ValidationError
+from aidial_adapter_anthropic.dial._attachments import AttachmentProcessors
 from aidial_adapter_anthropic.dial._message import (
     AIRegularMessage,
     AIToolCallMessage,
@@ -39,7 +42,6 @@ from aidial_adapter_anthropic.dial._message import (
     HumanToolResultMessage,
     SystemMessage,
 )
-from aidial_adapter_anthropic.dial.attachments import AttachmentProcessors
 from aidial_adapter_anthropic.dial.token_usage import TokenUsage
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 

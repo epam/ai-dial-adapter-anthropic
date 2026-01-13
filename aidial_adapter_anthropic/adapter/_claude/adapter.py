@@ -65,6 +65,38 @@ from anthropic.types.beta import (
 
 from aidial_adapter_anthropic._utils.json import json_dumps_short
 from aidial_adapter_anthropic._utils.list import ListProjection
+from aidial_adapter_anthropic.adapter._base import (
+    ChatCompletionAdapter,
+    default_preprocess_messages,
+    keep_last,
+    turn_based_partitioner,
+)
+from aidial_adapter_anthropic.adapter._claude.blocks import (
+    IMAGE_ATTACHMENT_PROCESSOR,
+    PDF_ATTACHMENT_PROCESSOR,
+    TEXT_ATTACHMENT_PROCESSOR,
+    create_text_block,
+)
+from aidial_adapter_anthropic.adapter._claude.config import (
+    ClaudeConfiguration,
+    ClaudeConfigurationWithThinking,
+)
+from aidial_adapter_anthropic.adapter._claude.converters import (
+    to_claude_messages,
+    to_claude_tool_config,
+    to_dial_finish_reason,
+    to_dial_usage,
+)
+from aidial_adapter_anthropic.adapter._claude.params import ClaudeParameters
+from aidial_adapter_anthropic.adapter._claude.state import MessageState
+from aidial_adapter_anthropic.adapter._claude.tokenizer import (
+    create_tokenizer,
+    tokenize_text,
+)
+from aidial_adapter_anthropic.adapter._claude.tools import (
+    function_to_tool_messages,
+    process_tools_block,
+)
 from aidial_adapter_anthropic.adapter._decorator.base import compose_decorators
 from aidial_adapter_anthropic.adapter._decorator.preprocess import (
     preprocess_messages_decorator,
@@ -72,45 +104,13 @@ from aidial_adapter_anthropic.adapter._decorator.preprocess import (
 from aidial_adapter_anthropic.adapter._decorator.replicator import (
     replicator_decorator,
 )
-from aidial_adapter_anthropic.adapter.base import (
-    ChatCompletionAdapter,
-    default_preprocess_messages,
-    keep_last,
-    turn_based_partitioner,
-)
-from aidial_adapter_anthropic.adapter.errors import ValidationError
-from aidial_adapter_anthropic.adapter.truncate_prompt import (
+from aidial_adapter_anthropic.adapter._errors import ValidationError
+from aidial_adapter_anthropic.adapter._truncate_prompt import (
     DiscardedMessages,
     truncate_prompt,
 )
-from aidial_adapter_anthropic.claude.blocks import (
-    IMAGE_ATTACHMENT_PROCESSOR,
-    PDF_ATTACHMENT_PROCESSOR,
-    TEXT_ATTACHMENT_PROCESSOR,
-    create_text_block,
-)
-from aidial_adapter_anthropic.claude.config import (
-    ClaudeConfiguration,
-    ClaudeConfigurationWithThinking,
-)
-from aidial_adapter_anthropic.claude.converters import (
-    to_claude_messages,
-    to_claude_tool_config,
-    to_dial_finish_reason,
-    to_dial_usage,
-)
-from aidial_adapter_anthropic.claude.params import ClaudeParameters
-from aidial_adapter_anthropic.claude.state import MessageState
-from aidial_adapter_anthropic.claude.tokenizer import (
-    create_tokenizer,
-    tokenize_text,
-)
-from aidial_adapter_anthropic.claude.tools import (
-    function_to_tool_messages,
-    process_tools_block,
-)
+from aidial_adapter_anthropic.dial._attachments import AttachmentProcessors
 from aidial_adapter_anthropic.dial._message import parse_dial_message
-from aidial_adapter_anthropic.dial.attachments import AttachmentProcessors
 from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
 from aidial_adapter_anthropic.dial.request import (
     ModelParameters as DialParameters,

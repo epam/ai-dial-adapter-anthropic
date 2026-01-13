@@ -16,7 +16,7 @@ from aidial_sdk.chat_completion.request import (
 )
 from pydantic import BaseModel
 
-from aidial_adapter_anthropic.adapter.errors import ValidationError
+from aidial_adapter_anthropic.adapter._errors import ValidationError
 
 _log = logging.getLogger(__name__)
 
