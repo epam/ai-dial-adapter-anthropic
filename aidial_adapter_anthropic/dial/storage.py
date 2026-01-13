@@ -3,7 +3,6 @@ import hashlib
 import io
 import logging
 import mimetypes
-import os
 from typing import Mapping, Optional, TypedDict
 from urllib.parse import unquote, urljoin
 
@@ -137,13 +136,3 @@ async def download_file(url: str, headers: Mapping[str, str] = {}) -> bytes:
 
 def compute_hash_digest(file_content: str) -> str:
     return hashlib.sha256(file_content.encode()).hexdigest()
-
-
-DIAL_URL = os.getenv("DIAL_URL")
-
-
-def create_file_storage(api_key: str) -> Optional[FileStorage]:
-    if DIAL_URL is None:
-        return None
-
-    return FileStorage(dial_url=DIAL_URL, api_key=api_key)

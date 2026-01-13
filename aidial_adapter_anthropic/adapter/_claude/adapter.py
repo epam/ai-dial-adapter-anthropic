@@ -115,10 +115,7 @@ from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
 from aidial_adapter_anthropic.dial.request import (
     ModelParameters as DialParameters,
 )
-from aidial_adapter_anthropic.dial.storage import (
-    FileStorage,
-    create_file_storage,
-)
+from aidial_adapter_anthropic.dial.storage import FileStorage
 from aidial_adapter_anthropic.dial.tools import ToolsMode
 
 log = logging.getLogger(__name__)
@@ -150,15 +147,14 @@ class ClaudeRequest:
 
 
 async def create_adapter(
+    *,
     deployment: str,
-    api_key: str,
+    storage: FileStorage | None,
     client: AsyncAnthropicBedrock | AsyncAnthropic,
     default_max_tokens: int,
     supports_thinking: bool,
     supports_documents: bool,
 ) -> ChatCompletionAdapter:
-    storage = create_file_storage(api_key=api_key)
-
     model = Adapter(
         deployment=deployment,
         storage=storage,

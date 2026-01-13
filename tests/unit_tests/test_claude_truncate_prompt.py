@@ -19,7 +19,7 @@ from tests.utils.messages import ai, sys, user, user_with_image
 async def model():
     return await create_adapter(
         deployment="test-anthropic-deployment",
-        api_key="test-anthropic-api-key",
+        storage=None,
         client=anthropic.AsyncAnthropic(),
         default_max_tokens=1024,
         supports_thinking=True,
