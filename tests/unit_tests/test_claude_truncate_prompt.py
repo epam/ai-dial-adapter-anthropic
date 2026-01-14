@@ -1,18 +1,30 @@
 import math
 from typing import List
-from unittest.mock import patch
 
 import anthropic
 import pytest
 from aidial_sdk.chat_completion import Function, Message, Tool
 from aidial_sdk.exceptions import HTTPException as DialException
+from typing_extensions import override
 
 from aidial_adapter_anthropic.adapter import ChatCompletionAdapter
+from aidial_adapter_anthropic.adapter._claude.tokenizer import (
+    CrudeClaudeTokenizer,
+)
 from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
 from aidial_adapter_anthropic.adapter.claude import create_adapter
 from aidial_adapter_anthropic.dial.request import ModelParameters
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 from tests.utils.messages import ai, sys, user, user_with_image
+
+
+class _MockTokenizer(CrudeClaudeTokenizer):
+    @override
+    def tokenize_text(self, text: str) -> int:
+        try:
+            return int(text)
+        except Exception:
+            return 1
 
 
 @pytest.fixture
@@ -21,6 +33,7 @@ async def model():
         deployment="test-anthropic-deployment",
         storage=None,
         client=anthropic.AsyncAnthropic(),
+        tokenizer=_MockTokenizer(),
         default_max_tokens=1024,
         supports_thinking=True,
         supports_documents=True,
@@ -66,23 +79,7 @@ _PNG_IMAGE_50_50 = "iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAIAAACRXR/mAAAAS0lEQVR4nO3O
 _PNG_IMAGE_50_50_TOKENS = math.ceil((50 * 50) / 750.0)
 
 
-@pytest.fixture
-def mock_tokenize_text():
-    with patch(
-        "aidial_adapter_anthropic.adapter._claude.tokenizer.tokenize_text"
-    ) as mock:
-
-        def _tokenize(txt: str):
-            try:
-                return int(txt)
-            except Exception:
-                return 1
-
-        mock.side_effect = _tokenize
-        yield mock
-
-
-async def test_one_turn_no_truncation(model, mock_tokenize_text):
+async def test_one_turn_no_truncation(model):
     messages = [
         sys("11"),
         user("22"),
@@ -102,7 +99,7 @@ async def test_one_turn_no_truncation(model, mock_tokenize_text):
     assert discarded_messages == []
 
 
-async def test_one_turn_with_image(model, mock_tokenize_text):
+async def test_one_turn_with_image(model):
     messages = [
         sys("11"),
         user_with_image("22", _PNG_IMAGE_50_50),
@@ -128,7 +125,7 @@ async def test_one_turn_with_image(model, mock_tokenize_text):
     )
 
 
-async def test_one_turn_with_tools(model, mock_tokenize_text):
+async def test_one_turn_with_tools(model):
     messages = [
         sys("11"),
         user("22"),
@@ -151,7 +148,7 @@ async def test_one_turn_with_tools(model, mock_tokenize_text):
     )
 
 
-async def test_one_turn_overflow(model, mock_tokenize_text):
+async def test_one_turn_overflow(model):
     messages = [
         sys("11"),
         user("22"),
@@ -170,7 +167,7 @@ async def test_one_turn_overflow(model, mock_tokenize_text):
     )
 
 
-async def test_multiple_system_messages(model, mock_tokenize_text):
+async def test_multiple_system_messages(model):
     messages = [
         sys("11"),
         sys("22"),
@@ -182,7 +179,7 @@ async def test_multiple_system_messages(model, mock_tokenize_text):
     assert await tokenize(model, messages) == expected_tokens
 
 
-async def test_truncate_first_turn(model, mock_tokenize_text):
+async def test_truncate_first_turn(model):
     messages = [
         user("11"),
         ai("22"),
@@ -206,7 +203,7 @@ async def test_truncate_first_turn(model, mock_tokenize_text):
     assert discarded_messages == [0, 1]
 
 
-async def test_truncate_first_turn_with_system(model, mock_tokenize_text):
+async def test_truncate_first_turn_with_system(model):
     messages = [
         sys("11"),
         user("22"),
@@ -224,7 +221,7 @@ async def test_truncate_first_turn_with_system(model, mock_tokenize_text):
     assert discarded_messages == [1, 2]
 
 
-async def test_truncate_first_turn_with_system_2(model, mock_tokenize_text):
+async def test_truncate_first_turn_with_system_2(model):
     # Equivalent of test_truncate_first_turn_with_system with adjacent messages with the same role
     messages = [
         sys("11"),
@@ -252,7 +249,7 @@ async def test_truncate_first_turn_with_system_2(model, mock_tokenize_text):
     assert discarded_messages == [1, 2, 3, 4, 5]
 
 
-async def test_truncate_first_turn_with_system_3(model, mock_tokenize_text):
+async def test_truncate_first_turn_with_system_3(model):
     # Equivalent of test_truncate_first_turn_with_system_2 with one less tokens requests than the critical amount
     messages = [
         sys("11"),
@@ -287,7 +284,7 @@ async def test_truncate_first_turn_with_system_3(model, mock_tokenize_text):
     )
 
 
-async def test_zero_turn_overflow(model, mock_tokenize_text):
+async def test_zero_turn_overflow(model):
     messages = [
         sys("11"),
         user("22"),
@@ -303,7 +300,7 @@ async def test_zero_turn_overflow(model, mock_tokenize_text):
     )
 
 
-async def test_chat_history_overflow(model, mock_tokenize_text):
+async def test_chat_history_overflow(model):
     messages = [
         sys("11"),
         user("22"),
@@ -321,7 +318,7 @@ async def test_chat_history_overflow(model, mock_tokenize_text):
     )
 
 
-async def test_chat_history_overflow_2(model, mock_tokenize_text):
+async def test_chat_history_overflow_2(model):
     # Equivalent of test_chat_history_overflow with adjacent messages with the same role
     messages = [
         sys("11"),

@@ -90,8 +90,8 @@ from aidial_adapter_anthropic.adapter._claude.converters import (
 from aidial_adapter_anthropic.adapter._claude.params import ClaudeParameters
 from aidial_adapter_anthropic.adapter._claude.state import MessageState
 from aidial_adapter_anthropic.adapter._claude.tokenizer import (
+    ClaudeTokenizer,
     create_tokenizer,
-    tokenize_text,
 )
 from aidial_adapter_anthropic.adapter._claude.tools import (
     function_to_tool_messages,
@@ -151,6 +151,7 @@ async def create_adapter(
     deployment: str,
     storage: FileStorage | None,
     client: AsyncAnthropicBedrock | AsyncAnthropic,
+    tokenizer: ClaudeTokenizer,
     default_max_tokens: int,
     supports_thinking: bool,
     supports_documents: bool,
@@ -159,6 +160,7 @@ async def create_adapter(
         deployment=deployment,
         storage=storage,
         client=client,
+        tokenizer=tokenizer,
         default_max_tokens=default_max_tokens,
         supports_documents=supports_documents,
         supports_thinking=supports_thinking,
@@ -175,6 +177,7 @@ class Adapter(ChatCompletionAdapter):
     storage: Optional[FileStorage]
     client: AsyncAnthropicBedrock | AsyncAnthropic
 
+    tokenizer: ClaudeTokenizer
     default_max_tokens: int
     supports_thinking: bool
     supports_documents: bool
@@ -258,7 +261,7 @@ class Adapter(ChatCompletionAdapter):
 
         discarded_messages, messages = await truncate_prompt(
             messages=request.messages.list,
-            tokenizer=create_tokenizer(request.params),
+            tokenizer=create_tokenizer(self.tokenizer, request.params),
             keep_message=keep_last,
             partitioner=turn_based_partitioner,
             model_limit=None,
@@ -307,10 +310,11 @@ class Adapter(ChatCompletionAdapter):
         self, params: DialParameters, messages: List[DialMessage]
     ) -> int:
         request = await self._prepare_claude_request(params, messages)
-        return await create_tokenizer(request.params)(request.messages.list)
+        tokenizer = create_tokenizer(self.tokenizer, request.params)
+        return await tokenizer(request.messages.list)
 
     async def count_completion_tokens(self, string: str) -> int:
-        return tokenize_text(string)
+        return self.tokenizer.tokenize_text(string)
 
     async def compute_discarded_messages(
         self, params: DialParameters, messages: List[DialMessage]
