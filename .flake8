@@ -3,10 +3,8 @@
 # W503 line break before binary operator
 # E203 whitespace before ':'
 # E704 multiple statements on one line (def)
-# F401 imported but unused
-ignore = E501, W503, E203, E704, F401
+ignore = E501, W503, E203, E704
 exclude =
     .venv,
     .nox,
-    __pycache__,
-    __init__.py
+    __pycache__
