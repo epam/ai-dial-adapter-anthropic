@@ -4,7 +4,14 @@ from logging import DEBUG
 from typing import List, Optional, Tuple, Type, assert_never
 
 from aidial_sdk.chat_completion import Message as DialMessage
-from anthropic import AsyncAnthropic, AsyncAnthropicBedrock, Omit, omit
+from anthropic import (
+    AsyncAnthropic,
+    AsyncAnthropicBedrock,
+    AsyncAnthropicFoundry,
+    AsyncAnthropicVertex,
+    Omit,
+    omit,
+)
 from anthropic._resource import AsyncAPIResource
 from anthropic.lib.streaming import BetaInputJsonEvent as InputJsonEvent
 from anthropic.lib.streaming import BetaTextEvent as TextEvent
@@ -152,11 +159,19 @@ class ClaudeRequest:
     messages: ListProjection[ClaudeMessageParam]
 
 
+AnthropicClient = (
+    AsyncAnthropic
+    | AsyncAnthropicBedrock
+    | AsyncAnthropicVertex
+    | AsyncAnthropicFoundry
+)
+
+
 async def create_adapter(
     *,
     deployment: str,
     storage: FileStorage | None,
-    client: AsyncAnthropicBedrock | AsyncAnthropic,
+    client: AnthropicClient,
     tokenizer: ClaudeTokenizer,
     default_max_tokens: int,
     supports_thinking: bool,
@@ -181,7 +196,7 @@ async def create_adapter(
 class Adapter(ChatCompletionAdapter):
     deployment: str
     storage: Optional[FileStorage]
-    client: AsyncAnthropicBedrock | AsyncAnthropic
+    client: AnthropicClient
 
     tokenizer: ClaudeTokenizer
     default_max_tokens: int
