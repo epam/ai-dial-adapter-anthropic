@@ -6,22 +6,22 @@ from typing import List, Optional, Tuple, Type, assert_never
 from aidial_sdk.chat_completion import Message as DialMessage
 from anthropic import AsyncAnthropic, AsyncAnthropicBedrock, Omit, omit
 from anthropic._resource import AsyncAPIResource
-from anthropic.lib.streaming import (
-    BetaContentBlockStopEvent as ContentBlockStopEvent,
-)
 from anthropic.lib.streaming import BetaInputJsonEvent as InputJsonEvent
 from anthropic.lib.streaming import BetaTextEvent as TextEvent
-from anthropic.lib.streaming._beta_types import (
-    BetaCitationEvent as CitationEvent,
+from anthropic.lib.streaming import (
+    ParsedBetaContentBlockStopEvent as ParsedContentBlockStopEvent,
 )
 from anthropic.lib.streaming._beta_types import (
-    BetaMessageStopEvent as MessageStopEvent,
+    BetaCitationEvent as CitationEvent,
 )
 from anthropic.lib.streaming._beta_types import (
     BetaSignatureEvent as SignatureEvent,
 )
 from anthropic.lib.streaming._beta_types import (
     BetaThinkingEvent as ThinkingEvent,
+)
+from anthropic.lib.streaming._beta_types import (
+    ParsedBetaMessageStopEvent as ParsedMessageStopEvent,
 )
 from anthropic.resources.beta import AsyncMessages as FirstPartyAsyncMessagesAPI
 from anthropic.types.beta import (
@@ -55,12 +55,18 @@ from anthropic.types.beta import (
 )
 from anthropic.types.beta import BetaThinkingBlock as ThinkingBlock
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
+from anthropic.types.beta import (
+    BetaToolSearchToolResultBlock as ToolSearchToolResultBlock,
+)
 from anthropic.types.beta import BetaToolUseBlock as ToolUseBlock
 from anthropic.types.beta import (
     BetaWebFetchToolResultBlock as WebFetchToolResultBlock,
 )
 from anthropic.types.beta import (
     BetaWebSearchToolResultBlock as WebSearchToolResultBlock,
+)
+from anthropic.types.beta.parsed_beta_message import (
+    ParsedBetaTextBlock as ParsedTextBlock,
 )
 
 from aidial_adapter_anthropic._utils.json import json_dumps_short
@@ -127,9 +133,9 @@ class _AsyncMessagesAdapter(AsyncAPIResource):
     create = FirstPartyAsyncMessagesAPI.create
     stream = FirstPartyAsyncMessagesAPI.stream
 
-    # NOTE: count_tokens is still not supported by Bedrock.
-    # The endpoint returns 200 {"Output":{"__type":"com.amazon.coral.service#UnknownOperationException"},"Version":"1.0"}
-    # count_tokens = FirstPartyAsyncMessagesAPI.count_tokens
+    # NOTE: count_tokens endpoint isn't supported by Bedrock.
+    # It returns 200 {"Output":{"__type":"com.amazon.coral.service#UnknownOperationException"},"Version":"1.0"}
+    count_tokens = FirstPartyAsyncMessagesAPI.count_tokens
 
     def __init__(self, resource: AsyncAPIResource):
         super().__init__(resource._client)
@@ -382,7 +388,9 @@ class Adapter(ChatCompletionAdapter):
                                 "The model generated tool input before start using it"
                             )
 
-                    case ContentBlockStopEvent(content_block=content_block):
+                    case ParsedContentBlockStopEvent(
+                        content_block=content_block
+                    ):
                         match content_block:
                             case TextBlock():
                                 # Already handled in TextEvent
@@ -391,6 +399,7 @@ class Adapter(ChatCompletionAdapter):
                                 # Tool Use is processed in ContentBlockStartEvent and InputJsonEvent handlers
                                 pass
                             case ThinkingBlock() | RedactedThinkingBlock():
+                                # Thinking is processed in ThinkingEvent
                                 pass
                             case (
                                 ServerToolUseBlock()
@@ -402,6 +411,9 @@ class Adapter(ChatCompletionAdapter):
                                 | BashCodeExecutionToolResultBlock()
                                 | TextEditorCodeExecutionToolResultBlock()
                                 | WebFetchToolResultBlock()
+                                | ParsedTextBlock()
+                                | BashCodeExecutionToolResultBlock()
+                                | TextEditorCodeExecutionToolResultBlock()
                             ):
                                 log.error(
                                     f"Content block of type {content_block.type} isn't supported"
@@ -409,7 +421,7 @@ class Adapter(ChatCompletionAdapter):
                             case _:
                                 assert_never(content_block)
 
-                    case MessageStopEvent(message=message):
+                    case ParsedMessageStopEvent(message=message):
                         consumer.add_usage(to_dial_usage(message.usage))
                         stop_reason = message.stop_reason
                         if self.supports_thinking:
@@ -478,9 +490,10 @@ class Adapter(ChatCompletionAdapter):
                     | BashCodeExecutionToolResultBlock()
                     | TextEditorCodeExecutionToolResultBlock()
                     | WebFetchToolResultBlock()
+                    | ToolSearchToolResultBlock()
                 ):
                     log.error(
-                        f"Content block of type {content} isn't supported"
+                        f"Content block of type {content.type} isn't supported"
                     )
                 case _:
                     assert_never(content)

@@ -56,7 +56,6 @@ from anthropic.types.beta import (
 from anthropic.types.beta import (
     BetaContainerUploadBlock as ContainerUploadBlock,
 )
-from anthropic.types.beta import BetaContentBlock as ContentBlock
 from anthropic.types.beta import BetaContentBlockParam as ContentBlockParam
 from anthropic.types.beta import BetaMCPToolResultBlock as MCPToolResultBlock
 from anthropic.types.beta import BetaMCPToolUseBlock as MCPToolUseBlock
@@ -74,6 +73,9 @@ from anthropic.types.beta import BetaToolParam as ToolParam
 from anthropic.types.beta import (
     BetaToolResultBlockParam as ToolResultBlockParam,
 )
+from anthropic.types.beta import (
+    BetaToolSearchToolResultBlock as ToolSearchToolResultBlock,
+)
 from anthropic.types.beta import BetaToolUseBlock as ToolUseBlock
 from anthropic.types.beta import (
     BetaWebFetchToolResultBlock as WebFetchToolResultBlock,
@@ -82,6 +84,9 @@ from anthropic.types.beta import (
     BetaWebSearchToolResultBlock as WebSearchToolResultBlock,
 )
 from anthropic.types.beta.beta_image_block_param import Source
+from anthropic.types.beta.beta_tool_result_block_param import (
+    Content as ToolResultBlockParamContent,
+)
 from PIL import Image
 
 from aidial_adapter_anthropic.adapter._claude.params import ClaudeParameters
@@ -141,7 +146,8 @@ class CrudeClaudeTokenizer:
         return tokens
 
     def _tokenize_sub_message(
-        self, message: Union[ContentBlockParam, ContentBlock]
+        self,
+        message: ContentBlockParam | ToolResultBlockParamContent,
     ) -> int:
         if isinstance(message, dict):
             match message["type"]:
@@ -174,6 +180,8 @@ class CrudeClaudeTokenizer:
                     | "bash_code_execution_tool_result"
                     | "text_editor_code_execution_tool_result"
                     | "web_fetch_tool_result"
+                    | "tool_search_tool_result"
+                    | "tool_reference"
                 ):
                     return 0
                 case _:
@@ -202,6 +210,7 @@ class CrudeClaudeTokenizer:
                     | BashCodeExecutionToolResultBlock()
                     | TextEditorCodeExecutionToolResultBlock()
                     | WebFetchToolResultBlock()
+                    | ToolSearchToolResultBlock()
                 ):
                     return 0
                 case _:

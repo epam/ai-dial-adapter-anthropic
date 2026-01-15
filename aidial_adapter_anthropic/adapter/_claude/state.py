@@ -4,6 +4,9 @@ from typing import List
 import pydantic
 from anthropic.types.beta import BetaContentBlock as ContentBlock
 from anthropic.types.beta import BetaContentBlockParam as ContentBlockParam
+from anthropic.types.beta.parsed_beta_message import (
+    ParsedBetaContentBlock as ParsedContentBlock,
+)
 from pydantic import BaseModel
 
 from aidial_adapter_anthropic.dial._message import (
@@ -15,7 +18,7 @@ log = logging.getLogger(__name__)
 
 
 class MessageState(BaseModel):
-    claude_message_content: List[ContentBlock]
+    claude_message_content: List[ParsedContentBlock] | List[ContentBlock]
 
     def to_dict(self) -> dict:
         return self.dict(
