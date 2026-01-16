@@ -8,3 +8,5 @@ __pycache__
 .nox
 dist
 *.html
+*.egg-info
+build
