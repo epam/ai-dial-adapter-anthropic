@@ -9,7 +9,7 @@ from urllib.parse import unquote, urljoin
 import aiohttp
 from pydantic import BaseModel
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class FileMetadata(TypedDict):
@@ -41,7 +41,7 @@ class FileStorage(BaseModel):
             ) as response:
                 response.raise_for_status()
                 self.bucket = bucket = await response.json()
-                log.debug(f"bucket: {self.bucket}")
+                _log.debug(f"bucket: {self.bucket}")
                 return bucket
 
         return self.bucket
@@ -87,7 +87,7 @@ class FileStorage(BaseModel):
             ) as response:
                 response.raise_for_status()
                 meta = await response.json()
-                log.debug(f"Uploaded file: url={url}, metadata={meta}")
+                _log.debug(f"Uploaded file: url={url}, metadata={meta}")
                 return meta
 
     async def upload_file_as_base64(

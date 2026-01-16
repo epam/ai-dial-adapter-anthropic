@@ -14,7 +14,7 @@ from aidial_adapter_anthropic.dial._message import (
     AIToolCallMessage,
 )
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 class MessageState(BaseModel):
@@ -38,7 +38,7 @@ def get_message_content_from_state(
             state = MessageState.parse_obj(state_dict)
             return [block.to_dict() for block in state.claude_message_content]  # type: ignore
         except pydantic.ValidationError as e:
-            log.error(
+            _log.error(
                 f"Invalid state at the path 'messages[{idx}].custom_content.state': {e}"
             )
 

@@ -131,7 +131,7 @@ from aidial_adapter_anthropic.dial.request import (
 from aidial_adapter_anthropic.dial.storage import FileStorage
 from aidial_adapter_anthropic.dial.tools import ToolsMode
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 # Beta AsyncMessages in Bedrock doesn't provide stream and count_tokens,
@@ -353,11 +353,11 @@ class Adapter(ChatCompletionAdapter):
         request: ClaudeRequest,
         discarded_messages: DiscardedMessages | None,
     ):
-        if log.isEnabledFor(DEBUG):
+        if _log.isEnabledFor(DEBUG):
             msg = json_dumps_short(
                 {"deployment": self.deployment, "request": request}
             )
-            log.debug(f"request: {msg}")
+            _log.debug(f"request: {msg}")
 
         async with (
             _AsyncMessagesAdapter(self.client.beta.messages).stream(
@@ -371,8 +371,8 @@ class Adapter(ChatCompletionAdapter):
             tool: ToolUseMessage | None = None
 
             async for event in stream:
-                if log.isEnabledFor(DEBUG):
-                    log.debug(f"response event: {json_dumps_short(event)}")
+                if _log.isEnabledFor(DEBUG):
+                    _log.debug(f"response event: {json_dumps_short(event)}")
 
                 match event:
                     case MessageStartEvent():
@@ -399,7 +399,7 @@ class Adapter(ChatCompletionAdapter):
                         if tool:
                             tool.append_arguments(partial_json)
                         else:
-                            log.warning(
+                            _log.warning(
                                 "The model generated tool input before start using it"
                             )
 
@@ -430,7 +430,7 @@ class Adapter(ChatCompletionAdapter):
                                 | BashCodeExecutionToolResultBlock()
                                 | TextEditorCodeExecutionToolResultBlock()
                             ):
-                                log.error(
+                                _log.error(
                                     f"Content block of type {content_block.type} isn't supported"
                                 )
                             case _:
@@ -466,11 +466,11 @@ class Adapter(ChatCompletionAdapter):
         discarded_messages: DiscardedMessages | None,
     ):
 
-        if log.isEnabledFor(DEBUG):
+        if _log.isEnabledFor(DEBUG):
             msg = json_dumps_short(
                 {"deployment": self.deployment, "request": request}
             )
-            log.debug(f"request: {msg}")
+            _log.debug(f"request: {msg}")
 
         message: ClaudeResponseMessage = await self.client.beta.messages.create(
             messages=request.messages.raw_list,
@@ -479,8 +479,8 @@ class Adapter(ChatCompletionAdapter):
             stream=False,
         )
 
-        if log.isEnabledFor(DEBUG):
-            log.debug(f"response: {json_dumps_short(message)}")
+        if _log.isEnabledFor(DEBUG):
+            _log.debug(f"response: {json_dumps_short(message)}")
 
         for content in message.content:
             match content:
@@ -507,7 +507,7 @@ class Adapter(ChatCompletionAdapter):
                     | WebFetchToolResultBlock()
                     | ToolSearchToolResultBlock()
                 ):
-                    log.error(
+                    _log.error(
                         f"Content block of type {content.type} isn't supported"
                     )
                 case _:

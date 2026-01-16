@@ -20,7 +20,7 @@ from aidial_adapter_anthropic.dial._message import (
 from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
 from aidial_adapter_anthropic.dial.tools import ToolsMode
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 def to_dial_function_call(block: ToolUseBlock, streaming: bool) -> FunctionCall:
@@ -50,7 +50,7 @@ def process_tools_block(
             )
         case ToolsMode.FUNCTIONS:
             if consumer.has_function_call:
-                log.warning(
+                _log.warning(
                     "The model generated more than one tool call. "
                     "Only the first one will be taken in to account."
                 )
