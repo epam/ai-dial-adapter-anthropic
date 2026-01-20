@@ -1,5 +1,5 @@
 import math
-from typing import List
+from typing import List, Literal
 
 import anthropic
 import pytest
@@ -17,6 +17,8 @@ from aidial_adapter_anthropic.dial.request import ModelParameters
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 from tests.utils.messages import ai, sys, user, user_with_image
 
+_TOOL_SYSTEM_MESSAGE = 55
+
 
 class _MockTokenizer(CrudeClaudeTokenizer):
     @override
@@ -25,6 +27,12 @@ class _MockTokenizer(CrudeClaudeTokenizer):
             return int(text)
         except Exception:
             return 1
+
+    @override
+    def tokenize_tool_system_message(
+        self, tool_choice: Literal["none", "auto", "any", "tool"]
+    ) -> int:
+        return _TOOL_SYSTEM_MESSAGE
 
 
 @pytest.fixture
@@ -133,7 +141,11 @@ async def test_one_turn_with_tools(model):
     ]
 
     expected_tokens = (
-        530 + 11 + 1 + (_PER_MESSAGE_TOKENS + 22) + (_PER_MESSAGE_TOKENS + 33)
+        _TOOL_SYSTEM_MESSAGE
+        + 11
+        + 1
+        + (_PER_MESSAGE_TOKENS + 22)
+        + (_PER_MESSAGE_TOKENS + 33)
     )
 
     assert await tokenize(model, messages, _TOOL_CONFIG) == expected_tokens
