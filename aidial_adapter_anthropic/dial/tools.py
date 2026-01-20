@@ -55,10 +55,10 @@ class ToolsConfig(BaseModel):
     def create_fresh_tool_call_id(self, tool_name: str) -> str:
         idx = 1
         while True:
-            id = f"{tool_name}_{idx}"
-            if id not in self.tool_ids:
-                self.tool_ids[id] = tool_name
-                return id
+            tool_id = f"{tool_name}_{idx}"
+            if tool_id not in self.tool_ids:
+                self.tool_ids[tool_id] = tool_name
+                return tool_id
             idx += 1
 
     def get_tool_name(self, tool_call_id: str) -> str:
