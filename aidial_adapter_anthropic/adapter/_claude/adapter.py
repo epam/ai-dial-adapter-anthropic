@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from functools import cached_property
 from logging import DEBUG
 from typing import List, Optional, Tuple, Type, assert_never
 
@@ -90,6 +91,7 @@ from aidial_adapter_anthropic.adapter._claude.blocks import (
     TEXT_ATTACHMENT_PROCESSOR,
     create_text_block,
 )
+from aidial_adapter_anthropic.adapter._claude.citations import create_citations
 from aidial_adapter_anthropic.adapter._claude.config import (
     ClaudeConfiguration,
     ClaudeConfigurationWithThinking,
@@ -122,12 +124,16 @@ from aidial_adapter_anthropic.adapter._truncate_prompt import (
     DiscardedMessages,
     truncate_prompt,
 )
-from aidial_adapter_anthropic.dial._attachments import AttachmentProcessors
+from aidial_adapter_anthropic.dial._attachments import (
+    AttachmentProcessors,
+    WithResources,
+)
 from aidial_adapter_anthropic.dial._message import parse_dial_message
 from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
 from aidial_adapter_anthropic.dial.request import (
     ModelParameters as DialParameters,
 )
+from aidial_adapter_anthropic.dial.resource import DialResource
 from aidial_adapter_anthropic.dial.storage import FileStorage
 from aidial_adapter_anthropic.dial.tools import ToolsMode
 
@@ -156,7 +162,20 @@ class _AsyncMessagesAdapter(AsyncAPIResource):
 @dataclass
 class ClaudeRequest:
     params: ClaudeParameters
-    messages: ListProjection[ClaudeMessageParam]
+    messages: ListProjection[WithResources[ClaudeMessageParam]]
+
+    @property
+    def claude_messages(self) -> List[ClaudeMessageParam]:
+        return [res.payload for res in self.messages.raw_list]
+
+    @cached_property
+    def dial_resources(self) -> List[DialResource]:
+        return [r for res in self.messages.raw_list for r in res.resources]
+
+    def get_dial_resource(self, index: int) -> DialResource | None:
+        if index < 0 or index >= len(self.dial_resources):
+            return None
+        return self.dial_resources[index]
 
 
 AnthropicClient = (
@@ -361,7 +380,7 @@ class Adapter(ChatCompletionAdapter):
 
         async with (
             _AsyncMessagesAdapter(self.client.beta.messages).stream(
-                messages=request.messages.raw_list,
+                messages=request.claude_messages,
                 model=self.deployment,
                 **request.params,
             ) as stream,
@@ -407,9 +426,14 @@ class Adapter(ChatCompletionAdapter):
                         content_block=content_block
                     ):
                         match content_block:
-                            case TextBlock():
-                                # Already handled in TextEvent
-                                pass
+                            case TextBlock(citations=citations):
+                                # The text content is already handled in TextEvent handler.
+                                for citation in citations or []:
+                                    await create_citations(
+                                        consumer,
+                                        request.get_dial_resource,
+                                        citation,
+                                    )
                             case ToolUseBlock():
                                 # Tool Use is processed in ContentBlockStartEvent and InputJsonEvent handlers
                                 pass
@@ -473,7 +497,7 @@ class Adapter(ChatCompletionAdapter):
             _log.debug(f"request: {msg}")
 
         message: ClaudeResponseMessage = await self.client.beta.messages.create(
-            messages=request.messages.raw_list,
+            messages=request.claude_messages,
             model=self.deployment,
             **request.params,
             stream=False,
@@ -484,8 +508,12 @@ class Adapter(ChatCompletionAdapter):
 
         for content in message.content:
             match content:
-                case TextBlock(text=text):
+                case TextBlock(text=text, citations=citations):
                     consumer.append_content(text)
+                    for citation in citations or []:
+                        await create_citations(
+                            consumer, request.get_dial_resource, citation
+                        )
                 case ToolUseBlock():
                     process_tools_block(
                         consumer, content, tools_mode, streaming=False

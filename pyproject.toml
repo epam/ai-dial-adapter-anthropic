@@ -54,7 +54,7 @@ typeCheckingMode = "basic"
 reportDeprecated = "error"
 reportUnusedVariable = "error"
 reportIncompatibleMethodOverride = "error"
-exclude = [".git", ".venv", ".nox", "**/__pycache__"]
+exclude = [".git", ".venv", ".nox", "**/__pycache__", "build"]
 
 [tool.black]
 line-length = 80
@@ -64,13 +64,14 @@ exclude = '''
   | \.venv
   | \.nox
   | \.__pycache__
+  | build
 )/
 '''
 
 [tool.isort]
 line_length = 80
 profile = "black"
-skip = [".venv", ".nox"]
+skip = [".venv", ".nox", "build"]
 
 [tool.autoflake]
 ignore_init_module_imports = true
@@ -78,4 +79,4 @@ remove_all_unused_imports = true
 in_place = true
 recursive = true
 quiet = true
-exclude = ["\\.venv", "\\.nox"]
+exclude = ["\\.venv", "\\.nox", "build"]
