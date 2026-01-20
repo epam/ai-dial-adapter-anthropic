@@ -46,11 +46,11 @@ class ToolsConfig(BaseModel):
     """
 
     def not_supported(self) -> None:
-        if self.tools:
-            if self.tools_mode == ToolsMode.TOOLS:
-                raise ValidationError("The tools aren't supported")
-            else:
-                raise ValidationError("The functions aren't supported")
+        if not self.tools:
+            return
+        if self.tools_mode == ToolsMode.TOOLS:
+            raise ValidationError("The tools aren't supported")
+        raise ValidationError("The functions aren't supported")
 
     def create_fresh_tool_call_id(self, tool_name: str) -> str:
         idx = 1
