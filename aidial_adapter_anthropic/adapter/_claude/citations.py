@@ -1,5 +1,4 @@
-import logging
-from typing import assert_never
+from typing import Callable, assert_never
 
 from anthropic.types.beta import (
     BetaCitationCharLocation as CitationCharLocation,
@@ -19,12 +18,15 @@ from anthropic.types.beta import (
 from anthropic.types.beta import BetaTextCitation as TextCitation
 
 from aidial_adapter_anthropic.dial.consumer import Consumer
+from aidial_adapter_anthropic.dial.resource import DialResource
 
 
 async def _add_document_citation(
-    consumer: Consumer, prompt: ClaudePrompt, document_index: int
+    consumer: Consumer,
+    get_dial_resource: Callable[[int], DialResource | None],
+    document_index: int,
 ):
-    resource = prompt.get_dial_resource(document_index)
+    resource = get_dial_resource(document_index)
     attachment = None if resource is None else resource.to_attachment()
 
     # NOTE: multiple citations to the same document are merged into one citation
@@ -39,16 +41,19 @@ async def _add_document_citation(
 
 
 async def create_citations(
-    consumer: Consumer, prompt: ClaudePrompt, citation: TextCitation
+    consumer: Consumer,
+    get_dial_resource: Callable[[int], DialResource | None],
+    citation: TextCitation,
 ):
     match citation:
-        case CitationCharLocation(document_index=document_index):
-            await _add_document_citation(consumer, prompt, document_index)
+        case CitationCharLocation(
+            document_index=document_index
+        ) | CitationPageLocation(document_index=document_index):
+            await _add_document_citation(
+                consumer, get_dial_resource, document_index
+            )
 
-        case CitationPageLocation(document_index=document_index):
-            await _add_document_citation(consumer, prompt, document_index)
-
-        # custom document aren't supported yet
+        # Custom document aren't supported yet
         case CitationContentBlockLocation():
             pass
         # web search isn't supported yet
