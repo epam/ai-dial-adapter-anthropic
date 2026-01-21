@@ -169,13 +169,13 @@ class ClaudeRequest:
         return [res.payload for res in self.messages.raw_list]
 
     @cached_property
-    def dial_resources(self) -> List[DialResource]:
+    def resources(self) -> List[DialResource]:
         return [r for res in self.messages.raw_list for r in res.resources]
 
-    def get_dial_resource(self, index: int) -> DialResource | None:
-        if index < 0 or index >= len(self.dial_resources):
-            return None
-        return self.dial_resources[index]
+    def get_resource(self, index: int) -> DialResource | None:
+        if 0 <= index < len(self.resources):
+            return self.resources[index]
+        return None
 
 
 AnthropicClient = (
@@ -228,16 +228,15 @@ class Adapter(ChatCompletionAdapter):
     @property
     def attachment_processors(self) -> AttachmentProcessors:
         # Document support: https://docs.anthropic.com/en/docs/build-with-claude/pdf-support#supported-platforms-and-models
-
+        document_processors = (
+            [PDF_ATTACHMENT_PROCESSOR, TEXT_ATTACHMENT_PROCESSOR]
+            if self.supports_documents
+            else []
+        )
         return AttachmentProcessors(
             text_handler=create_text_block,
             attachment_processors=(
-                [IMAGE_ATTACHMENT_PROCESSOR]
-                + (
-                    [PDF_ATTACHMENT_PROCESSOR, TEXT_ATTACHMENT_PROCESSOR]
-                    if self.supports_documents
-                    else []
-                )
+                [IMAGE_ATTACHMENT_PROCESSOR] + document_processors
             ),
             file_storage=self.storage,
         )
@@ -431,7 +430,7 @@ class Adapter(ChatCompletionAdapter):
                                 for citation in citations or []:
                                     await create_citations(
                                         consumer,
-                                        request.get_dial_resource,
+                                        request.get_resource,
                                         citation,
                                     )
                             case ToolUseBlock():
@@ -512,7 +511,7 @@ class Adapter(ChatCompletionAdapter):
                     consumer.append_content(text)
                     for citation in citations or []:
                         await create_citations(
-                            consumer, request.get_dial_resource, citation
+                            consumer, request.get_resource, citation
                         )
                 case ToolUseBlock():
                     process_tools_block(

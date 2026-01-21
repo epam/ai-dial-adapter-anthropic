@@ -23,16 +23,16 @@ from aidial_adapter_anthropic.dial.resource import DialResource
 
 async def _add_document_citation(
     consumer: Consumer,
-    get_dial_resource: Callable[[int], DialResource | None],
+    get_document: Callable[[int], DialResource | None],
     document_index: int,
 ):
-    resource = get_dial_resource(document_index)
-    attachment = None if resource is None else resource.to_attachment()
+    resource = get_document(document_index)
+    document = None if resource is None else resource.to_attachment()
 
     # NOTE: multiple citations to the same document are merged into one citation
     # until we find a better API to handle citations embedded in text.
     display_index = await consumer.add_citation_attachment(
-        document_id=document_index, document=attachment
+        document_id=document_index, document=document
     )
 
     # NOTE: avoid adding citation URLs into the generated content,
@@ -42,16 +42,14 @@ async def _add_document_citation(
 
 async def create_citations(
     consumer: Consumer,
-    get_dial_resource: Callable[[int], DialResource | None],
+    get_document: Callable[[int], DialResource | None],
     citation: TextCitation,
 ):
     match citation:
         case CitationCharLocation(
             document_index=document_index
         ) | CitationPageLocation(document_index=document_index):
-            await _add_document_citation(
-                consumer, get_dial_resource, document_index
-            )
+            await _add_document_citation(consumer, get_document, document_index)
 
         # Custom document aren't supported yet
         case CitationContentBlockLocation():
