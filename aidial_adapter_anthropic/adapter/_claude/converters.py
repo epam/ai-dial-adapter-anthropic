@@ -6,11 +6,7 @@ from anthropic.types.beta import (
     BetaCacheControlEphemeralParam as CacheControlEphemeralParam,
 )
 from anthropic.types.beta import BetaContentBlockParam as ContentBlockParam
-from anthropic.types.beta import BetaImageBlockParam as ImageBlockParam
 from anthropic.types.beta import BetaMessageParam as MessageParam
-from anthropic.types.beta import (
-    BetaRequestDocumentBlockParam as RequestDocumentBlockParam,
-)
 from anthropic.types.beta import BetaStopReason as ClaudeStopReason
 from anthropic.types.beta import BetaTextBlockParam as TextBlockParam
 from anthropic.types.beta import BetaToolChoiceAnyParam as ToolChoiceAnyParam
@@ -49,7 +45,6 @@ from aidial_adapter_anthropic.dial.token_usage import TokenUsage
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 
 DialMessage = BaseMessage | HumanToolResultMessage | AIToolCallMessage
-ClaudeParams = TextBlockParam | ImageBlockParam | RequestDocumentBlockParam
 
 ClaudeMessage = WithResources[ContentBlockParam]
 
@@ -87,10 +82,14 @@ def _get_claude_message_role(
             assert_never(dial_message)
 
 
+_Elem = Tuple[WithResources[MessageParam], Set[int]]
+
+
 def _merge_messages_with_same_role(
     messages: ListProjection[WithResources[MessageParam]],
 ) -> ListProjection[WithResources[MessageParam]]:
-    def _key(message: Tuple[WithResources[MessageParam], Set[int]]) -> str:
+
+    def _key(message: _Elem) -> str:
         return message[0].payload["role"]
 
     def _merge_message_param(
@@ -110,10 +109,7 @@ def _merge_messages_with_same_role(
             content=list(content1) + list(content2),
         )
 
-    def _merge(
-        a: Tuple[WithResources[MessageParam], Set[int]],
-        b: Tuple[WithResources[MessageParam], Set[int]],
-    ) -> Tuple[WithResources[MessageParam], Set[int]]:
+    def _merge(a: _Elem, b: _Elem) -> _Elem:
         (msg1, set1), (msg2, set2) = a, b
         payload = _merge_message_param(msg1.payload, msg2.payload)
         resources = msg1.resources + msg2.resources
@@ -122,8 +118,10 @@ def _merge_messages_with_same_role(
     return ListProjection(group_by(messages.list, _key, lambda x: x, _merge))
 
 
-async def _get_content(
-    handlers: AttachmentProcessors[TextBlockParam, ClaudeParams, Configuration],
+async def _get_claude_blocks(
+    handlers: AttachmentProcessors[
+        TextBlockParam, ContentBlockParam, Configuration
+    ],
     message: (
         HumanRegularMessage
         | AIRegularMessage
@@ -131,46 +129,47 @@ async def _get_content(
         | HumanToolResultMessage
     ),
     message_idx: int,
-) -> Tuple[
-    WithResources[Sequence[ContentBlockParam]],
-    List[ContentBlockParam] | None,
-]:
+) -> WithResources[Sequence[ContentBlockParam]]:
 
     match message:
         case HumanRegularMessage():
-            content = await handlers.process_attachments(message)
-            return (content, None)
+            return await handlers.process_attachments(message)
+
+        case HumanToolResultMessage():
+            blocks = [create_tool_result_block(message)]
+            return WithResources(payload=blocks)
 
         case AIRegularMessage():
+            content = await handlers.process_attachments(message)
+
             # Take the message content from the state if possible,
             # since it may include certain content blocks that
             # are missing from the DIAL message itself,
             # such as thinking signatures and redacted thinking blocks.
-            state = get_message_content_from_state(message_idx, message)
-            content = await handlers.process_attachments(message)
-            return (content, state)
+            if state := get_message_content_from_state(message_idx, message):
+                content.payload = state
+
+            return content
 
         case AIToolCallMessage():
-            state = get_message_content_from_state(message_idx, message)
-
             blocks = [create_tool_use_block(call) for call in message.calls]
             if text_content := message.content:
                 blocks.insert(0, create_text_block(text_content))
 
             content = WithResources(payload=blocks)
-            return (content, state)
+            if state := get_message_content_from_state(message_idx, message):
+                content.payload = state
 
-        case HumanToolResultMessage():
-            blocks = [create_tool_result_block(message)]
-            content = WithResources(payload=blocks)
-            return (content, None)
+            return content
 
         case _:
             assert_never(message)
 
 
 async def to_claude_messages(
-    handlers: AttachmentProcessors[TextBlockParam, ClaudeParams, Configuration],
+    handlers: AttachmentProcessors[
+        TextBlockParam, ContentBlockParam, Configuration
+    ],
     messages: List[DialMessage],
 ) -> Tuple[List[TextBlockParam], ListProjection[WithResources[MessageParam]]]:
 
@@ -197,17 +196,13 @@ async def to_claude_messages(
                 "System and developer messages are only allowed in the beginning of the conversation."
             )
 
-        (content, state) = await _get_content(handlers, message, idx)
-
-        if state is not None:
-            content.payload = state
-
-        _add_cache_control(message, content.payload)
+        blocks = await _get_claude_blocks(handlers, message, idx)
+        _add_cache_control(message, blocks.payload)
 
         role = _get_claude_message_role(message)
         claude_message = WithResources(
-            payload=MessageParam(role=role, content=content.payload),
-            resources=content.resources,
+            payload=MessageParam(role=role, content=blocks.payload),
+            resources=blocks.resources,
         )
 
         claude_messages.append(claude_message, idx)
