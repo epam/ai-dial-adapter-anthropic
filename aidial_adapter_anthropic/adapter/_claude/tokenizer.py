@@ -36,10 +36,10 @@ import json
 import logging
 import math
 from typing import (
-    Any,
     List,
     Literal,
     Protocol,
+    Set,
     Tuple,
     Union,
     assert_never,
@@ -281,10 +281,10 @@ class CrudeClaudeTokenizer:
 
 def create_tokenizer(tokenizer: ClaudeTokenizer, params: ClaudeParameters):
     async def _tokenize(
-        messages: List[Tuple[WithResources[ClaudeMessage], Any]],
+        messages: List[Tuple[WithResources[ClaudeMessage], Set[int]]],
     ) -> int:
         return await tokenizer.tokenize(
-            params, [msg.payload for msg, _ in messages]
+            params, [msg[0].payload for msg in messages]
         )
 
     return _tokenize
