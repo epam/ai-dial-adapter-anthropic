@@ -219,7 +219,6 @@ class CrudeClaudeTokenizer:
 
     def _tokenize_message(self, message: ClaudeMessage) -> int:
         tokens: int = 0
-
         content = message["content"]
 
         match content:
@@ -243,7 +242,7 @@ class CrudeClaudeTokenizer:
     def _tokenize_tool_param(self, tool: ToolParam) -> int:
         return self.tokenize_text(json.dumps(tool))
 
-    def _tokenize_tool_system_message(
+    def tokenize_tool_system_message(
         self,
         tool_choice: Literal["none", "auto", "any", "tool"],
     ) -> int:
@@ -270,7 +269,7 @@ class CrudeClaudeTokenizer:
             else:
                 choice = "auto"
 
-            tokens += self._tokenize_tool_system_message(choice)
+            tokens += self.tokenize_tool_system_message(choice)
 
             for tool in tools:
                 tokens += self._tokenize_tool_param(tool)

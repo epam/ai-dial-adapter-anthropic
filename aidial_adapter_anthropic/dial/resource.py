@@ -186,5 +186,4 @@ async def _download_url(file_storage: FileStorage | None, url: str) -> bytes:
 
     if file_storage:
         return await file_storage.download_file(url)
-    else:
-        return await download_file(url)
+    return await download_file(url)
