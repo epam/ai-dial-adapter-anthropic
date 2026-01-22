@@ -105,6 +105,7 @@ from aidial_adapter_anthropic.adapter._claude.converters import (
 from aidial_adapter_anthropic.adapter._claude.params import ClaudeParameters
 from aidial_adapter_anthropic.adapter._claude.state import MessageState
 from aidial_adapter_anthropic.adapter._claude.tokenizer import (
+    AnthropicTokenizer,
     ClaudeTokenizer,
     create_tokenizer,
 )
@@ -140,15 +141,11 @@ from aidial_adapter_anthropic.dial.tools import ToolsMode
 _log = logging.getLogger(__name__)
 
 
-# Beta AsyncMessages in Bedrock doesn't provide stream and count_tokens,
+# Beta AsyncMessages in Bedrock doesn't provide stream method,
 # so we enabled it via the adapter.
 class _AsyncMessagesAdapter(AsyncAPIResource):
     create = FirstPartyAsyncMessagesAPI.create
     stream = FirstPartyAsyncMessagesAPI.stream
-
-    # NOTE: count_tokens endpoint isn't supported by Bedrock.
-    # It returns 200 {"Output":{"__type":"com.amazon.coral.service#UnknownOperationException"},"Version":"1.0"}
-    count_tokens = FirstPartyAsyncMessagesAPI.count_tokens
 
     def __init__(self, resource: AsyncAPIResource):
         super().__init__(resource._client)
@@ -191,11 +188,12 @@ async def create_adapter(
     deployment: str,
     storage: FileStorage | None,
     client: AnthropicClient,
-    tokenizer: ClaudeTokenizer,
     default_max_tokens: int,
     supports_thinking: bool,
     supports_documents: bool,
+    custom_tokenizer: ClaudeTokenizer | None = None,
 ) -> ChatCompletionAdapter:
+    tokenizer = custom_tokenizer or AnthropicTokenizer(deployment, client)
     model = Adapter(
         deployment=deployment,
         storage=storage,

@@ -1,11 +1,17 @@
-from typing import List, TypedDict
+from typing import List, TypedDict, TypeVar
 
-from anthropic import Omit
+from anthropic import Omit, omit
 from anthropic.types.anthropic_beta_param import AnthropicBetaParam
 from anthropic.types.beta import BetaTextBlockParam as TextBlockParam
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
 from anthropic.types.beta import BetaToolChoiceParam as ToolChoice
 from anthropic.types.beta import BetaToolParam as ToolParam
+
+_T = TypeVar("_T")
+
+
+def none_to_omit(value: _T | None) -> _T | Omit:
+    return value if value is not None else omit
 
 
 class ClaudeParameters(TypedDict):
