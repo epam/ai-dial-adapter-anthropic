@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import inspect
+from dataclasses import dataclass, field
 from typing import (
     AsyncIterator,
     Callable,
@@ -33,6 +36,7 @@ from aidial_adapter_anthropic.dial.resource import (
 from aidial_adapter_anthropic.dial.storage import FileStorage
 
 _T = TypeVar("_T", covariant=True)
+_Txt = TypeVar("_Txt", covariant=True)
 _Config = TypeVar("_Config", bound=BaseModel, contravariant=True)
 
 
@@ -73,10 +77,22 @@ class AttachmentProcessor(BaseModel, Generic[_T, _Config]):
         return self.handler(resource)  # type: ignore
 
 
-class AttachmentProcessors(BaseModel, Generic[_T, _Config]):
+@dataclass
+class WithResources(Generic[_T]):
+    payload: _T
+    resources: List[DialResource] = field(default_factory=list)
+
+    @staticmethod
+    def transpose(xs: List[WithResources[_T]]) -> WithResources[List[_T]]:
+        resources = [r for x in xs for r in x.resources]
+        payload = [x.payload for x in xs]
+        return WithResources(payload=payload, resources=resources)
+
+
+class AttachmentProcessors(BaseModel, Generic[_Txt, _T, _Config]):
     config: _Config | None = None
     attachment_processors: Sequence[AttachmentProcessor[_T, _Config]]
-    text_handler: Callable[[str], _T]
+    text_handler: Callable[[str], _Txt]
     file_storage: FileStorage | None
 
     @property
@@ -95,14 +111,41 @@ class AttachmentProcessors(BaseModel, Generic[_T, _Config]):
     def supported_image_types(self) -> List[str]:
         return [t for t in self.supported_mime_types if t.startswith("image/")]
 
-    async def process_attachments(self, message: BaseMessage) -> List[_T]:
-        return await aiter_to_list(self._process_attachments_iter(message)) or [
-            self.text_handler("")
+    def _text_handler(self, text: str) -> WithResources[_Txt]:
+        return WithResources(self.text_handler(text))
+
+    async def process_system_message(
+        self, message: SystemMessage
+    ) -> List[_Txt]:
+        def _gen():
+            match (content := message.content):
+                case str():
+                    if content:
+                        yield self.text_handler(content)
+                case list():
+                    for part in content:
+                        match part:
+                            case MessageContentTextPart(text=text):
+                                if text:
+                                    yield self.text_handler(text)
+                            case _:
+                                assert_never(part)
+                case _:
+                    assert_never(content)
+
+        return [x for x in _gen()]
+
+    async def process_attachments(
+        self, message: BaseMessage
+    ) -> WithResources[List[_T | _Txt]]:
+        ret = await aiter_to_list(self._process_attachments_iter(message)) or [
+            self._text_handler("")
         ]
+        return WithResources.transpose(ret)
 
     async def _process_attachments_iter(
         self, message: BaseMessage
-    ) -> AsyncIterator[_T]:
+    ) -> AsyncIterator[WithResources[_T | _Txt]]:
         if not isinstance(message, SystemMessage):
             for attachment in message.attachments:
                 yield await self._handle_dial_resource(
@@ -118,13 +161,13 @@ class AttachmentProcessors(BaseModel, Generic[_T, _Config]):
         match content:
             case str():
                 if content:
-                    yield self.text_handler(content)
+                    yield self._text_handler(content)
             case list():
                 for part in content:
                     match part:
                         case MessageContentTextPart(text=text):
                             if text:
-                                yield self.text_handler(text)
+                                yield self._text_handler(text)
                         case MessageContentImagePart(image_url=image_url):
                             yield await self._handle_dial_resource(
                                 URLResource(
@@ -161,9 +204,12 @@ class AttachmentProcessors(BaseModel, Generic[_T, _Config]):
             _get_usage_message(self.get_file_exts(self.supported_mime_types)),
         )
 
-    async def _handle_dial_resource(self, dial_resource: DialResource) -> _T:
+    async def _handle_dial_resource(
+        self, dial_resource: DialResource
+    ) -> WithResources[_T]:
         resource = await self._download_resource(dial_resource)
-        return await self._handle_resource(resource)
+        message = await self._handle_resource(resource)
+        return WithResources(message, resources=[dial_resource])
 
     def get_file_exts(self, mime_types: List[str]) -> List[str]:
         return [

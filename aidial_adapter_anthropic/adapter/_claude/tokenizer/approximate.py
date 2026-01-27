@@ -35,16 +35,7 @@ import io
 import json
 import logging
 import math
-from typing import (
-    Any,
-    List,
-    Literal,
-    Protocol,
-    Tuple,
-    Union,
-    assert_never,
-    runtime_checkable,
-)
+from typing import List, Literal, Tuple, assert_never
 
 from anthropic._types import Base64FileInput
 from anthropic.types.beta import (
@@ -95,21 +86,12 @@ from aidial_adapter_anthropic.adapter._tokenize import default_tokenize_string
 _log = logging.getLogger(__name__)
 
 
-@runtime_checkable
-class ClaudeTokenizer(Protocol):
-    def tokenize_text(self, text: str) -> int: ...
-
-    async def tokenize(
-        self, params: ClaudeParameters, messages: List[ClaudeMessage]
-    ) -> int: ...
-
-
-class CrudeClaudeTokenizer:
+class ApproximateTokenizer:
     def tokenize_text(self, text: str) -> int:
         return default_tokenize_string(text)
 
     def _get_image_size(
-        self, image_data: Union[str, Base64FileInput]
+        self, image_data: str | Base64FileInput
     ) -> Tuple[int, int]:
         try:
             if not isinstance(image_data, str):
@@ -276,10 +258,3 @@ class CrudeClaudeTokenizer:
         tokens += self._tokenize_messages(messages)
 
         return tokens
-
-
-def create_tokenizer(tokenizer: ClaudeTokenizer, params: ClaudeParameters):
-    async def _tokenize(messages: List[Tuple[ClaudeMessage, Any]]) -> int:
-        return await tokenizer.tokenize(params, [msg for msg, _ in messages])
-
-    return _tokenize
