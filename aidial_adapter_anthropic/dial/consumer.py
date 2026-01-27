@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import ContextManager, List, Optional, Protocol, Self
+from typing import ContextManager, List, Optional, Protocol, Self, Tuple
 
 from aidial_sdk.chat_completion import (
     Attachment,
@@ -57,6 +57,11 @@ class Consumer(ContextManager, ABC):
     def add_attachment(self, attachment: Attachment): ...
 
     @abstractmethod
+    async def add_citation_attachment(
+        self, document_id: int, document: Attachment | None
+    ) -> int: ...
+
+    @abstractmethod
     def add_usage(self, usage: TokenUsage): ...
 
     @abstractmethod
@@ -95,6 +100,7 @@ class ChoiceConsumer(Consumer):
     _root: Optional[Consumer]
     _choice: Optional[Choice]
     _tool_calls: List[ToolUseMessage]
+    _citations: dict[int, Tuple[int, Attachment | None]]
 
     def __init__(self, response: Response, root: Optional[Consumer] = None):
         self.response = response
@@ -105,6 +111,7 @@ class ChoiceConsumer(Consumer):
         self._choice = None
         self._root = root
         self._tool_calls = []
+        self._citations = {}
 
     def fork(self) -> Consumer:
         return ChoiceConsumer(self.response, self._root or self)
@@ -161,6 +168,24 @@ class ChoiceConsumer(Consumer):
 
     def add_attachment(self, attachment: Attachment):
         self.choice.add_attachment(attachment)
+
+    async def add_citation_attachment(
+        self, document_id: int, document: Attachment | None
+    ) -> int:
+        if document_id in self._citations:
+            return self._citations[document_id][0]
+
+        display_index = len(self._citations) + 1
+        self._citations[document_id] = (display_index, document)
+
+        if document:
+            document = document.copy()
+            document.title = f"[{display_index}] {document.title or ''}".strip()
+            document.reference_type = document.reference_type or document.type
+            document.reference_url = document.reference_url or document.url
+            self.add_attachment(document)
+
+        return display_index
 
     def add_usage(self, usage: TokenUsage):
         if self._root:
@@ -242,6 +267,11 @@ class ConsumerDecorator(Consumer):
 
     def add_attachment(self, attachment: Attachment):
         self.consumer.add_attachment(attachment)
+
+    async def add_citation_attachment(self, document_id, document):
+        return await self.consumer.add_citation_attachment(
+            document_id, document
+        )
 
     def add_usage(self, usage: TokenUsage):
         self.consumer.add_usage(usage)
