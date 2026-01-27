@@ -21,7 +21,7 @@ from aidial_adapter_anthropic.dial.consumer import Consumer
 from aidial_adapter_anthropic.dial.resource import DialResource
 
 
-async def _add_document_citation(
+def _add_document_citation(
     consumer: Consumer,
     get_document: Callable[[int], DialResource | None],
     document_index: int,
@@ -31,7 +31,7 @@ async def _add_document_citation(
 
     # NOTE: multiple citations to the same document are merged into one citation
     # until we find a better API to handle citations embedded in text.
-    display_index = await consumer.add_citation_attachment(
+    display_index = consumer.add_citation_attachment(
         document_id=document_index, document=document
     )
 
@@ -40,7 +40,7 @@ async def _add_document_citation(
     consumer.append_content(f"[{display_index}]")
 
 
-async def create_citations(
+def create_citations(
     consumer: Consumer,
     get_document: Callable[[int], DialResource | None],
     citation: TextCitation,
@@ -49,7 +49,7 @@ async def create_citations(
         case CitationCharLocation(
             document_index=document_index
         ) | CitationPageLocation(document_index=document_index):
-            await _add_document_citation(consumer, get_document, document_index)
+            _add_document_citation(consumer, get_document, document_index)
 
         # Custom document aren't supported yet
         case CitationContentBlockLocation():

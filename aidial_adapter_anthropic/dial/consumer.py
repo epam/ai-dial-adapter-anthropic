@@ -57,7 +57,7 @@ class Consumer(ContextManager, ABC):
     def add_attachment(self, attachment: Attachment): ...
 
     @abstractmethod
-    async def add_citation_attachment(
+    def add_citation_attachment(
         self, document_id: int, document: Attachment | None
     ) -> int: ...
 
@@ -169,7 +169,7 @@ class ChoiceConsumer(Consumer):
     def add_attachment(self, attachment: Attachment):
         self.choice.add_attachment(attachment)
 
-    async def add_citation_attachment(
+    def add_citation_attachment(
         self, document_id: int, document: Attachment | None
     ) -> int:
         if document_id in self._citations:
@@ -233,63 +233,3 @@ class ChoiceConsumer(Consumer):
     @property
     def has_function_call(self) -> bool:
         return self._choice is not None and self._choice.has_function_call
-
-
-class ConsumerDecorator(Consumer):
-    consumer: Consumer
-
-    def __init__(self, consumer: Consumer):
-        self.consumer = consumer
-
-    def __enter__(self) -> Consumer:
-        return self.consumer.__enter__()
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> bool | None:
-        return self.consumer.__exit__(exc_type, exc, traceback)
-
-    def fork(self) -> Consumer:
-        return self.consumer.fork()
-
-    @property
-    def choice(self) -> Choice:
-        return self.consumer.choice
-
-    def close_content(self, finish_reason: FinishReason | None = None):
-        self.consumer.close_content(finish_reason)
-
-    def append_content(self, content: str):
-        self.consumer.append_content(content)
-
-    def add_attachment(self, attachment: Attachment):
-        self.consumer.add_attachment(attachment)
-
-    async def add_citation_attachment(self, document_id, document):
-        return await self.consumer.add_citation_attachment(
-            document_id, document
-        )
-
-    def add_usage(self, usage: TokenUsage):
-        self.consumer.add_usage(usage)
-
-    def set_discarded_messages(
-        self, discarded_messages: Optional[DiscardedMessages]
-    ):
-        self.consumer.set_discarded_messages(discarded_messages)
-
-    def get_discarded_messages(self) -> Optional[DiscardedMessages]:
-        return self.consumer.get_discarded_messages()
-
-    def create_function_tool_call(self, call: ToolCall) -> ToolUseMessage:
-        return self.consumer.create_function_tool_call(call)
-
-    def create_function_call(self, call: FunctionCall) -> ToolUseMessage:
-        return self.consumer.create_function_call(call)
-
-    @property
-    def has_function_call(self) -> bool:
-        return self.consumer.has_function_call
