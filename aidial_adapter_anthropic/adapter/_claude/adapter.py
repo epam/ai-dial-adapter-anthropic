@@ -88,7 +88,7 @@ from aidial_adapter_anthropic.adapter._base import (
 from aidial_adapter_anthropic.adapter._claude.blocks import (
     IMAGE_ATTACHMENT_PROCESSOR,
     PDF_ATTACHMENT_PROCESSOR,
-    TEXT_ATTACHMENT_PROCESSOR,
+    PLAIN_TEXT_ATTACHMENT_PROCESSOR,
     create_text_block,
 )
 from aidial_adapter_anthropic.adapter._claude.citations import create_citations
@@ -227,7 +227,7 @@ class Adapter(ChatCompletionAdapter):
     def attachment_processors(self) -> AttachmentProcessors:
         # Document support: https://docs.anthropic.com/en/docs/build-with-claude/pdf-support#supported-platforms-and-models
         document_processors = (
-            [PDF_ATTACHMENT_PROCESSOR, TEXT_ATTACHMENT_PROCESSOR]
+            [PDF_ATTACHMENT_PROCESSOR, PLAIN_TEXT_ATTACHMENT_PROCESSOR]
             if self.supports_documents
             else []
         )
