@@ -141,7 +141,7 @@ from aidial_adapter_anthropic.dial.tools import ToolsMode
 _log = logging.getLogger(__name__)
 
 
-# Beta AsyncMessages in Bedrock doesn't provide stream method,
+# Beta AsyncMessages doesn't provide the 'stream' method,
 # so we enabled it via the adapter.
 class _AsyncMessagesAdapter(AsyncAPIResource):
     create = FirstPartyAsyncMessagesAPI.create

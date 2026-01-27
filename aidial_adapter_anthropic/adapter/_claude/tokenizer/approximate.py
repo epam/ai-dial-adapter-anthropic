@@ -35,7 +35,7 @@ import io
 import json
 import logging
 import math
-from typing import List, Literal, Set, Tuple, assert_never
+from typing import List, Literal, Tuple, assert_never
 
 from anthropic._types import Base64FileInput
 from anthropic.types.beta import (
@@ -81,11 +81,7 @@ from anthropic.types.beta.beta_tool_result_block_param import (
 from PIL import Image
 
 from aidial_adapter_anthropic.adapter._claude.params import ClaudeParameters
-from aidial_adapter_anthropic.adapter._claude.tokenizer.base import (
-    ClaudeTokenizer,
-)
 from aidial_adapter_anthropic.adapter._tokenize import default_tokenize_string
-from aidial_adapter_anthropic.dial._attachments import WithResources
 
 _log = logging.getLogger(__name__)
 
@@ -262,14 +258,3 @@ class ApproximateTokenizer:
         tokens += self._tokenize_messages(messages)
 
         return tokens
-
-
-def create_tokenizer(tokenizer: ClaudeTokenizer, params: ClaudeParameters):
-    async def _tokenize(
-        messages: List[Tuple[WithResources[ClaudeMessage], Set[int]]],
-    ) -> int:
-        return await tokenizer.tokenize(
-            params, [msg[0].payload for msg in messages]
-        )
-
-    return _tokenize

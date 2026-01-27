@@ -22,7 +22,7 @@ AnthropicClient = (
 )
 
 
-# Beta AsyncMessages in Bedrock doesn't provide count_tokens,
+# Beta AsyncMessages doesn't provide the 'count_tokens' method,
 # so we enabled it via the adapter.
 class _AsyncMessagesAdapter(AsyncAPIResource):
     count_tokens = FirstPartyAsyncMessagesAPI.count_tokens
