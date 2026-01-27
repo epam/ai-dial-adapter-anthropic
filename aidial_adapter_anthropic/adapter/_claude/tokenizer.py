@@ -36,10 +36,10 @@ import json
 import logging
 import math
 from typing import (
-    Any,
     List,
     Literal,
     Protocol,
+    Set,
     Tuple,
     Union,
     assert_never,
@@ -91,6 +91,7 @@ from PIL import Image
 
 from aidial_adapter_anthropic.adapter._claude.params import ClaudeParameters
 from aidial_adapter_anthropic.adapter._tokenize import default_tokenize_string
+from aidial_adapter_anthropic.dial._attachments import WithResources
 
 _log = logging.getLogger(__name__)
 
@@ -279,7 +280,11 @@ class CrudeClaudeTokenizer:
 
 
 def create_tokenizer(tokenizer: ClaudeTokenizer, params: ClaudeParameters):
-    async def _tokenize(messages: List[Tuple[ClaudeMessage, Any]]) -> int:
-        return await tokenizer.tokenize(params, [msg for msg, _ in messages])
+    async def _tokenize(
+        messages: List[Tuple[WithResources[ClaudeMessage], Set[int]]],
+    ) -> int:
+        return await tokenizer.tokenize(
+            params, [msg[0].payload for msg in messages]
+        )
 
     return _tokenize
