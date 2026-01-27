@@ -8,8 +8,8 @@ from aidial_sdk.exceptions import HTTPException as DialException
 from typing_extensions import override
 
 from aidial_adapter_anthropic.adapter import ChatCompletionAdapter
-from aidial_adapter_anthropic.adapter._claude.tokenizer import (
-    CrudeClaudeTokenizer,
+from aidial_adapter_anthropic.adapter._claude.tokenizer.approximate import (
+    ApproximateTokenizer,
 )
 from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
 from aidial_adapter_anthropic.adapter.claude import create_adapter
@@ -20,7 +20,7 @@ from tests.utils.messages import ai, sys, user, user_with_image
 _TOOL_SYSTEM_MESSAGE = 55
 
 
-class _MockTokenizer(CrudeClaudeTokenizer):
+class _MockTokenizer(ApproximateTokenizer):
     @override
     def tokenize_text(self, text: str) -> int:
         try:
@@ -41,7 +41,7 @@ async def model():
         deployment="test-anthropic-deployment",
         storage=None,
         client=anthropic.AsyncAnthropic(),
-        tokenizer=_MockTokenizer(),
+        custom_tokenizer=_MockTokenizer(),
         default_max_tokens=1024,
         supports_thinking=True,
         supports_documents=True,
