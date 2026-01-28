@@ -426,10 +426,8 @@ class Adapter(ChatCompletionAdapter):
                             case TextBlock(citations=citations):
                                 # The text content is already handled in TextEvent handler.
                                 for citation in citations or []:
-                                    await create_citations(
-                                        consumer,
-                                        request.get_resource,
-                                        citation,
+                                    create_citations(
+                                        consumer, request.get_resource, citation
                                     )
                             case ToolUseBlock():
                                 # Tool Use is processed in ContentBlockStartEvent and InputJsonEvent handlers
@@ -508,7 +506,7 @@ class Adapter(ChatCompletionAdapter):
                 case TextBlock(text=text, citations=citations):
                     consumer.append_content(text)
                     for citation in citations or []:
-                        await create_citations(
+                        create_citations(
                             consumer, request.get_resource, citation
                         )
                 case ToolUseBlock():
