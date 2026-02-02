@@ -210,6 +210,7 @@ async def create_adapter(
     )(model)
 
 
+@dataclass
 class Adapter(ChatCompletionAdapter):
     deployment: str
     storage: Optional[FileStorage]

@@ -5,7 +5,6 @@ from aidial_sdk.chat_completion import Message
 from pydantic import BaseModel
 
 from aidial_adapter_anthropic._utils.list import ListProjection
-from aidial_adapter_anthropic._utils.pydantic import AnyTypeModel
 from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
 from aidial_adapter_anthropic.dial.consumer import Consumer
@@ -16,7 +15,7 @@ from aidial_adapter_anthropic.dial.request import (
 )
 
 
-class ChatCompletionAdapter(ABC, AnyTypeModel):
+class ChatCompletionAdapter(ABC):
     @abstractmethod
     async def chat(
         self,

@@ -2,9 +2,11 @@ from typing import List, Literal
 
 from anthropic.types.anthropic_beta_param import AnthropicBetaParam
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from aidial_adapter_anthropic._utils.pydantic import ExtraForbidModel
+
+class ExtraForbidModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 class ThinkingConfigEnabled(ExtraForbidModel):

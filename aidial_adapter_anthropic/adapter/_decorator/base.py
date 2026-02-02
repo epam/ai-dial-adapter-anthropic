@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Callable, List
 
 from aidial_sdk.chat_completion import Message
@@ -9,6 +10,7 @@ from aidial_adapter_anthropic.dial.consumer import Consumer
 from aidial_adapter_anthropic.dial.request import ModelParameters
 
 
+@dataclass
 class ChatCompletionDecorator(ChatCompletionAdapter):
     adapter: ChatCompletionAdapter
 
