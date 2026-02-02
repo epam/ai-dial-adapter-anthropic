@@ -24,6 +24,7 @@ from aidial_sdk.chat_completion import (
 from pydantic import BaseModel
 
 from aidial_adapter_anthropic._utils.list import aiter_to_list
+from aidial_adapter_anthropic._utils.pydantic import AnyTypeModel
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic.adapter._errors import UserError, ValidationError
 from aidial_adapter_anthropic.dial._message import BaseMessage, SystemMessage
@@ -50,10 +51,7 @@ class HandlerWithConfig(Protocol, Generic[_T, _Config]):
     def __call__(self, resource: Resource, config: _Config | None) -> _T: ...
 
 
-class AttachmentProcessor(BaseModel, Generic[_T, _Config]):
-    class Config:
-        arbitrary_types_allowed = True
-
+class AttachmentProcessor(AnyTypeModel, Generic[_T, _Config]):
     supported_types: Dict[str, Set[str]]
     """MIME type to file extensions mapping"""
 

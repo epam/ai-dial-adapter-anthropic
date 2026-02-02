@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Awaitable, Callable, List, Optional, Set, Tuple, TypeVar
 
 from aidial_sdk.exceptions import ContextLengthExceededError
@@ -7,7 +8,6 @@ from aidial_sdk.exceptions import (
     InvalidRequestError,
     TruncatePromptSystemAndLastUserError,
 )
-from pydantic import BaseModel
 
 from aidial_adapter_anthropic._utils.list import (
     omit_by_indices,
@@ -15,7 +15,7 @@ from aidial_adapter_anthropic._utils.list import (
 )
 
 
-class TruncatePromptError(ABC, BaseModel):
+class TruncatePromptError(ABC):
     @abstractmethod
     def to_dial_exception(self) -> DialException:
         pass
@@ -24,6 +24,7 @@ class TruncatePromptError(ABC, BaseModel):
         return self.to_dial_exception().message
 
 
+@dataclass
 class InconsistentLimitsError(TruncatePromptError):
     user_limit: int
     model_limit: int
@@ -35,6 +36,7 @@ class InconsistentLimitsError(TruncatePromptError):
         )
 
 
+@dataclass
 class ModelLimitOverflow(TruncatePromptError):
     model_limit: int
     token_count: int
@@ -43,6 +45,7 @@ class ModelLimitOverflow(TruncatePromptError):
         return ContextLengthExceededError(self.model_limit, self.token_count)
 
 
+@dataclass
 class UserLimitOverflow(TruncatePromptError):
     user_limit: int
     token_count: int
