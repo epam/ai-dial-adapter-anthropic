@@ -179,7 +179,7 @@ class ChoiceConsumer(Consumer):
         self._citations[document_id] = (display_index, document)
 
         if document:
-            document = document.copy()
+            document = document.model_copy()
             document.title = f"[{display_index}] {document.title or ''}".strip()
             document.reference_type = document.reference_type or document.type
             document.reference_url = document.reference_url or document.url

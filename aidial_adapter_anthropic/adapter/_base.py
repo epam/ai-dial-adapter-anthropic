@@ -15,10 +15,7 @@ from aidial_adapter_anthropic.dial.request import (
 )
 
 
-class ChatCompletionAdapter(ABC, BaseModel):
-    class Config:
-        arbitrary_types_allowed = True
-
+class ChatCompletionAdapter(ABC):
     @abstractmethod
     async def chat(
         self,

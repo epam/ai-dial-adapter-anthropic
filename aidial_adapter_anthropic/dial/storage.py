@@ -3,11 +3,12 @@ import hashlib
 import io
 import logging
 import mimetypes
-from typing import Mapping, Optional, TypedDict
+from typing import Mapping, Optional
 from urllib.parse import unquote, urljoin
 
 import aiohttp
 from pydantic import BaseModel
+from typing_extensions import TypedDict
 
 _log = logging.getLogger(__name__)
 
