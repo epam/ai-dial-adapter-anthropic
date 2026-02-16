@@ -44,6 +44,7 @@ from anthropic.types.beta import (
 from anthropic.types.beta import (
     BetaCodeExecutionToolResultBlock as CodeExecutionToolResultBlock,
 )
+from anthropic.types.beta import BetaCompactionBlock as CompactionBlock
 from anthropic.types.beta import (
     BetaContainerUploadBlock as ContainerUploadBlock,
 )
@@ -164,6 +165,7 @@ class ApproximateTokenizer:
                     | "web_fetch_tool_result"
                     | "tool_search_tool_result"
                     | "tool_reference"
+                    | "compaction"
                 ):
                     return 0
                 case _:
@@ -193,6 +195,7 @@ class ApproximateTokenizer:
                     | TextEditorCodeExecutionToolResultBlock()
                     | WebFetchToolResultBlock()
                     | ToolSearchToolResultBlock()
+                    | CompactionBlock()
                 ):
                     return 0
                 case _:

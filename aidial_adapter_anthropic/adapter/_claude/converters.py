@@ -222,7 +222,7 @@ def to_dial_finish_reason(
             return FinishReason.STOP
         case "max_tokens" | "model_context_window_exceeded":
             return FinishReason.LENGTH
-        case "stop_sequence" | "pause_turn" | "refusal":
+        case "stop_sequence" | "pause_turn" | "refusal" | "compaction":
             return FinishReason.STOP
         case "tool_use":
             match tools_mode:
