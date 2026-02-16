@@ -10,7 +10,7 @@ classifiers = ["Topic :: Software Development :: Libraries :: Python Modules"]
 requires-python = ">=3.11,<4.0"
 dependencies = [
   "aidial-sdk (>=0.28.0,<1)",
-  "anthropic (>=0.75.0,<1)",
+  "anthropic (>=0.79.0,<1)",
   "pydantic (>=2.8.2,<3)",
   "pillow (>=10.4.0,<13)",
   "aiohttp (>=3.13.3,<4)",

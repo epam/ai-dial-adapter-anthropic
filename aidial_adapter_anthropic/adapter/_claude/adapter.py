@@ -23,6 +23,9 @@ from anthropic.lib.streaming._beta_types import (
     BetaCitationEvent as CitationEvent,
 )
 from anthropic.lib.streaming._beta_types import (
+    BetaCompactionEvent as CompactionEvent,
+)
+from anthropic.lib.streaming._beta_types import (
     BetaSignatureEvent as SignatureEvent,
 )
 from anthropic.lib.streaming._beta_types import (
@@ -38,6 +41,7 @@ from anthropic.types.beta import (
 from anthropic.types.beta import (
     BetaCodeExecutionToolResultBlock as CodeExecutionToolResultBlock,
 )
+from anthropic.types.beta import BetaCompactionBlock as CompactionBlock
 from anthropic.types.beta import (
     BetaContainerUploadBlock as ContainerUploadBlock,
 )
@@ -449,6 +453,7 @@ class Adapter(ChatCompletionAdapter):
                                 | ParsedTextBlock()
                                 | BashCodeExecutionToolResultBlock()
                                 | TextEditorCodeExecutionToolResultBlock()
+                                | CompactionBlock()
                             ):
                                 _log.error(
                                     f"Content block of type {content_block.type} isn't supported"
@@ -466,7 +471,11 @@ class Adapter(ChatCompletionAdapter):
                                 ).to_dict()
                             )
 
-                    case ContentBlockDeltaEvent() | CitationEvent():
+                    case (
+                        ContentBlockDeltaEvent()
+                        | CitationEvent()
+                        | CompactionEvent()
+                    ):
                         pass
 
                     case _:
@@ -530,6 +539,7 @@ class Adapter(ChatCompletionAdapter):
                     | TextEditorCodeExecutionToolResultBlock()
                     | WebFetchToolResultBlock()
                     | ToolSearchToolResultBlock()
+                    | CompactionBlock()
                 ):
                     _log.error(
                         f"Content block of type {content.type} isn't supported"
