@@ -1,0 +1,162 @@
+import anthropic
+import pytest
+from aidial_sdk.chat_completion.request import (
+    ResponseFormatJsonObject,
+    ResponseFormatJsonSchema,
+    ResponseFormatJsonSchemaObject,
+    ResponseFormatText,
+)
+
+from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
+from aidial_adapter_anthropic.adapter._claude.converters import (
+    to_claude_output_config,
+)
+from aidial_adapter_anthropic.adapter._claude.tokenizer import (
+    ApproximateTokenizer,
+)
+from aidial_adapter_anthropic.adapter._errors import ValidationError
+
+
+@pytest.fixture
+def adapter() -> Adapter:
+    return Adapter(
+        deployment="test-deployment",
+        storage=None,
+        client=anthropic.AsyncAnthropic(),
+        tokenizer=ApproximateTokenizer(),
+        default_max_tokens=1024,
+        supports_thinking=True,
+        supports_documents=True,
+    )
+
+
+class TestResponseFormatConversion:
+    def test_no_response_format(self):
+        output_config = to_claude_output_config(None)
+
+        assert output_config is None
+
+    def test_text_response_format(self):
+        output_config = to_claude_output_config(ResponseFormatText(type="text"))
+
+        assert output_config is None
+
+    def test_json_object_response_format(self):
+        with pytest.raises(ValidationError):
+            to_claude_output_config(
+                ResponseFormatJsonObject(type="json_object")
+            )
+
+    def test_json_schema_response_format(self):
+        test_schema = {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"},
+            },
+            "required": ["name"],
+            "additionalProperties": False,
+        }
+
+        output_config = to_claude_output_config(
+            ResponseFormatJsonSchema(
+                type="json_schema",
+                json_schema=ResponseFormatJsonSchemaObject(
+                    name="PersonSchema",
+                    schema=test_schema,
+                ),
+            )
+        )
+
+        assert output_config == {
+            "format": {"type": "json_schema", "schema": test_schema}
+        }
+
+    def test_json_schema_nested_objects(self):
+        test_schema = {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "address": {
+                    "type": "object",
+                    "properties": {
+                        "street": {"type": "string"},
+                        "city": {"type": "string"},
+                    },
+                },
+            },
+        }
+
+        output_config = to_claude_output_config(
+            ResponseFormatJsonSchema(
+                type="json_schema",
+                json_schema=ResponseFormatJsonSchemaObject(
+                    name="PersonSchema",
+                    schema=test_schema,
+                ),
+            )
+        )
+
+        assert output_config == {
+            "format": {
+                "type": "json_schema",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "address": {
+                            "type": "object",
+                            "properties": {
+                                "street": {"type": "string"},
+                                "city": {"type": "string"},
+                            },
+                            "additionalProperties": False,
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+            }
+        }
+
+    def test_json_schema_additional_properties_true_raises(self):
+        test_schema = {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+            },
+            "additionalProperties": True,
+        }
+
+        with pytest.raises(ValidationError):
+            to_claude_output_config(
+                ResponseFormatJsonSchema(
+                    type="json_schema",
+                    json_schema=ResponseFormatJsonSchemaObject(
+                        name="PersonSchema",
+                        schema=test_schema,
+                    ),
+                )
+            )
+
+    def test_json_schema_nested_additional_properties_true_raises(self):
+        test_schema = {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "object",
+                    "properties": {"street": {"type": "string"}},
+                    "additionalProperties": True,
+                },
+            },
+        }
+
+        with pytest.raises(ValidationError):
+            to_claude_output_config(
+                ResponseFormatJsonSchema(
+                    type="json_schema",
+                    json_schema=ResponseFormatJsonSchemaObject(
+                        name="PersonSchema",
+                        schema=test_schema,
+                    ),
+                )
+            )
