@@ -116,7 +116,6 @@ def _truncate_lists(obj: Any, limit: int) -> Any:
     return obj
 
 
-_T = TypeVar("_T")
 
 
 def traverse_json(obj: Any, on_dict: Callable[[dict], None]) -> None:
