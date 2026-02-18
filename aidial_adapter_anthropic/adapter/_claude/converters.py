@@ -314,10 +314,10 @@ def to_claude_tool_config(
     return ClaudeToolsConfig(tools=tools, tool_choice=tool_choice)
 
 
-def _set_additional_properties_false(obj: dict) -> dict:
-    def on_dict(obj: dict) -> dict:
+def _set_additional_properties_false(obj: dict) -> None:
+    def on_dict(obj: dict) -> None:
         if obj.get("type") != "object":
-            return obj
+            return
 
         if (props := obj.get("additionalProperties")) not in (None, False):
             raise ValidationError(
@@ -326,9 +326,8 @@ def _set_additional_properties_false(obj: dict) -> dict:
             )
 
         obj["additionalProperties"] = False
-        return obj
 
-    return traverse_json(obj, on_dict)
+    traverse_json(obj, on_dict)
 
 
 def to_claude_output_config(
@@ -347,9 +346,8 @@ def to_claude_output_config(
             )
 
         case ResponseFormatJsonSchema():
-            schema = _set_additional_properties_false(
-                response_format.json_schema.schema_
-            )
+            schema = response_format.json_schema.schema_
+            _set_additional_properties_false(schema)
             return OutputConfigParam(
                 format=JSONOutputFormatParam(type="json_schema", schema=schema)
             )
