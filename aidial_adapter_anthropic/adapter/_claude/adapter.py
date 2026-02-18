@@ -5,11 +5,6 @@ from logging import DEBUG
 from typing import List, Optional, Tuple, Type, assert_never
 
 from aidial_sdk.chat_completion import Message as DialMessage
-from aidial_sdk.chat_completion.request import (
-    ResponseFormatJsonObject,
-    ResponseFormatJsonSchema,
-    ResponseFormatText,
-)
 from anthropic import (
     AsyncAnthropic,
     AsyncAnthropicBedrock,
@@ -50,12 +45,10 @@ from anthropic.types.beta import BetaCompactionBlock as CompactionBlock
 from anthropic.types.beta import (
     BetaContainerUploadBlock as ContainerUploadBlock,
 )
-from anthropic.types.beta import BetaJSONOutputFormatParam
 from anthropic.types.beta import BetaMCPToolResultBlock as MCPToolResultBlock
 from anthropic.types.beta import BetaMCPToolUseBlock as MCPToolUseBlock
 from anthropic.types.beta import BetaMessage as ClaudeResponseMessage
 from anthropic.types.beta import BetaMessageParam as ClaudeMessageParam
-from anthropic.types.beta import BetaOutputConfigParam as OutputConfigParam
 from anthropic.types.beta import (
     BetaRawContentBlockDeltaEvent as ContentBlockDeltaEvent,
 )
@@ -109,6 +102,7 @@ from aidial_adapter_anthropic.adapter._claude.config import (
 )
 from aidial_adapter_anthropic.adapter._claude.converters import (
     to_claude_messages,
+    to_claude_output_config,
     to_claude_tool_config,
     to_dial_finish_reason,
     to_dial_usage,
@@ -287,7 +281,7 @@ class Adapter(ChatCompletionAdapter):
             temperature = omit
 
         max_tokens = params.max_tokens or self.default_max_tokens
-        output_config = self._convert_response_format(params)
+        output_config = to_claude_output_config(params.response_format)
 
         claude_params = ClaudeParameters(
             max_tokens=max_tokens,
@@ -299,57 +293,10 @@ class Adapter(ChatCompletionAdapter):
             tool_choice=(tools_config and tools_config.tool_choice) or omit,
             thinking=thinking,
             betas=configuration.betas or omit,
-            output_config=output_config,
+            output_config=output_config or omit,
         )
 
         return ClaudeRequest(params=claude_params, messages=claude_messages)
-
-    def _convert_response_format(
-        self, params: DialParameters
-    ) -> OutputConfigParam | Omit:
-        """
-        OpenAI response_format structure:
-        - {"type": "text"}
-        - {"type": "json_object"}
-        - {"type": "json_schema", "json_schema": {"name": "", "schema": {}}}
-
-        Anthropic output_config structure:
-        - {"format": {"type": "json_schema", "schema": {}}}
-        """
-
-        response_format = params.response_format
-
-        if response_format is None:
-            return omit
-
-        match response_format:
-            case ResponseFormatText():
-                return omit
-
-            case ResponseFormatJsonObject():
-                return OutputConfigParam(
-                    format=BetaJSONOutputFormatParam(
-                        type="json_schema",
-                        schema={
-                            "type": "object",
-                            "additionalProperties": False,
-                        },
-                    )
-                )
-
-            case ResponseFormatJsonSchema():
-                json_schema = response_format.json_schema
-                schema = json_schema.schema_
-                schema = {**schema, "additionalProperties": False}
-
-                return OutputConfigParam(
-                    format=BetaJSONOutputFormatParam(
-                        type="json_schema", schema=schema
-                    )
-                )
-
-            case _:
-                return omit
 
     async def _compute_discarded_messages(
         self, request: ClaudeRequest, max_prompt_tokens: int | None
