@@ -97,17 +97,26 @@ class TestResponseFormatConversion:
             )
         )
 
-        assert isinstance(output_config, dict)
-        output_format = output_config.get("format")
-        assert isinstance(output_format, dict)
-        schema = output_format.get("schema")
-        assert isinstance(schema, dict)
-        assert schema["additionalProperties"] is False
-        properties = schema.get("properties")
-        assert isinstance(properties, dict)
-        address = properties.get("address")
-        assert isinstance(address, dict)
-        assert address["additionalProperties"] is False
+        assert output_config == {
+            "format": {
+                "type": "json_schema",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "address": {
+                            "type": "object",
+                            "properties": {
+                                "street": {"type": "string"},
+                                "city": {"type": "string"},
+                            },
+                            "additionalProperties": False,
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+            }
+        }
 
     def test_json_schema_additional_properties_true_raises(self):
         test_schema = {

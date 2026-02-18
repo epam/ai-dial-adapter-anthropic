@@ -28,6 +28,7 @@ from anthropic.types.beta import BetaToolParam as ToolParam
 from anthropic.types.beta import BetaUsage as Usage
 from pydantic import BaseModel
 
+from aidial_adapter_anthropic._utils.json import traverse_json
 from aidial_adapter_anthropic._utils.list import ListProjection, group_by
 from aidial_adapter_anthropic.adapter._claude.blocks import (
     create_text_block,
@@ -313,27 +314,21 @@ def to_claude_tool_config(
     return ClaudeToolsConfig(tools=tools, tool_choice=tool_choice)
 
 
-def _check_additional_properties(schema: dict) -> dict:
-    if schema.get("additionalProperties") is True:
-        raise ValidationError(
-            "additionalProperties: true isn't supported in response format JSON schema"
-        )
+def _set_additional_properties_false(obj: dict) -> dict:
+    def on_dict(obj: dict) -> dict:
+        if obj.get("type") != "object":
+            return obj
 
-    result = dict(schema)
+        if (props := obj.get("additionalProperties")) not in (None, False):
+            raise ValidationError(
+                "The only supported value of additionalProperties field "
+                f"in the response format JSON schema is False, but got {props}"
+            )
 
-    if schema.get("type") == "object" and "additionalProperties" not in schema:
-        result["additionalProperties"] = False
+        obj["additionalProperties"] = False
+        return obj
 
-    if "properties" in schema:
-        result["properties"] = {
-            k: _check_additional_properties(v) if isinstance(v, dict) else v
-            for k, v in schema["properties"].items()
-        }
-
-    if "items" in schema and isinstance(schema["items"], dict):
-        result["items"] = _check_additional_properties(schema["items"])
-
-    return result
+    return traverse_json(obj, on_dict)
 
 
 def to_claude_output_config(
@@ -352,7 +347,7 @@ def to_claude_output_config(
             )
 
         case ResponseFormatJsonSchema():
-            schema = _check_additional_properties(
+            schema = _set_additional_properties_false(
                 response_format.json_schema.schema_
             )
             return OutputConfigParam(
@@ -360,4 +355,4 @@ def to_claude_output_config(
             )
 
         case _:
-            return None
+            assert_never(response_format)

@@ -7,7 +7,7 @@ with options to trim long strings and lists to specified limits.
 import json
 from dataclasses import asdict, is_dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Callable, TypeVar, cast
 
 from anthropic import Omit
 from pydantic import BaseModel
@@ -114,3 +114,20 @@ def _truncate_lists(obj: Any, limit: int) -> Any:
         return tuple(rec(element) for element in obj)
 
     return obj
+
+
+_T = TypeVar("_T")
+
+
+def traverse_json(obj: _T, on_dict: Callable[[dict], dict]) -> _T:
+    def _traverse(value: Any) -> Any:
+        if isinstance(value, dict):
+            new_dict = on_dict(value)
+            return {k: _traverse(v) for k, v in new_dict.items()}
+
+        if isinstance(value, list):
+            return [_traverse(item) for item in value]
+
+        return value
+
+    return cast(_T, _traverse(obj))
