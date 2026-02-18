@@ -102,6 +102,7 @@ from aidial_adapter_anthropic.adapter._claude.config import (
 )
 from aidial_adapter_anthropic.adapter._claude.converters import (
     to_claude_messages,
+    to_claude_output_config,
     to_claude_tool_config,
     to_dial_finish_reason,
     to_dial_usage,
@@ -280,6 +281,7 @@ class Adapter(ChatCompletionAdapter):
             temperature = omit
 
         max_tokens = params.max_tokens or self.default_max_tokens
+        output_config = to_claude_output_config(params.response_format)
 
         claude_params = ClaudeParameters(
             max_tokens=max_tokens,
@@ -291,6 +293,7 @@ class Adapter(ChatCompletionAdapter):
             tool_choice=(tools_config and tools_config.tool_choice) or omit,
             thinking=thinking,
             betas=configuration.betas or omit,
+            output_config=output_config or omit,
         )
 
         return ClaudeRequest(params=claude_params, messages=claude_messages)

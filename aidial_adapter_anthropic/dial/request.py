@@ -17,6 +17,7 @@ from aidial_sdk.chat_completion import (
 from aidial_sdk.chat_completion.request import (
     ChatCompletionRequest,
     MessageContentRefusalPart,
+    ResponseFormat,
 )
 from aidial_sdk.exceptions import RequestValidationError
 from pydantic import BaseModel
@@ -50,6 +51,7 @@ class ModelParameters(BaseModel):
     stream: bool = False
     tool_config: Optional[ToolsConfig] = None
     configuration: Optional[dict] = None
+    response_format: Optional[ResponseFormat] = None
 
     @classmethod
     def create(cls, request: ChatCompletionRequest) -> "ModelParameters":
@@ -80,6 +82,7 @@ class ModelParameters(BaseModel):
             stream=request.stream,
             tool_config=ToolsConfig.from_request(request),
             configuration=configuration,
+            response_format=request.response_format,
         )
 
     @property

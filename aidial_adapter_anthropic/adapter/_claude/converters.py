@@ -2,11 +2,21 @@ from typing import List, Literal, Optional, Sequence, Set, Tuple, assert_never
 
 from aidial_sdk.chat_completion import FinishReason, Tool
 from aidial_sdk.chat_completion import ToolChoice as DialToolChoice
+from aidial_sdk.chat_completion.request import (
+    ResponseFormat,
+    ResponseFormatJsonObject,
+    ResponseFormatJsonSchema,
+    ResponseFormatText,
+)
 from anthropic.types.beta import (
     BetaCacheControlEphemeralParam as CacheControlEphemeralParam,
 )
 from anthropic.types.beta import BetaContentBlockParam as ContentBlockParam
+from anthropic.types.beta import (
+    BetaJSONOutputFormatParam as JSONOutputFormatParam,
+)
 from anthropic.types.beta import BetaMessageParam as MessageParam
+from anthropic.types.beta import BetaOutputConfigParam as OutputConfigParam
 from anthropic.types.beta import BetaStopReason as ClaudeStopReason
 from anthropic.types.beta import BetaTextBlockParam as TextBlockParam
 from anthropic.types.beta import BetaToolChoiceAnyParam as ToolChoiceAnyParam
@@ -18,6 +28,7 @@ from anthropic.types.beta import BetaToolParam as ToolParam
 from anthropic.types.beta import BetaUsage as Usage
 from pydantic import BaseModel
 
+from aidial_adapter_anthropic._utils.json import traverse_json
 from aidial_adapter_anthropic._utils.list import ListProjection, group_by
 from aidial_adapter_anthropic.adapter._claude.blocks import (
     create_text_block,
@@ -301,3 +312,45 @@ def to_claude_tool_config(
     tools = [_to_claude_tool(tool) for tool in tools_config.tools]
     tool_choice = _to_claude_tool_choice(tools_config.tool_choice)
     return ClaudeToolsConfig(tools=tools, tool_choice=tool_choice)
+
+
+def _set_additional_properties_false(obj: dict) -> None:
+    def on_dict(obj: dict) -> None:
+        if obj.get("type") != "object":
+            return
+
+        if (props := obj.get("additionalProperties")) not in (None, False):
+            raise ValidationError(
+                "The only supported value of additionalProperties field "
+                f"in the response format JSON schema is False, but got {props}"
+            )
+
+        obj["additionalProperties"] = False
+
+    traverse_json(obj, on_dict)
+
+
+def to_claude_output_config(
+    response_format: ResponseFormat | None,
+) -> OutputConfigParam | None:
+    if response_format is None:
+        return None
+
+    match response_format:
+        case ResponseFormatText():
+            return None
+
+        case ResponseFormatJsonObject():
+            raise ValidationError(
+                "Response format JSON object isn't supported. Use response format JSON schema instead."
+            )
+
+        case ResponseFormatJsonSchema():
+            schema = response_format.json_schema.schema_
+            _set_additional_properties_false(schema)
+            return OutputConfigParam(
+                format=JSONOutputFormatParam(type="json_schema", schema=schema)
+            )
+
+        case _:
+            assert_never(response_format)
