@@ -42,10 +42,11 @@ class TestResponseFormatConversion:
         assert output_config is None
 
     def test_json_object_response_format(self):
-        with pytest.raises(ValidationError):
-            to_claude_output_config(
-                ResponseFormatJsonObject(type="json_object")
-            )
+        output_config = to_claude_output_config(
+            ResponseFormatJsonObject(type="json_object")
+        )
+
+        assert output_config is None
 
     def test_json_schema_response_format(self):
         test_schema = {
@@ -127,16 +128,26 @@ class TestResponseFormatConversion:
             "additionalProperties": True,
         }
 
-        with pytest.raises(ValidationError):
-            to_claude_output_config(
-                ResponseFormatJsonSchema(
-                    type="json_schema",
-                    json_schema=ResponseFormatJsonSchemaObject(
-                        name="PersonSchema",
-                        schema=test_schema,
-                    ),
-                )
+        output_config = to_claude_output_config(
+            ResponseFormatJsonSchema(
+                type="json_schema",
+                json_schema=ResponseFormatJsonSchemaObject(
+                    name="PersonSchema",
+                    schema=test_schema,
+                ),
             )
+        )
+
+        assert output_config == {
+            "format": {
+                "type": "json_schema",
+                "schema": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}},
+                    "additionalProperties": False,
+                },
+            }
+        }
 
     def test_json_schema_nested_additional_properties_true_raises(self):
         test_schema = {
@@ -150,13 +161,29 @@ class TestResponseFormatConversion:
             },
         }
 
-        with pytest.raises(ValidationError):
-            to_claude_output_config(
-                ResponseFormatJsonSchema(
-                    type="json_schema",
-                    json_schema=ResponseFormatJsonSchemaObject(
-                        name="PersonSchema",
-                        schema=test_schema,
-                    ),
-                )
+        output_config = to_claude_output_config(
+            ResponseFormatJsonSchema(
+                type="json_schema",
+                json_schema=ResponseFormatJsonSchemaObject(
+                    name="PersonSchema",
+                    schema=test_schema,
+                ),
             )
+        )
+
+        assert output_config == {
+            "format": {
+                "type": "json_schema",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "address": {
+                            "type": "object",
+                            "properties": {"street": {"type": "string"}},
+                            "additionalProperties": False,
+                        }
+                    },
+                    "additionalProperties": False,
+                },
+            }
+        }
