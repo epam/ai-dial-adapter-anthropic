@@ -324,8 +324,8 @@ def _set_additional_properties_false(obj: dict) -> None:
 
         if (props := obj.get("additionalProperties")) not in (None, False):
             _log.warning(
-                "The only supported value of additionalProperties field "
-                f"in the response format JSON schema is False, but got {props}"
+                "Only 'additionalProperties: false' is supported in the response format JSON schema; "
+                f"got {props!r}. The value will be ignored and treated as false."
             )
 
         obj["additionalProperties"] = False
@@ -345,7 +345,7 @@ def to_claude_output_config(
 
         case ResponseFormatJsonObject():
             _log.warning(
-                "Response format JSON object isn't supported. Use response format JSON schema instead."
+                "JSON object response format is not supported and will be ignored."
             )
             return None
 

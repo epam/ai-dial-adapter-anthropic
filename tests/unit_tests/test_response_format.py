@@ -118,7 +118,7 @@ class TestResponseFormatConversion:
             }
         }
 
-    def test_json_schema_additional_properties_true_raises(self):
+    def test_json_schema_additional_properties_true(self):
         test_schema = {
             "type": "object",
             "properties": {
@@ -148,7 +148,7 @@ class TestResponseFormatConversion:
             }
         }
 
-    def test_json_schema_nested_additional_properties_true_raises(self):
+    def test_json_schema_nested_additional_properties_true(self):
         test_schema = {
             "type": "object",
             "properties": {
