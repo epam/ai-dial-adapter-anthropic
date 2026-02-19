@@ -1,3 +1,4 @@
+import logging
 from typing import List, Literal, Optional, Sequence, Set, Tuple, assert_never
 
 from aidial_sdk.chat_completion import FinishReason, Tool
@@ -54,6 +55,8 @@ from aidial_adapter_anthropic.dial._message import (
 )
 from aidial_adapter_anthropic.dial.token_usage import TokenUsage
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
+
+_log = logging.getLogger(__name__)
 
 DialMessage = BaseMessage | HumanToolResultMessage | AIToolCallMessage
 
@@ -320,9 +323,9 @@ def _set_additional_properties_false(obj: dict) -> None:
             return
 
         if (props := obj.get("additionalProperties")) not in (None, False):
-            raise ValidationError(
-                "The only supported value of additionalProperties field "
-                f"in the response format JSON schema is False, but got {props}"
+            _log.warning(
+                "Only 'additionalProperties: false' is supported in the response format JSON schema; "
+                f"got {props!r}. The value will be ignored and treated as false."
             )
 
         obj["additionalProperties"] = False
@@ -341,9 +344,10 @@ def to_claude_output_config(
             return None
 
         case ResponseFormatJsonObject():
-            raise ValidationError(
-                "Response format JSON object isn't supported. Use response format JSON schema instead."
+            _log.warning(
+                "JSON object response format is not supported and will be ignored."
             )
+            return None
 
         case ResponseFormatJsonSchema():
             schema = response_format.json_schema.schema_
