@@ -14,7 +14,6 @@ from aidial_adapter_anthropic.adapter._claude.converters import (
 from aidial_adapter_anthropic.adapter._claude.tokenizer import (
     ApproximateTokenizer,
 )
-from aidial_adapter_anthropic.adapter._errors import ValidationError
 
 
 @pytest.fixture
