@@ -17,8 +17,8 @@
 </h4>
 
 - [Overview](#overview)
-- [Developer environment](#developer-environment)
-- [Set up](#set-up)
+- [Development Environment](#development-environment)
+  - [Setup](#setup)
   - [Lint](#lint)
   - [Test](#test)
   - [Clean](#clean)
@@ -33,19 +33,33 @@ The framework provides adapter from [AI DIAL Chat Completion API](https://dialx.
 
 ---
 
-## Developer environment
+## Development Environment
 
-To install requirements:
+This project requires [Python ≥3.11](https://www.python.org/downloads/) and [Poetry ≥2.1.1](https://python-poetry.org/) for dependency management.
 
-```sh
-poetry install
-```
+### Setup
 
-This will install all requirements for running the package, linting, formatting and tests.
+1. Install Poetry. See the official [installation guide](https://python-poetry.org/docs/#installation).
 
----
+2. *(Optional)* Specify custom Python or Poetry executables in `.env.dev`. This is useful if multiple versions are installed. By default, `python` and `poetry` are used.
 
-## Set up
+   ```sh
+   POETRY_PYTHON=path-to-python-exe
+   POETRY=path-to-poetry-exe
+   ```
+
+3. Create and activate the virtual environment:
+
+   ```sh
+   make init_env
+   source .venv/bin/activate
+   ```
+
+4. Install project dependencies (including linting, formatting, and test tools):
+
+   ```sh
+   make install
+   ```
 
 ### Lint
 
