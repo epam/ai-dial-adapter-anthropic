@@ -35,7 +35,7 @@ import io
 import json
 import logging
 import math
-from typing import List, Literal, Tuple, assert_never
+from typing import Literal, assert_never
 
 from anthropic._types import Base64FileInput
 from anthropic.types.beta import (
@@ -93,7 +93,7 @@ class ApproximateTokenizer:
 
     def _get_image_size(
         self, image_data: str | Base64FileInput
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         try:
             if not isinstance(image_data, str):
                 raise ValueError("Images as files aren't yet supported.")
@@ -214,7 +214,7 @@ class ApproximateTokenizer:
 
         return tokens
 
-    def _tokenize_messages(self, messages: List[ClaudeMessage]) -> int:
+    def _tokenize_messages(self, messages: list[ClaudeMessage]) -> int:
         # A rough estimation
         per_message_tokens = 5
 
@@ -236,7 +236,7 @@ class ApproximateTokenizer:
         return 530 if tool_choice in ("auto", "none") else 281
 
     async def tokenize(
-        self, params: ClaudeParameters, messages: List[ClaudeMessage]
+        self, params: ClaudeParameters, messages: list[ClaudeMessage]
     ) -> int:
         tokens: int = 0
 

@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List
 
 from aidial_sdk.exceptions import InternalServerError
 from anthropic import (
@@ -42,7 +41,7 @@ class AnthropicTokenizer:
         )
 
     async def tokenize(
-        self, params: ClaudeParameters, messages: List[ClaudeMessageParam]
+        self, params: ClaudeParameters, messages: list[ClaudeMessageParam]
     ) -> int:
         return (
             await _AsyncMessagesAdapter(self.client.beta.messages).count_tokens(

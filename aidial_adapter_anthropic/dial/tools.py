@@ -1,6 +1,6 @@
 import logging
 from enum import Enum
-from typing import Dict, List, Literal, Self
+from typing import Literal, Self
 
 from aidial_sdk.chat_completion import (
     Function,
@@ -30,7 +30,7 @@ class ToolsMode(Enum):
 
 
 class ToolsConfig(BaseModel):
-    tools: List[Tool]
+    tools: list[Tool]
     """
     List of functions/tools.
     """
@@ -39,7 +39,7 @@ class ToolsConfig(BaseModel):
 
     tool_choice: Literal["auto", "none", "required"] | ToolChoice
 
-    tool_ids: Dict[str, str]
+    tool_ids: dict[str, str]
     """
     Mapping from tool call IDs to corresponding tool names.
     Empty when there are no tool calls in the messages.
@@ -88,8 +88,8 @@ class ToolsConfig(BaseModel):
 
     @staticmethod
     def _get_tools_from_functions(
-        tools: List[Function] | List[Tool | StaticTool],
-    ) -> List[Tool]:
+        tools: list[Function] | list[Tool | StaticTool],
+    ) -> list[Tool]:
         return [ToolsConfig._get_tool_from_function(tool) for tool in tools]
 
     @classmethod
@@ -169,8 +169,8 @@ def validate_messages(request: AzureChatCompletionRequest) -> None:
             )
 
 
-def _collect_tool_ids(messages: List[Message]) -> Dict[str, str]:
-    ret: Dict[str, str] = {}
+def _collect_tool_ids(messages: list[Message]) -> dict[str, str]:
+    ret: dict[str, str] = {}
 
     for message in messages:
         if message.role == Role.ASSISTANT and message.tool_calls is not None:

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import dataclasses
 from abc import ABC, abstractmethod
+from contextlib import AbstractContextManager
 from types import TracebackType
-from typing import ContextManager, List, Optional, Protocol, Self, Tuple
+from typing import Protocol, Self
 
 from aidial_sdk.chat_completion import (
     Attachment,
@@ -39,7 +40,7 @@ class ToolUseMessage:
         return self
 
 
-class Consumer(ContextManager, ABC):
+class Consumer(AbstractContextManager, ABC):
     @abstractmethod
     def fork(self) -> Consumer: ...
 
@@ -66,11 +67,11 @@ class Consumer(ContextManager, ABC):
 
     @abstractmethod
     def set_discarded_messages(
-        self, discarded_messages: Optional[DiscardedMessages]
+        self, discarded_messages: DiscardedMessages | None
     ): ...
 
     @abstractmethod
-    def get_discarded_messages(self) -> Optional[DiscardedMessages]: ...
+    def get_discarded_messages(self) -> DiscardedMessages | None: ...
 
     @abstractmethod
     def create_function_tool_call(self, call: ToolCall) -> ToolUseMessage: ...
@@ -94,15 +95,15 @@ class Consumer(ContextManager, ABC):
 class ChoiceConsumer(Consumer):
     response: Response
 
-    usage: Optional[TokenUsage]
-    discarded_messages: Optional[DiscardedMessages]
+    usage: TokenUsage | None
+    discarded_messages: DiscardedMessages | None
 
-    _root: Optional[Consumer]
-    _choice: Optional[Choice]
-    _tool_calls: List[ToolUseMessage]
-    _citations: dict[int, Tuple[int, Attachment | None]]
+    _root: Consumer | None
+    _choice: Choice | None
+    _tool_calls: list[ToolUseMessage]
+    _citations: dict[int, tuple[int, Attachment | None]]
 
-    def __init__(self, response: Response, root: Optional[Consumer] = None):
+    def __init__(self, response: Response, root: Consumer | None = None):
         self.response = response
 
         self.usage = None
@@ -194,14 +195,14 @@ class ChoiceConsumer(Consumer):
             self.usage = (self.usage or TokenUsage()).accumulate(usage)
 
     def set_discarded_messages(
-        self, discarded_messages: Optional[DiscardedMessages]
+        self, discarded_messages: DiscardedMessages | None
     ):
         if self._root:
             self._root.set_discarded_messages(discarded_messages)
         else:
             self.discarded_messages = discarded_messages
 
-    def get_discarded_messages(self) -> Optional[DiscardedMessages]:
+    def get_discarded_messages(self) -> DiscardedMessages | None:
         if self._root:
             return self._root.get_discarded_messages()
         else:

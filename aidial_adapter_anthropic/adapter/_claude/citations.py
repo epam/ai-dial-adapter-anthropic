@@ -1,4 +1,5 @@
-from typing import Callable, assert_never
+from collections.abc import Callable
+from typing import assert_never
 
 from anthropic.types.beta import (
     BetaCitationCharLocation as CitationCharLocation,

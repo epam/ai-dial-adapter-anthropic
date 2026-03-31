@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from functools import cached_property
 from logging import DEBUG
-from typing import List, Optional, Tuple, Type, assert_never
+from typing import assert_never
 
 from aidial_sdk.chat_completion import Message as DialMessage
 from anthropic import (
@@ -167,11 +167,11 @@ class ClaudeRequest:
     messages: ListProjection[WithResources[ClaudeMessageParam]]
 
     @property
-    def claude_messages(self) -> List[ClaudeMessageParam]:
+    def claude_messages(self) -> list[ClaudeMessageParam]:
         return [res.payload for res in self.messages.raw_list]
 
     @cached_property
-    def resources(self) -> List[DialResource]:
+    def resources(self) -> list[DialResource]:
         return [r for res in self.messages.raw_list for r in res.resources]
 
     def get_resource(self, index: int) -> DialResource | None:
@@ -218,7 +218,7 @@ async def create_adapter(
 @dataclass
 class Adapter(ChatCompletionAdapter):
     deployment: str
-    storage: Optional[FileStorage]
+    storage: FileStorage | None
     client: AnthropicClient
 
     tokenizer: ClaudeTokenizer
@@ -226,7 +226,7 @@ class Adapter(ChatCompletionAdapter):
     supports_thinking: bool
     supports_documents: bool
 
-    async def configuration(self) -> Type[ClaudeConfiguration]:
+    async def configuration(self) -> type[ClaudeConfiguration]:
         return ClaudeConfigurationWithThinking
 
     @property
@@ -246,7 +246,7 @@ class Adapter(ChatCompletionAdapter):
         )
 
     async def _prepare_claude_request(
-        self, params: DialParameters, messages: List[DialMessage]
+        self, params: DialParameters, messages: list[DialMessage]
     ) -> ClaudeRequest:
         configuration = params.parse_configuration(await self.configuration())
 
@@ -300,12 +300,12 @@ class Adapter(ChatCompletionAdapter):
 
     async def _compute_discarded_messages(
         self, request: ClaudeRequest, max_prompt_tokens: int | None
-    ) -> Tuple[DiscardedMessages | None, ClaudeRequest]:
+    ) -> tuple[DiscardedMessages | None, ClaudeRequest]:
         if max_prompt_tokens is None:
             return None, request
 
         discarded_messages, messages = await truncate_prompt(
-            messages=request.messages.list,
+            messages=request.messages.elems,
             tokenizer=create_tokenizer(self.tokenizer, request.params),
             keep_message=keep_last,
             partitioner=turn_based_partitioner,
@@ -328,7 +328,7 @@ class Adapter(ChatCompletionAdapter):
         self,
         consumer: Consumer,
         params: DialParameters,
-        messages: List[DialMessage],
+        messages: list[DialMessage],
     ):
         request = await self._prepare_claude_request(params, messages)
 
@@ -352,17 +352,17 @@ class Adapter(ChatCompletionAdapter):
             )
 
     async def count_prompt_tokens(
-        self, params: DialParameters, messages: List[DialMessage]
+        self, params: DialParameters, messages: list[DialMessage]
     ) -> int:
         request = await self._prepare_claude_request(params, messages)
         tokenizer = create_tokenizer(self.tokenizer, request.params)
-        return await tokenizer(request.messages.list)
+        return await tokenizer(request.messages.elems)
 
     async def count_completion_tokens(self, string: str) -> int:
         return self.tokenizer.tokenize_text(string)
 
     async def compute_discarded_messages(
-        self, params: DialParameters, messages: List[DialMessage]
+        self, params: DialParameters, messages: list[DialMessage]
     ) -> DiscardedMessages | None:
         request = await self._prepare_claude_request(params, messages)
         discarded_messages, _request = await self._compute_discarded_messages(

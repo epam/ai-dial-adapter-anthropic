@@ -3,7 +3,7 @@ import hashlib
 import io
 import logging
 import mimetypes
-from typing import Mapping, Optional
+from collections.abc import Mapping
 from urllib.parse import unquote, urljoin
 
 import aiohttp
@@ -28,7 +28,7 @@ class Bucket(TypedDict):
 class FileStorage(BaseModel):
     dial_url: str
     api_key: str
-    bucket: Optional[Bucket] = None
+    bucket: Bucket | None = None
 
     @property
     def auth_headers(self) -> Mapping[str, str]:

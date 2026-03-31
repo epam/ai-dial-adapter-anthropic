@@ -1,5 +1,4 @@
 import logging
-from typing import List
 
 import pydantic
 from anthropic.types.beta import BetaContentBlock as ContentBlock
@@ -18,7 +17,7 @@ _log = logging.getLogger(__name__)
 
 
 class MessageState(BaseModel):
-    claude_message_content: List[ParsedContentBlock] | List[ContentBlock]
+    claude_message_content: list[ParsedContentBlock] | list[ContentBlock]
 
     def to_dict(self) -> dict:
         return self.model_dump(
@@ -32,7 +31,7 @@ class MessageState(BaseModel):
 
 def get_message_content_from_state(
     idx: int, message: AIRegularMessage | AIToolCallMessage
-) -> List[ContentBlockParam] | None:
+) -> list[ContentBlockParam] | None:
     if (cc := message.custom_content) and (state_dict := cc.state):
         try:
             state = MessageState.model_validate(state_dict)

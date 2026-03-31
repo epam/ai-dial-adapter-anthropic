@@ -1,5 +1,6 @@
 import logging
-from typing import List, Literal, Optional, Sequence, Set, Tuple, assert_never
+from collections.abc import Sequence
+from typing import Literal, assert_never
 
 from aidial_sdk.chat_completion import FinishReason, Tool
 from aidial_sdk.chat_completion import ToolChoice as DialToolChoice
@@ -96,7 +97,7 @@ def _get_claude_message_role(
             assert_never(dial_message)
 
 
-_Elem = Tuple[WithResources[MessageParam], Set[int]]
+_Elem = tuple[WithResources[MessageParam], set[int]]
 
 
 def _merge_messages_with_same_role(
@@ -128,7 +129,7 @@ def _merge_messages_with_same_role(
         resources = msg1.resources + msg2.resources
         return (WithResources(payload, resources), set1 | set2)
 
-    return ListProjection(group_by(messages.list, _key, lambda x: x, _merge))
+    return ListProjection(group_by(messages.elems, _key, lambda x: x, _merge))
 
 
 async def _get_claude_blocks(
@@ -182,10 +183,10 @@ async def to_claude_messages(
     handlers: AttachmentProcessors[
         TextBlockParam, ContentBlockParam, Configuration
     ],
-    messages: List[DialMessage],
-) -> Tuple[List[TextBlockParam], ListProjection[WithResources[MessageParam]]]:
+    messages: list[DialMessage],
+) -> tuple[list[TextBlockParam], ListProjection[WithResources[MessageParam]]]:
     idx_offset: int = 0
-    system_messages: List[TextBlockParam] = []
+    system_messages: list[TextBlockParam] = []
 
     for message in messages:
         if not isinstance(message, SystemMessage):
@@ -222,7 +223,7 @@ async def to_claude_messages(
 
 
 def to_dial_finish_reason(
-    finish_reason: Optional[ClaudeStopReason],
+    finish_reason: ClaudeStopReason | None,
     tools_mode: ToolsMode | None,
 ) -> FinishReason:
     if finish_reason is None:
@@ -299,7 +300,7 @@ def _to_claude_tool_choice(
 
 
 class ClaudeToolsConfig(BaseModel):
-    tools: List[ToolParam]
+    tools: list[ToolParam]
     tool_choice: ToolChoice
 
 
