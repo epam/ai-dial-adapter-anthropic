@@ -305,7 +305,7 @@ class Adapter(ChatCompletionAdapter):
             return None, request
 
         discarded_messages, messages = await truncate_prompt(
-            messages=request.messages.elems,
+            messages=request.messages.lst,
             tokenizer=create_tokenizer(self.tokenizer, request.params),
             keep_message=keep_last,
             partitioner=turn_based_partitioner,
@@ -356,7 +356,7 @@ class Adapter(ChatCompletionAdapter):
     ) -> int:
         request = await self._prepare_claude_request(params, messages)
         tokenizer = create_tokenizer(self.tokenizer, request.params)
-        return await tokenizer(request.messages.elems)
+        return await tokenizer(request.messages.lst)
 
     async def count_completion_tokens(self, string: str) -> int:
         return self.tokenizer.tokenize_text(string)

@@ -129,7 +129,7 @@ def _merge_messages_with_same_role(
         resources = msg1.resources + msg2.resources
         return (WithResources(payload, resources), set1 | set2)
 
-    return ListProjection(group_by(messages.elems, _key, lambda x: x, _merge))
+    return ListProjection(group_by(messages.lst, _key, lambda x: x, _merge))
 
 
 async def _get_claude_blocks(
