@@ -102,7 +102,7 @@ class ModelParameters(BaseModel):
                 path = ".".join(map(str, error["loc"]))
                 msg = f"Invalid request. Path: 'custom_fields.configuration.{path}', error: {error['msg']}"
 
-            raise RequestValidationError(msg)
+            raise RequestValidationError(msg) from None
 
 
 def collect_text_content(

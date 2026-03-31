@@ -129,7 +129,7 @@ async def test_one_turn_with_image(model):
 
     assert (
         truncation
-        == f"The requested maximum prompt tokens is {expected_tokens-1}. However, the system messages and the last user message resulted in {expected_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
+        == f"The requested maximum prompt tokens is {expected_tokens - 1}. However, the system messages and the last user message resulted in {expected_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
     )
 
 
@@ -156,7 +156,7 @@ async def test_one_turn_with_tools(model):
 
     assert (
         discarded_messages
-        == f"The requested maximum prompt tokens is {expected_tokens-1}. However, the system messages and the last user message resulted in {expected_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
+        == f"The requested maximum prompt tokens is {expected_tokens - 1}. However, the system messages and the last user message resulted in {expected_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
     )
 
 

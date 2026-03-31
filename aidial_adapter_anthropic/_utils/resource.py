@@ -14,7 +14,7 @@ class Resource(BaseModel):
         try:
             data = base64.b64decode(data_base64, validate=True)
         except Exception:
-            raise ValueError("Invalid base64 data")
+            raise ValueError("Invalid base64 data") from None
 
         return cls(type=type, data=data)
 

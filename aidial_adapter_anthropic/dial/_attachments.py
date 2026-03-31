@@ -117,7 +117,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         self, message: SystemMessage
     ) -> List[_Txt]:
         def _gen():
-            match (content := message.content):
+            match content := message.content:
                 case str():
                     if content:
                         yield self.text_handler(content)
@@ -132,7 +132,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
                 case _:
                     assert_never(content)
 
-        return [x for x in _gen()]
+        return list(_gen())
 
     async def process_attachments(
         self, message: BaseMessage
@@ -191,7 +191,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
             raise UserError(
                 f"Unsupported media type: {e.type}",
                 _get_usage_message(self.get_file_exts(e.supported_types)),
-            )
+            ) from None
 
     async def _handle_resource(self, resource: Resource) -> _T:
         for processor in self.attachment_processors:
@@ -228,7 +228,7 @@ def _get_usage_message(supported_exts: List[str]) -> str:
 The application answers queries about attached files.
 Attach file(s) and ask questions about them in the same message.
 
-Supported attachment types: {', '.join(supported_exts)}.
+Supported attachment types: {", ".join(supported_exts)}.
 
 Examples of queries:
 - "Describe this picture" for an image

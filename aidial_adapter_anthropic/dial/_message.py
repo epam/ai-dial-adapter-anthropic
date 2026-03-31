@@ -6,15 +6,13 @@ from aidial_sdk.chat_completion import (
     CacheBreakpoint,
     CustomContent,
     FunctionCall,
-)
-from aidial_sdk.chat_completion import Message as DialMessage
-from aidial_sdk.chat_completion import (
     MessageContentPart,
     MessageContentTextPart,
     MessageCustomFields,
     Role,
     ToolCall,
 )
+from aidial_sdk.chat_completion import Message as DialMessage
 from pydantic import BaseModel
 
 from aidial_adapter_anthropic.adapter._errors import ValidationError

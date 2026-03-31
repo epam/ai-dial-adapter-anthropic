@@ -102,7 +102,6 @@ _Elem = Tuple[WithResources[MessageParam], Set[int]]
 def _merge_messages_with_same_role(
     messages: ListProjection[WithResources[MessageParam]],
 ) -> ListProjection[WithResources[MessageParam]]:
-
     def _key(message: _Elem) -> str:
         return message[0].payload["role"]
 
@@ -144,7 +143,6 @@ async def _get_claude_blocks(
     ),
     message_idx: int,
 ) -> WithResources[Sequence[ContentBlockParam]]:
-
     match message:
         case HumanRegularMessage():
             return await handlers.process_attachments(message)
@@ -186,7 +184,6 @@ async def to_claude_messages(
     ],
     messages: List[DialMessage],
 ) -> Tuple[List[TextBlockParam], ListProjection[WithResources[MessageParam]]]:
-
     idx_offset: int = 0
     system_messages: List[TextBlockParam] = []
 

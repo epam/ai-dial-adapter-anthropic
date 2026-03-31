@@ -497,7 +497,6 @@ class Adapter(ChatCompletionAdapter):
         request: ClaudeRequest,
         discarded_messages: DiscardedMessages | None,
     ):
-
         if _log.isEnabledFor(DEBUG):
             msg = json_dumps_short(
                 {"deployment": self.deployment, "request": request}
