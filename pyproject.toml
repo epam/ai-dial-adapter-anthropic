@@ -34,10 +34,7 @@ respx = "^0.22.0"
 
 [tool.poetry.group.lint.dependencies]
 pyright = "1.1.389"
-black = "26.3.1"
-isort = "5.12.0"
-autoflake = "2.2.0"
-flake8 = "6.0.0"
+ruff = "0.12.11"
 
 [tool.poetry.group.dev.dependencies]
 nox = "^2023.4.22"
@@ -47,44 +44,34 @@ addopts = "-n=auto --asyncio-mode=auto --self-contained-html --html=pytest.html 
 generate_report_on_test = true
 env_override_existing_values = 1
 testpaths = ["tests"]
-filterwarnings = [
-  "error",
-  # "ignore::pydantic.warnings.PydanticDeprecatedSince20",
-  # "ignore::pytest.PytestUnraisableExceptionWarning",
-  # muting warnings coming from opentelemetry and pkg_resources packages
-  # "ignore::DeprecationWarning:opentelemetry.instrumentation.dependencies",
-  # "ignore::DeprecationWarning:pkg_resources",
-
-]
+filterwarnings = ["error"]
 
 [tool.pyright]
 typeCheckingMode = "basic"
 reportDeprecated = "error"
 reportUnusedVariable = "error"
 reportIncompatibleMethodOverride = "error"
-exclude = [".git", ".venv", ".nox", "**/__pycache__", "build"]
 
-[tool.black]
+[tool.ruff]
+target-version = "py311"
 line-length = 80
-exclude = '''
-/(
-    \.git
-  | \.venv
-  | \.nox
-  | \.__pycache__
-  | build
-)/
-'''
 
-[tool.isort]
-line_length = 80
-profile = "black"
-skip = [".venv", ".nox", "build"]
-
-[tool.autoflake]
-ignore_init_module_imports = true
-remove_all_unused_imports = true
-in_place = true
-recursive = true
-quiet = true
-exclude = ["\\.venv", "\\.nox", "build"]
+[tool.ruff.lint]
+select = [
+  "ERA",  # flake8-eradicate
+  "B",    # flake8-builtins
+  "C4",   # flake8-comprehensions
+  "SIM",  # flake8-simplify
+  "B9",   # flake8-bugbear
+  "E",    # pycodestyle
+  "W",    # pycodestyle
+  "F",    # pyflakes
+  "I",    # flake8-isort
+  "S",    # flake8-bandit
+  "FURB", # refurb
+  "UP",   # pyupgrade
+]
+ignore = [
+  "E501", # string literal is too long
+  "S101", # Use of `assert` detected
+]

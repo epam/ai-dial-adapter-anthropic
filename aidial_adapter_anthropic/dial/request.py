@@ -1,8 +1,5 @@
 from typing import (
-    List,
     Literal,
-    Optional,
-    Type,
     TypeGuard,
     TypeVar,
     assert_never,
@@ -30,32 +27,32 @@ from aidial_adapter_anthropic.dial.tools import (
     validate_messages,
 )
 
-MessageContent = str | List[MessageContentPart] | None
+MessageContent = str | list[MessageContentPart] | None
 MessageContentSpecialized = (
     MessageContent
-    | List[MessageContentTextPart]
-    | List[MessageContentImagePart]
+    | list[MessageContentTextPart]
+    | list[MessageContentImagePart]
 )
 
 _Model = TypeVar("_Model", bound=BaseModel)
 
 
 class ModelParameters(BaseModel):
-    temperature: Optional[float] = None
-    top_p: Optional[float] = None
+    temperature: float | None = None
+    top_p: float | None = None
     n: int = 1
-    stop: List[str] = []
-    seed: Optional[int] = None
-    max_tokens: Optional[int] = None
-    max_prompt_tokens: Optional[int] = None
+    stop: list[str] = []
+    seed: int | None = None
+    max_tokens: int | None = None
+    max_prompt_tokens: int | None = None
     stream: bool = False
-    tool_config: Optional[ToolsConfig] = None
-    configuration: Optional[dict] = None
-    response_format: Optional[ResponseFormat] = None
+    tool_config: ToolsConfig | None = None
+    configuration: dict | None = None
+    response_format: ResponseFormat | None = None
 
     @classmethod
     def create(cls, request: ChatCompletionRequest) -> "ModelParameters":
-        stop: List[str] = []
+        stop: list[str] = []
         if request.stop is not None:
             stop = (
                 [request.stop]
@@ -91,7 +88,7 @@ class ModelParameters(BaseModel):
             return self.tool_config.tools_mode
         return None
 
-    def parse_configuration(self, cls: Type[_Model]) -> _Model:
+    def parse_configuration(self, cls: type[_Model]) -> _Model:
         try:
             return cls.model_validate(self.configuration or {})
         except PydanticValidationError as e:
@@ -102,7 +99,7 @@ class ModelParameters(BaseModel):
                 path = ".".join(map(str, error["loc"]))
                 msg = f"Invalid request. Path: 'custom_fields.configuration.{path}', error: {error['msg']}"
 
-            raise RequestValidationError(msg)
+            raise RequestValidationError(msg) from None
 
 
 def collect_text_content(
@@ -114,7 +111,7 @@ def collect_text_content(
         case str():
             return content
         case list():
-            texts: List[str] = []
+            texts: list[str] = []
             for part in content:
                 match part:
                     case MessageContentTextPart(text=text):
@@ -146,7 +143,7 @@ def to_message_content(content: MessageContentSpecialized) -> MessageContent:
 
 def is_text_content(
     content: MessageContent,
-) -> TypeGuard[str | List[MessageContentTextPart]]:
+) -> TypeGuard[str | list[MessageContentTextPart]]:
     match content:
         case None:
             return False

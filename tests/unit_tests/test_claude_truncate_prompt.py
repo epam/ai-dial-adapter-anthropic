@@ -1,5 +1,5 @@
 import math
-from typing import List, Literal
+from typing import Literal
 
 import anthropic
 import pytest
@@ -50,7 +50,7 @@ async def model():
 
 async def tokenize(
     model: ChatCompletionAdapter,
-    messages: List[Message],
+    messages: list[Message],
     tool_config: ToolsConfig | None = None,
 ) -> int:
     params = ModelParameters(tool_config=tool_config)
@@ -59,7 +59,7 @@ async def tokenize(
 
 async def compute_discarded_messages(
     model: ChatCompletionAdapter,
-    messages: List[Message],
+    messages: list[Message],
     max_prompt_tokens: int | None,
     tool_config: ToolsConfig | None = None,
 ) -> DiscardedMessages | str:
@@ -129,7 +129,7 @@ async def test_one_turn_with_image(model):
 
     assert (
         truncation
-        == f"The requested maximum prompt tokens is {expected_tokens-1}. However, the system messages and the last user message resulted in {expected_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
+        == f"The requested maximum prompt tokens is {expected_tokens - 1}. However, the system messages and the last user message resulted in {expected_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
     )
 
 
@@ -156,7 +156,7 @@ async def test_one_turn_with_tools(model):
 
     assert (
         discarded_messages
-        == f"The requested maximum prompt tokens is {expected_tokens-1}. However, the system messages and the last user message resulted in {expected_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
+        == f"The requested maximum prompt tokens is {expected_tokens - 1}. However, the system messages and the last user message resulted in {expected_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
     )
 
 

@@ -1,7 +1,6 @@
 import base64
 import mimetypes
 from abc import ABC, abstractmethod
-from typing import List
 
 from aidial_sdk.chat_completion import Attachment
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -25,9 +24,9 @@ class MissingContentType(ValidationError):
 
 class UnsupportedContentType(ValidationError):
     type: str
-    supported_types: List[str]
+    supported_types: list[str]
 
-    def __init__(self, *, message: str, type: str, supported_types: List[str]):
+    def __init__(self, *, message: str, type: str, supported_types: list[str]):
         self.type = type
         self.supported_types = supported_types
         super().__init__(message)
@@ -35,7 +34,7 @@ class UnsupportedContentType(ValidationError):
 
 class DialResource(ABC, BaseModel):
     entity_name: str | None = None
-    supported_types: List[str] | None = Field(default=None)
+    supported_types: list[str] | None = Field(default=None)
 
     @abstractmethod
     def to_attachment(self) -> Attachment: ...
