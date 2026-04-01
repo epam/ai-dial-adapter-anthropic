@@ -5,9 +5,10 @@ with options to trim long strings and lists to specified limits.
 """
 
 import json
+from collections.abc import Callable
 from dataclasses import asdict, is_dataclass
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 from anthropic import Omit
 from pydantic import BaseModel

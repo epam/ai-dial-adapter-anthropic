@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import (
-    AsyncIterator,
-    Callable,
-    Dict,
     Generic,
-    List,
     Protocol,
-    Sequence,
-    Set,
     TypeVar,
     assert_never,
     runtime_checkable,
@@ -52,7 +47,7 @@ class HandlerWithConfig(Protocol, Generic[_T, _Config]):
 
 @dataclass
 class AttachmentProcessor(Generic[_T, _Config]):
-    supported_types: Dict[str, Set[str]]
+    supported_types: dict[str, set[str]]
     """MIME type to file extensions mapping"""
 
     handler: Handler[_T] | HandlerWithConfig[_T, _Config]
@@ -78,10 +73,10 @@ class AttachmentProcessor(Generic[_T, _Config]):
 @dataclass
 class WithResources(Generic[_T]):
     payload: _T
-    resources: List[DialResource] = field(default_factory=list)
+    resources: list[DialResource] = field(default_factory=list)
 
     @staticmethod
-    def transpose(xs: List[WithResources[_T]]) -> WithResources[List[_T]]:
+    def transpose(xs: list[WithResources[_T]]) -> WithResources[list[_T]]:
         resources = [r for x in xs for r in x.resources]
         payload = [x.payload for x in xs]
         return WithResources(payload=payload, resources=resources)
@@ -95,19 +90,19 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
     config: _Config | None = field(default=None)
 
     @property
-    def supported_types(self) -> Dict[str, Set[str]]:
-        ret: Dict[str, Set[str]] = {}
+    def supported_types(self) -> dict[str, set[str]]:
+        ret: dict[str, set[str]] = {}
         for processor in self.attachment_processors:
             for mime_type, file_exts in processor.supported_types.items():
                 ret.setdefault(mime_type, set()).update(file_exts)
         return ret
 
     @property
-    def supported_mime_types(self) -> List[str]:
+    def supported_mime_types(self) -> list[str]:
         return list(self.supported_types)
 
     @property
-    def supported_image_types(self) -> List[str]:
+    def supported_image_types(self) -> list[str]:
         return [t for t in self.supported_mime_types if t.startswith("image/")]
 
     def _text_handler(self, text: str) -> WithResources[_Txt]:
@@ -115,9 +110,9 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
 
     async def process_system_message(
         self, message: SystemMessage
-    ) -> List[_Txt]:
+    ) -> list[_Txt]:
         def _gen():
-            match (content := message.content):
+            match content := message.content:
                 case str():
                     if content:
                         yield self.text_handler(content)
@@ -132,11 +127,11 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
                 case _:
                     assert_never(content)
 
-        return [x for x in _gen()]
+        return list(_gen())
 
     async def process_attachments(
         self, message: BaseMessage
-    ) -> WithResources[List[_T | _Txt]]:
+    ) -> WithResources[list[_T | _Txt]]:
         ret = await aiter_to_list(self._process_attachments_iter(message)) or [
             self._text_handler("")
         ]
@@ -191,7 +186,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
             raise UserError(
                 f"Unsupported media type: {e.type}",
                 _get_usage_message(self.get_file_exts(e.supported_types)),
-            )
+            ) from None
 
     async def _handle_resource(self, resource: Resource) -> _T:
         for processor in self.attachment_processors:
@@ -210,7 +205,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         message = await self._handle_resource(resource)
         return WithResources(message, resources=[dial_resource])
 
-    def get_file_exts(self, mime_types: List[str]) -> List[str]:
+    def get_file_exts(self, mime_types: list[str]) -> list[str]:
         return [
             file_ext
             for mime_type, file_exts in self.supported_types.items()
@@ -219,7 +214,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         ]
 
 
-def _get_usage_message(supported_exts: List[str]) -> str:
+def _get_usage_message(supported_exts: list[str]) -> str:
     document_hint = ""
     if "pdf" in supported_exts:
         document_hint = '- "Summarize the document" for a PDF document'
@@ -228,7 +223,7 @@ def _get_usage_message(supported_exts: List[str]) -> str:
 The application answers queries about attached files.
 Attach file(s) and ask questions about them in the same message.
 
-Supported attachment types: {', '.join(supported_exts)}.
+Supported attachment types: {", ".join(supported_exts)}.
 
 Examples of queries:
 - "Describe this picture" for an image

@@ -1,4 +1,5 @@
-from typing import Callable, assert_never
+from collections.abc import Callable
+from typing import assert_never
 
 from anthropic.types.beta import (
     BetaCitationCharLocation as CitationCharLocation,
@@ -46,9 +47,10 @@ def create_citations(
     citation: TextCitation,
 ):
     match citation:
-        case CitationCharLocation(
-            document_index=document_index
-        ) | CitationPageLocation(document_index=document_index):
+        case (
+            CitationCharLocation(document_index=document_index)
+            | CitationPageLocation(document_index=document_index)
+        ):
             _add_document_citation(consumer, get_document, document_index)
 
         # Custom document aren't supported yet

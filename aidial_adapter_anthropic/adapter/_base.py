@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Set, Tuple, Type
+from typing import Any
 
 from aidial_sdk.chat_completion import Message
 from pydantic import BaseModel
@@ -21,15 +21,15 @@ class ChatCompletionAdapter(ABC):
         self,
         consumer: Consumer,
         params: ModelParameters,
-        messages: List[Message],
+        messages: list[Message],
     ) -> None:
         pass
 
-    async def configuration(self) -> Type[BaseModel]:
+    async def configuration(self) -> type[BaseModel]:
         raise NotImplementedError
 
     async def count_prompt_tokens(
-        self, params: ModelParameters, messages: List[Message]
+        self, params: ModelParameters, messages: list[Message]
     ) -> int:
         raise NotImplementedError
 
@@ -37,7 +37,7 @@ class ChatCompletionAdapter(ABC):
         raise NotImplementedError
 
     async def compute_discarded_messages(
-        self, params: ModelParameters, messages: List[Message]
+        self, params: ModelParameters, messages: list[Message]
     ) -> DiscardedMessages | None:
         """
         The method truncates the list of messages to fit
@@ -51,7 +51,7 @@ class ChatCompletionAdapter(ABC):
 
 
 def default_preprocess_messages(
-    messages: List[Message],
+    messages: list[Message],
 ) -> ListProjection[Message]:
     def _is_empty_system_message(msg: Message) -> bool:
         return (
@@ -59,8 +59,8 @@ def default_preprocess_messages(
             and collect_text_content(msg.content).strip() == ""
         )
 
-    ret: List[Tuple[Message, Set[int]]] = []
-    idx: Set[int] = set()
+    ret: list[tuple[Message, set[int]]] = []
+    idx: set[int] = set()
 
     for i, msg in enumerate(messages):
         idx.add(i)
@@ -75,18 +75,18 @@ def default_preprocess_messages(
     return ListProjection(ret)
 
 
-def keep_last(messages: List[Any], idx: int) -> bool:
+def keep_last(messages: list[Any], idx: int) -> bool:
     return idx == len(messages) - 1
 
 
-def keep_last_and_system_messages(messages: List[Message], idx: int) -> bool:
+def keep_last_and_system_messages(messages: list[Message], idx: int) -> bool:
     return is_system_role(messages[idx].role) or keep_last(messages, idx)
 
 
-def trivial_partitioner(messages: List[Any]) -> List[int]:
+def trivial_partitioner(messages: list[Any]) -> list[int]:
     return [1] * len(messages)
 
 
-def turn_based_partitioner(messages: List[Any]) -> List[int]:
+def turn_based_partitioner(messages: list[Any]) -> list[int]:
     n = len(messages)
     return [2] * (n // 2) + [1] * (n % 2)

@@ -1,15 +1,10 @@
+import builtins
+from collections.abc import AsyncIterator, Callable, Container, Iterable
 from dataclasses import dataclass, field
 from typing import (
     Any,
-    AsyncIterator,
-    Callable,
-    Container,
     Generic,
-    Iterable,
-    List,
     Self,
-    Set,
-    Tuple,
     TypeVar,
 )
 
@@ -17,21 +12,20 @@ _T = TypeVar("_T")
 _V = TypeVar("_V")
 
 
-def select_by_indices(lst: List[_T], indices: Container[int]) -> List[_T]:
+def select_by_indices(lst: list[_T], indices: Container[int]) -> list[_T]:
     return [elem for idx, elem in enumerate(lst) if idx in indices]
 
 
-def omit_by_indices(lst: List[_T], indices: Container[int]) -> List[_T]:
+def omit_by_indices(lst: list[_T], indices: Container[int]) -> list[_T]:
     return [elem for idx, elem in enumerate(lst) if idx not in indices]
 
 
 def group_by(
-    lst: List[_T],
+    lst: list[_T],
     key: Callable[[_T], Any],
     init: Callable[[_T], _V],
     merge: Callable[[_V, _T], _V],
-) -> List[_V]:
-
+) -> list[_V]:
     def _gen():
         if not lst:
             return
@@ -62,23 +56,21 @@ class ListProjection(Generic[_T]):
     The subsets must be disjoint.
     """
 
-    list: List[Tuple[_T, Set[int]]] = field(default_factory=list)
+    lst: list[tuple[_T, set[int]]] = field(default_factory=list)
 
     @property
-    def raw_list(self) -> List[_T]:
-        return [msg for msg, _ in self.list]
+    def raw_list(self) -> builtins.list[_T]:
+        return [msg for msg, _ in self.lst]
 
-    def to_original_indices(self, indices: Iterable[int]) -> Set[int]:
+    def to_original_indices(self, indices: Iterable[int]) -> set[int]:
         return {
-            orig_index
-            for index in indices
-            for orig_index in self.list[index][1]
+            orig_index for index in indices for orig_index in self.lst[index][1]
         }
 
     def append(self, elem: _T, idx: int) -> Self:
-        self.list.append((elem, {idx}))
+        self.lst.append((elem, {idx}))
         return self
 
 
-async def aiter_to_list(iterator: AsyncIterator[_T]) -> List[_T]:
+async def aiter_to_list(iterator: AsyncIterator[_T]) -> list[_T]:
     return [item async for item in iterator]

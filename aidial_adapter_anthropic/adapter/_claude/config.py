@@ -1,4 +1,4 @@
-from typing import List, Literal
+from typing import Literal
 
 from anthropic.types.anthropic_beta_param import AnthropicBetaParam
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
@@ -25,7 +25,7 @@ class ThinkingConfigDisabled(ExtraForbidModel):
 
 
 class ClaudeConfiguration(ExtraForbidModel):
-    betas: List[AnthropicBetaParam] | None = Field(
+    betas: list[AnthropicBetaParam] | None = Field(
         default=None,
         description="List of beta features to enable. Make sure to check if the given feature is supported by the Claude deployment you are using.",
     )
