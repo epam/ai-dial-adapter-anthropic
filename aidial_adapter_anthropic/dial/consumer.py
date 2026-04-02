@@ -92,30 +92,55 @@ class Consumer(AbstractContextManager, ABC):
         return LazyStage(factory, title)
 
 
+@dataclasses.dataclass
+class _ResponseState:
+    usage: TokenUsage | None = None
+    discarded_messages: DiscardedMessages | None = None
+
+    def add_usage(self, usage: TokenUsage):
+        self.usage = (self.usage or TokenUsage()).accumulate(usage)
+
+    def flush(self, response: Response):
+        if self.usage is not None:
+            response.set_usage(
+                prompt_tokens=self.usage.prompt_tokens,
+                completion_tokens=self.usage.completion_tokens,
+                prompt_tokens_details={
+                    "cached_tokens": self.usage.cache_read_input_tokens
+                },
+            )
+
+        if self.discarded_messages is not None:
+            response.set_discarded_messages(self.discarded_messages)
+
+
 class ChoiceConsumer(Consumer):
     response: Response
+    _response_state: _ResponseState
 
-    usage: TokenUsage | None
-    discarded_messages: DiscardedMessages | None
-
-    _root: Consumer | None
+    _is_root: bool
     _choice: Choice | None
     _tool_calls: list[ToolUseMessage]
     _citations: dict[int, tuple[int, Attachment | None]]
 
-    def __init__(self, response: Response, root: Consumer | None = None):
+    def __init__(
+        self,
+        response: Response,
+        *,
+        response_state: _ResponseState | None = None,
+    ):
         self.response = response
+        self._response_state = response_state or _ResponseState()
 
-        self.usage = None
-        self.discarded_messages = None
-
+        self._is_root = response_state is None
         self._choice = None
-        self._root = root
         self._tool_calls = []
         self._citations = {}
 
     def fork(self) -> Consumer:
-        return ChoiceConsumer(self.response, self._root or self)
+        return ChoiceConsumer(
+            self.response, response_state=self._response_state
+        )
 
     @property
     def choice(self) -> Choice:
@@ -144,18 +169,8 @@ class ChoiceConsumer(Consumer):
         if exc is None and self._choice is not None:
             self._choice.close()
 
-        if self._root is None:
-            if self.usage is not None:
-                self.response.set_usage(
-                    prompt_tokens=self.usage.prompt_tokens,
-                    completion_tokens=self.usage.completion_tokens,
-                    prompt_tokens_details={
-                        "cached_tokens": self.usage.cache_read_input_tokens
-                    },
-                )
-
-            if self.discarded_messages is not None:
-                self.response.set_discarded_messages(self.discarded_messages)
+        if self._is_root:
+            self._response_state.flush(self.response)
 
         return False
 
@@ -189,24 +204,15 @@ class ChoiceConsumer(Consumer):
         return display_index
 
     def add_usage(self, usage: TokenUsage):
-        if self._root:
-            self._root.add_usage(usage)
-        else:
-            self.usage = (self.usage or TokenUsage()).accumulate(usage)
+        self._response_state.add_usage(usage)
 
     def set_discarded_messages(
         self, discarded_messages: DiscardedMessages | None
     ):
-        if self._root:
-            self._root.set_discarded_messages(discarded_messages)
-        else:
-            self.discarded_messages = discarded_messages
+        self._response_state.discarded_messages = discarded_messages
 
     def get_discarded_messages(self) -> DiscardedMessages | None:
-        if self._root:
-            return self._root.get_discarded_messages()
-        else:
-            return self.discarded_messages
+        return self._response_state.discarded_messages
 
     def create_function_tool_call(self, call: ToolCall) -> ToolUseMessage:
         tool_call = ToolUseMessage(
