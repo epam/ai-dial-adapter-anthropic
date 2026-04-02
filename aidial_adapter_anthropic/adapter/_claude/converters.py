@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Literal, assert_never
 
 from aidial_sdk.chat_completion import FinishReason, Tool
@@ -28,7 +29,6 @@ from anthropic.types.beta import BetaToolChoiceParam as ToolChoice
 from anthropic.types.beta import BetaToolChoiceToolParam as ToolChoiceToolParam
 from anthropic.types.beta import BetaToolParam as ToolParam
 from anthropic.types.beta import BetaUsage as Usage
-from pydantic import BaseModel
 
 from aidial_adapter_anthropic._utils.json import traverse_json
 from aidial_adapter_anthropic._utils.list import ListProjection, group_by
@@ -299,7 +299,8 @@ def _to_claude_tool_choice(
             assert_never(tool_choice)
 
 
-class ClaudeToolsConfig(BaseModel):
+@dataclass
+class ClaudeToolsConfig:
     tools: list[ToolParam]
     tool_choice: ToolChoice
 
