@@ -10,7 +10,7 @@ from aidial_adapter_anthropic.adapter._truncate_prompt import (
     _partition_indexer,
     compute_discarded_messages,
 )
-from tests.utils.messages import ai, sys, user
+from tests.utils.openai import ai, sys, user
 
 
 async def truncate_prompt_by_words(
