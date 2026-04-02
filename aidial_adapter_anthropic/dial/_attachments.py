@@ -133,8 +133,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         self, message: BaseMessage
     ) -> WithResources[list[_T | _Txt]]:
         ret = await aiter_to_list(self._process_attachments_iter(message))
-        if not ret and not isinstance(message, SystemMessage):
-            ret = [self._text_handler(" ")]
+        ret = ret or [self._text_handler(" ")]
         return WithResources.transpose(ret)
 
     async def _process_attachments_iter(
