@@ -1,6 +1,7 @@
 ARGS ?=
 POETRY ?= poetry
 POETRY_PYTHON ?= python
+VENV_DIR ?= .venv
 
 -include .env.dev
 export
@@ -26,6 +27,9 @@ clean:
 publish: build
 	$(POETRY) publish -u __token__ -p $(PYPI_TOKEN) --skip-existing
 
+install_git_hooks: install
+	$(VENV_DIR)/bin/pre-commit install
+
 lint: install
 	$(POETRY) run nox -s lint
 
@@ -46,6 +50,7 @@ help:
 	@echo 'build                        - build the library'
 	@echo 'clean                        - clean virtual env and build artifacts'
 	@echo 'publish                      - publish the library to Pypi'
+	@echo 'install_git_hooks            - install the git hooks'
 	@echo '-- LINTING --'
 	@echo 'format                       - run code formatters'
 	@echo 'lint                         - run linters'
