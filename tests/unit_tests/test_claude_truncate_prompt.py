@@ -15,7 +15,7 @@ from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
 from aidial_adapter_anthropic.adapter.claude import create_adapter
 from aidial_adapter_anthropic.dial.request import ModelParameters
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
-from tests.utils.messages import ai, sys, user, user_with_image
+from tests.utils.openai import ai, sys, user, user_with_image
 
 _TOOL_SYSTEM_MESSAGE = 55
 
