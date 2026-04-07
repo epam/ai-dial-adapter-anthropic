@@ -132,9 +132,8 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
     async def process_attachments(
         self, message: BaseMessage
     ) -> WithResources[list[_T | _Txt]]:
-        ret = await aiter_to_list(self._process_attachments_iter(message)) or [
-            self._text_handler("")
-        ]
+        ret = await aiter_to_list(self._process_attachments_iter(message))
+        ret = ret or [self._text_handler(" ")]
         return WithResources.transpose(ret)
 
     async def _process_attachments_iter(
