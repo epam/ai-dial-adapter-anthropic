@@ -1,6 +1,6 @@
 from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.dial.request import ModelParameters
-from tests.utils.messages import ai, sys, user
+from tests.utils.openai import ai, sys, user
 
 
 async def test_empty_message_is_replaced_with_space(adapter: Adapter):
