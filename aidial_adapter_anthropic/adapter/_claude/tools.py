@@ -36,7 +36,7 @@ def to_dial_tool_call(block: ToolUseBlock, streaming: bool) -> ToolCall:
     )
 
 
-def process_tools_block(
+async def process_tools_block(
     consumer: Consumer,
     block: ToolUseBlock,
     tools_mode: ToolsMode | None,
@@ -45,7 +45,7 @@ def process_tools_block(
 ) -> ToolUseMessage | None:
     match tools_mode:
         case ToolsMode.TOOLS:
-            return consumer.create_function_tool_call(
+            return await consumer.create_function_tool_call(
                 to_dial_tool_call(block, streaming)
             )
         case ToolsMode.FUNCTIONS:
@@ -56,7 +56,7 @@ def process_tools_block(
                 )
                 return None
             else:
-                return consumer.create_function_call(
+                return await consumer.create_function_call(
                     to_dial_function_call(block, streaming)
                 )
         case None:

@@ -402,7 +402,7 @@ class Adapter(ChatCompletionAdapter):
                     case MessageStartEvent():
                         pass
                     case TextEvent(text=text):
-                        consumer.append_content(text)
+                        await consumer.append_content(text)
 
                     case ThinkingEvent(thinking=thinking):
                         thinking_stage.append_content(thinking)
@@ -412,7 +412,7 @@ class Adapter(ChatCompletionAdapter):
 
                     case ContentBlockStartEvent(content_block=content_block):
                         if isinstance(content_block, ToolUseBlock):
-                            tool = process_tools_block(
+                            tool = await process_tools_block(
                                 consumer,
                                 content_block,
                                 tools_mode,
@@ -434,7 +434,7 @@ class Adapter(ChatCompletionAdapter):
                             case TextBlock(citations=citations):
                                 # The text content is already handled in TextEvent handler.
                                 for citation in citations or []:
-                                    create_citations(
+                                    await create_citations(
                                         consumer, request.get_resource, citation
                                     )
                             case ToolUseBlock():
@@ -465,7 +465,7 @@ class Adapter(ChatCompletionAdapter):
                                 assert_never(content_block)
 
                     case ParsedMessageStopEvent(message=message):
-                        consumer.add_usage(to_dial_usage(message.usage))
+                        await consumer.add_usage(to_dial_usage(message.usage))
                         stop_reason = message.stop_reason
                         if self.supports_thinking:
                             consumer.choice.set_state(
@@ -484,11 +484,11 @@ class Adapter(ChatCompletionAdapter):
                     case _:
                         assert_never(event)
 
-            consumer.close_content(
+            await consumer.close_content(
                 to_dial_finish_reason(stop_reason, tools_mode)
             )
 
-            consumer.set_discarded_messages(discarded_messages)
+            await consumer.set_discarded_messages(discarded_messages)
 
     async def invoke_non_streaming(
         self,
@@ -516,13 +516,13 @@ class Adapter(ChatCompletionAdapter):
         for content in message.content:
             match content:
                 case TextBlock(text=text, citations=citations):
-                    consumer.append_content(text)
+                    await consumer.append_content(text)
                     for citation in citations or []:
-                        create_citations(
+                        await create_citations(
                             consumer, request.get_resource, citation
                         )
                 case ToolUseBlock():
-                    process_tools_block(
+                    await process_tools_block(
                         consumer, content, tools_mode, streaming=False
                     )
                 case ThinkingBlock(thinking=thinking):
@@ -554,9 +554,9 @@ class Adapter(ChatCompletionAdapter):
                 MessageState(claude_message_content=message.content).to_dict()
             )
 
-        consumer.close_content(
+        await consumer.close_content(
             to_dial_finish_reason(message.stop_reason, tools_mode)
         )
 
-        consumer.add_usage(to_dial_usage(message.usage))
-        consumer.set_discarded_messages(discarded_messages)
+        await consumer.add_usage(to_dial_usage(message.usage))
+        await consumer.set_discarded_messages(discarded_messages)

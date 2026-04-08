@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 from abc import ABC, abstractmethod
-from contextlib import AbstractContextManager
+from contextlib import AbstractAsyncContextManager
 from types import TracebackType
 from typing import Protocol, Self
 
@@ -40,7 +40,7 @@ class ToolUseMessage:
         return self
 
 
-class Consumer(AbstractContextManager, ABC):
+class Consumer(AbstractAsyncContextManager, ABC):
     @abstractmethod
     def fork(self) -> Consumer: ...
 
@@ -49,35 +49,41 @@ class Consumer(AbstractContextManager, ABC):
     def choice(self) -> Choice: ...
 
     @abstractmethod
-    def close_content(self, finish_reason: FinishReason | None = None): ...
+    async def close_content(
+        self, finish_reason: FinishReason | None = None
+    ): ...
 
     @abstractmethod
-    def append_content(self, content: str): ...
+    async def append_content(self, content: str): ...
 
     @abstractmethod
-    def add_attachment(self, attachment: Attachment): ...
+    async def add_attachment(self, attachment: Attachment): ...
 
     @abstractmethod
-    def add_citation_attachment(
+    async def add_citation_attachment(
         self, document_id: int, document: Attachment | None
     ) -> int: ...
 
     @abstractmethod
-    def add_usage(self, usage: TokenUsage): ...
+    async def add_usage(self, usage: TokenUsage): ...
 
     @abstractmethod
-    def set_discarded_messages(
+    async def set_discarded_messages(
         self, discarded_messages: DiscardedMessages | None
     ): ...
 
     @abstractmethod
-    def get_discarded_messages(self) -> DiscardedMessages | None: ...
+    async def get_discarded_messages(self) -> DiscardedMessages | None: ...
 
     @abstractmethod
-    def create_function_tool_call(self, call: ToolCall) -> ToolUseMessage: ...
+    async def create_function_tool_call(
+        self, call: ToolCall
+    ) -> ToolUseMessage: ...
 
     @abstractmethod
-    def create_function_call(self, call: FunctionCall) -> ToolUseMessage: ...
+    async def create_function_call(
+        self, call: FunctionCall
+    ) -> ToolUseMessage: ...
 
     @property
     @abstractmethod
@@ -154,10 +160,10 @@ class ChoiceConsumer(Consumer):
         else:
             return self._choice
 
-    def __enter__(self) -> ChoiceConsumer:
+    async def __aenter__(self) -> ChoiceConsumer:
         return self
 
-    def __exit__(
+    async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
@@ -174,18 +180,18 @@ class ChoiceConsumer(Consumer):
 
         return False
 
-    def close_content(self, finish_reason: FinishReason | None = None):
+    async def close_content(self, finish_reason: FinishReason | None = None):
         # Choice.close(finish_reason: Optional[FinishReason]) can be called only once
         # Currently, there's no other way to explicitly set the finish reason
         self.choice._last_finish_reason = finish_reason
 
-    def append_content(self, content: str):
+    async def append_content(self, content: str):
         self.choice.append_content(content)
 
-    def add_attachment(self, attachment: Attachment):
+    async def add_attachment(self, attachment: Attachment):
         self.choice.add_attachment(attachment)
 
-    def add_citation_attachment(
+    async def add_citation_attachment(
         self, document_id: int, document: Attachment | None
     ) -> int:
         if document_id in self._citations:
@@ -199,22 +205,22 @@ class ChoiceConsumer(Consumer):
             document.title = f"[{display_index}] {document.title or ''}".strip()
             document.reference_type = document.reference_type or document.type
             document.reference_url = document.reference_url or document.url
-            self.add_attachment(document)
+            await self.add_attachment(document)
 
         return display_index
 
-    def add_usage(self, usage: TokenUsage):
+    async def add_usage(self, usage: TokenUsage):
         self._response_state.add_usage(usage)
 
-    def set_discarded_messages(
+    async def set_discarded_messages(
         self, discarded_messages: DiscardedMessages | None
     ):
         self._response_state.discarded_messages = discarded_messages
 
-    def get_discarded_messages(self) -> DiscardedMessages | None:
+    async def get_discarded_messages(self) -> DiscardedMessages | None:
         return self._response_state.discarded_messages
 
-    def create_function_tool_call(self, call: ToolCall) -> ToolUseMessage:
+    async def create_function_tool_call(self, call: ToolCall) -> ToolUseMessage:
         tool_call = ToolUseMessage(
             call=self.choice.create_function_tool_call(
                 id=call.id,
@@ -226,7 +232,7 @@ class ChoiceConsumer(Consumer):
         self._tool_calls.append(tool_call)
         return tool_call
 
-    def create_function_call(self, call: FunctionCall) -> ToolUseMessage:
+    async def create_function_call(self, call: FunctionCall) -> ToolUseMessage:
         tool_call = ToolUseMessage(
             call=self.choice.create_function_call(
                 name=call.name,
