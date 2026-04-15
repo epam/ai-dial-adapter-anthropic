@@ -36,6 +36,9 @@ from anthropic.lib.streaming._beta_types import (
 )
 from anthropic.resources.beta import AsyncMessages as FirstPartyAsyncMessagesAPI
 from anthropic.types.beta import (
+    BetaAdvisorToolResultBlock as AdvisorToolResultBlock,
+)
+from anthropic.types.beta import (
     BetaBashCodeExecutionToolResultBlock as BashCodeExecutionToolResultBlock,
 )
 from anthropic.types.beta import (
@@ -542,6 +545,7 @@ class Adapter(ChatCompletionAdapter):
                     | WebFetchToolResultBlock()
                     | ToolSearchToolResultBlock()
                     | CompactionBlock()
+                    | AdvisorToolResultBlock()
                 ):
                     _log.error(
                         f"Content block of type {content.type} isn't supported"
