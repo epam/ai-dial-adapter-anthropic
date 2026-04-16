@@ -15,7 +15,6 @@ from aidial_adapter_anthropic.adapter._claude.converters import (
     to_claude_cache_control,
 )
 from aidial_adapter_anthropic.dial.request import ModelParameters
-from tests.utils.openai import sys, user
 
 _EPHEMERAL = CacheControlEphemeralParam(type="ephemeral")
 
@@ -37,20 +36,36 @@ async def _to_clade_request(adapter: Adapter, request: dict) -> ClaudeRequest:
 
 
 async def test_top_level_cache_breakpoint(adapter: Adapter):
-    params = ModelParameters(cache_breakpoint=CacheBreakpoint())
-    request = await adapter._prepare_claude_request(params, [user("hi")])
+    request = await _to_clade_request(
+        adapter,
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "custom_fields": {"cache_breakpoint": {}},
+        },
+    )
     assert request.params["cache_control"] == _EPHEMERAL
 
 
 async def test_no_top_level_cache_breakpoint(adapter: Adapter):
-    params = ModelParameters()
-    request = await adapter._prepare_claude_request(params, [user("hi")])
+    request = await _to_clade_request(
+        adapter, {"messages": [{"role": "user", "content": "hi"}]}
+    )
     assert isinstance(request.params["cache_control"], Omit)
 
 
 async def test_user_message_cache_control(adapter: Adapter):
-    msg = user(content="hello", cache_breakpoint=CacheBreakpoint())
-    request = await adapter._prepare_claude_request(ModelParameters(), [msg])
+    request = await _to_clade_request(
+        adapter,
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "hello",
+                    "custom_fields": {"cache_breakpoint": {}},
+                }
+            ]
+        },
+    )
     content = request.claude_messages[0]["content"]
     assert isinstance(content, list)
     assert len(content) == 1
@@ -60,8 +75,8 @@ async def test_user_message_cache_control(adapter: Adapter):
 
 
 async def test_user_message_no_cache_control(adapter: Adapter):
-    request = await adapter._prepare_claude_request(
-        ModelParameters(), [user("hello")]
+    request = await _to_clade_request(
+        adapter, {"messages": [{"role": "user", "content": "hello"}]}
     )
     content = request.claude_messages[0]["content"]
     assert isinstance(content, list)
@@ -71,9 +86,18 @@ async def test_user_message_no_cache_control(adapter: Adapter):
 
 
 async def test_system_message_cache_control(adapter: Adapter):
-    sys_msg = sys("be helpful", cache_breakpoint=CacheBreakpoint())
-    request = await adapter._prepare_claude_request(
-        ModelParameters(), [sys_msg, user("hi")]
+    request = await _to_clade_request(
+        adapter,
+        {
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "be helpful",
+                    "custom_fields": {"cache_breakpoint": {}},
+                },
+                {"role": "user", "content": "hi"},
+            ]
+        },
     )
     system = request.params["system"]
     assert isinstance(system, list)
