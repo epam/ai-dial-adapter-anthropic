@@ -67,7 +67,8 @@ ClaudeMessage = WithResources[ContentBlockParam]
 def to_claude_cache_control(
     cache_breakpoint: CacheBreakpoint,
 ) -> CacheControlEphemeralParam:
-    return CacheControlEphemeralParam(type="ephemeral")
+    extra = cache_breakpoint.model_extra or {}
+    return CacheControlEphemeralParam(type="ephemeral", **extra)
 
 
 def _add_cache_control(

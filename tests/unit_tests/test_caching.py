@@ -1,3 +1,4 @@
+import pytest
 from aidial_sdk.chat_completion import CacheBreakpoint
 from aidial_sdk.chat_completion.request import (
     ChatCompletionRequest,
@@ -54,6 +55,11 @@ def test_to_claude_cache_control_returns_ephemeral():
 def test_to_claude_cache_control_ignores_expire_at():
     result = to_claude_cache_control(CacheBreakpoint(expire_at="2099-01-01"))
     assert result == _EPHEMERAL
+
+
+def test_to_claude_cache_control_proxy_extra_fields():
+    result = to_claude_cache_control(CacheBreakpoint.model_construct(foo="bar"))
+    assert result == {"type": "ephemeral", "foo": "bar"}
 
 
 async def test_top_level_cache_breakpoint(adapter: Adapter):
@@ -115,3 +121,16 @@ async def test_tool_with_no_cache_control(adapter: Adapter):
     tools = request.params["tools"]
     assert isinstance(tools, list)
     assert "cache_control" not in tools[0]
+
+
+@pytest.mark.parametrize("ttl", [None, "5m", "1h", "foobar"])
+async def test_cache_control_ttl(adapter: Adapter, ttl: str | None):
+    request = await _to_clade_request(
+        adapter,
+        {
+            "messages": [_user("hi")],
+            "custom_fields": {"cache_breakpoint": {"ttl": ttl}},
+        },
+    )
+
+    assert request.params["cache_control"] == {"type": "ephemeral", "ttl": ttl}
