@@ -19,6 +19,33 @@ from aidial_adapter_anthropic.dial.request import ModelParameters
 _EPHEMERAL = CacheControlEphemeralParam(type="ephemeral")
 
 
+async def _to_clade_request(adapter: Adapter, request: dict) -> ClaudeRequest:
+    req = ChatCompletionRequest.model_validate(request)
+    params = ModelParameters.create(req)
+    return await adapter._prepare_claude_request(params, req.messages)
+
+
+def _user(content: str, *, cache_breakpoint: dict | None = None) -> dict:
+    msg: dict = {"role": "user", "content": content}
+    if cache_breakpoint is not None:
+        msg["custom_fields"] = {"cache_breakpoint": cache_breakpoint}
+    return msg
+
+
+def _sys(content: str, *, cache_breakpoint: dict | None = None) -> dict:
+    msg: dict = {"role": "system", "content": content}
+    if cache_breakpoint is not None:
+        msg["custom_fields"] = {"cache_breakpoint": cache_breakpoint}
+    return msg
+
+
+def _create_request_with_tool(add_breakpoint: bool) -> dict:
+    tool = {"type": "function", "function": {"name": "get_weather"}}
+    if add_breakpoint:
+        tool["custom_fields"] = {"cache_breakpoint": {}}
+    return {"messages": [_user("hi")], "tools": [tool]}
+
+
 def test_to_claude_cache_control_returns_ephemeral():
     result = to_claude_cache_control(CacheBreakpoint())
     assert result == _EPHEMERAL
@@ -29,42 +56,22 @@ def test_to_claude_cache_control_ignores_expire_at():
     assert result == _EPHEMERAL
 
 
-async def _to_clade_request(adapter: Adapter, request: dict) -> ClaudeRequest:
-    req = ChatCompletionRequest.model_validate(request)
-    params = ModelParameters.create(req)
-    return await adapter._prepare_claude_request(params, req.messages)
-
-
 async def test_top_level_cache_breakpoint(adapter: Adapter):
     request = await _to_clade_request(
         adapter,
-        {
-            "messages": [{"role": "user", "content": "hi"}],
-            "custom_fields": {"cache_breakpoint": {}},
-        },
+        {"messages": [_user("hi")], "custom_fields": {"cache_breakpoint": {}}},
     )
     assert request.params["cache_control"] == _EPHEMERAL
 
 
 async def test_no_top_level_cache_breakpoint(adapter: Adapter):
-    request = await _to_clade_request(
-        adapter, {"messages": [{"role": "user", "content": "hi"}]}
-    )
+    request = await _to_clade_request(adapter, {"messages": [_user("hi")]})
     assert isinstance(request.params["cache_control"], Omit)
 
 
 async def test_user_message_cache_control(adapter: Adapter):
     request = await _to_clade_request(
-        adapter,
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "hello",
-                    "custom_fields": {"cache_breakpoint": {}},
-                }
-            ]
-        },
+        adapter, {"messages": [_user("hello", cache_breakpoint={})]}
     )
     content = request.claude_messages[0]["content"]
     assert isinstance(content, list)
@@ -75,29 +82,18 @@ async def test_user_message_cache_control(adapter: Adapter):
 
 
 async def test_user_message_no_cache_control(adapter: Adapter):
-    request = await _to_clade_request(
-        adapter, {"messages": [{"role": "user", "content": "hello"}]}
-    )
+    request = await _to_clade_request(adapter, {"messages": [_user("hello")]})
     content = request.claude_messages[0]["content"]
     assert isinstance(content, list)
-    for block in content:
-        assert isinstance(block, dict)
-        assert "cache_control" not in block
+    assert len(content) == 1
+    assert isinstance(content[0], dict)
+    assert "cache_control" not in content[0]
 
 
 async def test_system_message_cache_control(adapter: Adapter):
     request = await _to_clade_request(
         adapter,
-        {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "be helpful",
-                    "custom_fields": {"cache_breakpoint": {}},
-                },
-                {"role": "user", "content": "hi"},
-            ]
-        },
+        {"messages": [_sys("be helpful", cache_breakpoint={}), _user("hi")]},
     )
     system = request.params["system"]
     assert isinstance(system, list)
@@ -105,15 +101,8 @@ async def test_system_message_cache_control(adapter: Adapter):
     assert system[0].get("cache_control") == _EPHEMERAL
 
 
-def _create_request_with_tools(add_breakpoint: bool) -> dict:
-    tool = {"type": "function", "function": {"name": "get_weather"}}
-    if add_breakpoint:
-        tool["custom_fields"] = {"cache_breakpoint": {}}
-    return {"messages": [{"role": "user", "content": "hi"}], "tools": [tool]}
-
-
 async def test_tool_with_cache_control(adapter: Adapter):
-    request = await _to_clade_request(adapter, _create_request_with_tools(True))
+    request = await _to_clade_request(adapter, _create_request_with_tool(True))
     tools = request.params["tools"]
 
     assert isinstance(tools, list)
@@ -121,9 +110,7 @@ async def test_tool_with_cache_control(adapter: Adapter):
 
 
 async def test_tool_with_no_cache_control(adapter: Adapter):
-    request = await _to_clade_request(
-        adapter, _create_request_with_tools(False)
-    )
+    request = await _to_clade_request(adapter, _create_request_with_tool(False))
 
     tools = request.params["tools"]
     assert isinstance(tools, list)
