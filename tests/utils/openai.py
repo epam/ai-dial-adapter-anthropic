@@ -1,4 +1,9 @@
-from aidial_sdk.chat_completion import Attachment, CustomContent, Message
+from aidial_sdk.chat_completion import (
+    Attachment,
+    CacheBreakpoint,
+    CustomContent,
+    Message,
+)
 from openai.types.chat import ChatCompletionToolParam
 from openai.types.shared_params.function_definition import FunctionDefinition
 
@@ -9,16 +14,29 @@ from aidial_adapter_anthropic.dial._message import (
 )
 
 
-def sys(content: str) -> Message:
-    return SystemMessage(content=content).to_message()
+def sys(
+    content: str, *, cache_breakpoint: CacheBreakpoint | None = None
+) -> Message:
+    return SystemMessage(
+        content=content, cache_breakpoint=cache_breakpoint
+    ).to_message()
 
 
-def ai(content: str) -> Message:
-    return AIRegularMessage(content=content).to_message()
+def ai(
+    content: str, *, cache_breakpoint: CacheBreakpoint | None = None
+) -> Message:
+    return AIRegularMessage(
+        content=content, cache_breakpoint=cache_breakpoint
+    ).to_message()
 
 
-def user(content: str) -> Message:
-    return HumanRegularMessage(content=content).to_message()
+def user(
+    content: str, *, cache_breakpoint: CacheBreakpoint | None = None
+) -> Message:
+    return HumanRegularMessage(
+        content=content,
+        cache_breakpoint=cache_breakpoint,
+    ).to_message()
 
 
 def user_with_image(content: str, image_base64: str) -> Message:
