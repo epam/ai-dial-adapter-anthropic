@@ -42,6 +42,9 @@ from anthropic.types.beta import (
     BetaBashCodeExecutionToolResultBlock as BashCodeExecutionToolResultBlock,
 )
 from anthropic.types.beta import (
+    BetaCacheControlEphemeralParam as CacheControlEphemeralParam,
+)
+from anthropic.types.beta import (
     BetaCodeExecutionToolResultBlock as CodeExecutionToolResultBlock,
 )
 from anthropic.types.beta import BetaCompactionBlock as CompactionBlock
@@ -104,6 +107,7 @@ from aidial_adapter_anthropic.adapter._claude.config import (
     ClaudeConfigurationWithThinking,
 )
 from aidial_adapter_anthropic.adapter._claude.converters import (
+    to_claude_cache_control,
     to_claude_messages,
     to_claude_output_config,
     to_claude_tool_config,
@@ -286,6 +290,10 @@ class Adapter(ChatCompletionAdapter):
         max_tokens = params.max_tokens or self.default_max_tokens
         output_config = to_claude_output_config(params.response_format)
 
+        cache_control: CacheControlEphemeralParam | Omit = omit
+        if params.cache_breakpoint:
+            cache_control = to_claude_cache_control(params.cache_breakpoint)
+
         claude_params = ClaudeParameters(
             max_tokens=max_tokens,
             stop_sequences=params.stop,
@@ -297,6 +305,7 @@ class Adapter(ChatCompletionAdapter):
             thinking=thinking,
             betas=configuration.betas or omit,
             output_config=output_config or omit,
+            cache_control=cache_control or omit,
         )
 
         return ClaudeRequest(params=claude_params, messages=claude_messages)
