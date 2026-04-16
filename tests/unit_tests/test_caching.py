@@ -7,7 +7,10 @@ from anthropic.types.beta import (
     BetaCacheControlEphemeralParam as CacheControlEphemeralParam,
 )
 
-from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
+from aidial_adapter_anthropic.adapter._claude.adapter import (
+    Adapter,
+    ClaudeRequest,
+)
 from aidial_adapter_anthropic.adapter._claude.converters import (
     to_claude_cache_control,
 )
@@ -25,6 +28,12 @@ def test_to_claude_cache_control_returns_ephemeral():
 def test_to_claude_cache_control_ignores_expire_at():
     result = to_claude_cache_control(CacheBreakpoint(expire_at="2099-01-01"))
     assert result == _EPHEMERAL
+
+
+async def _to_clade_request(adapter: Adapter, request: dict) -> ClaudeRequest:
+    req = ChatCompletionRequest.model_validate(request)
+    params = ModelParameters.create(req)
+    return await adapter._prepare_claude_request(params, req.messages)
 
 
 async def test_top_level_cache_breakpoint(adapter: Adapter):
@@ -72,28 +81,26 @@ async def test_system_message_cache_control(adapter: Adapter):
     assert system[0].get("cache_control") == _EPHEMERAL
 
 
-def _create_request_with_tools(add_breakpoint: bool) -> ChatCompletionRequest:
+def _create_request_with_tools(add_breakpoint: bool) -> dict:
     tool = {"type": "function", "function": {"name": "get_weather"}}
     if add_breakpoint:
         tool["custom_fields"] = {"cache_breakpoint": {}}
-    return ChatCompletionRequest.model_validate(
-        {"messages": [{"role": "user", "content": "hi"}], "tools": [tool]}
-    )
+    return {"messages": [{"role": "user", "content": "hi"}], "tools": [tool]}
 
 
 async def test_tool_with_cache_control(adapter: Adapter):
-    req = _create_request_with_tools(True)
-    params = ModelParameters.create(req)
-    request = await adapter._prepare_claude_request(params, req.messages)
+    request = await _to_clade_request(adapter, _create_request_with_tools(True))
     tools = request.params["tools"]
+
     assert isinstance(tools, list)
     assert tools[0].get("cache_control") == _EPHEMERAL
 
 
 async def test_tool_with_no_cache_control(adapter: Adapter):
-    req = _create_request_with_tools(False)
-    params = ModelParameters.create(req)
-    request = await adapter._prepare_claude_request(params, req.messages)
+    request = await _to_clade_request(
+        adapter, _create_request_with_tools(False)
+    )
+
     tools = request.params["tools"]
     assert isinstance(tools, list)
     assert "cache_control" not in tools[0]
