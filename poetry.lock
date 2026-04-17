@@ -23,8 +23,8 @@ telemetry = ["opentelemetry-api (>=1.22.0,<2.0)", "opentelemetry-exporter-otlp-p
 [package.source]
 type = "git"
 url = "https://github.com/epam/ai-dial-sdk.git"
-reference = "feat/enable-top-level-cache-breakpoint"
-resolved_reference = "eabbc47c11e3b1610631d8d707f9841623507665"
+reference = "development"
+resolved_reference = "2a90b8d65da05d6cfdc6da566b89e15ff0a15a18"
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -2109,4 +2109,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "1bff3c00ad1039065c1056de3940386cc96beca758fd3b0c45cc697ce23715bb"
+content-hash = "56b50487b904dccc2524056eac5ae2001f6bbe26f0bf8553b719b1733ff10ddc"
