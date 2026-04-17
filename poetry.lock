@@ -2,13 +2,15 @@
 
 [[package]]
 name = "aidial-sdk"
-version = "0.35.0rc0"
+version = "0.35.0"
 description = "Framework to create applications and model adapters for AI DIAL"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
-files = []
-develop = false
+files = [
+    {file = "aidial_sdk-0.35.0-py3-none-any.whl", hash = "sha256:94f9e57284c74231a9a1e6efac22142247059a09892c4166fa05877dfc4263ab"},
+    {file = "aidial_sdk-0.35.0.tar.gz", hash = "sha256:85e2ffdbdf03440970b1550b5181df1ac55179dbfb6b8e68b6a8dbd40fb01727"},
+]
 
 [package.dependencies]
 fastapi = ">=0.51,<1.0"
@@ -19,12 +21,6 @@ wrapt = ">=1.10,<2"
 [package.extras]
 httpx = ["httpx (>=0.25.0,<1.0)"]
 telemetry = ["opentelemetry-api (>=1.22.0,<2.0)", "opentelemetry-exporter-otlp-proto-grpc (>=1.22.0,<2.0)", "opentelemetry-exporter-prometheus (>=0.43b0)", "opentelemetry-instrumentation-aiohttp-client (>=0.43b0)", "opentelemetry-instrumentation-fastapi (>=0.43b0)", "opentelemetry-instrumentation-httpx (>=0.43b0)", "opentelemetry-instrumentation-logging (>=0.43b0)", "opentelemetry-instrumentation-requests (>=0.43b0)", "opentelemetry-instrumentation-system-metrics (>=0.43b0)", "opentelemetry-instrumentation-urllib (>=0.43b0)", "opentelemetry-sdk (>=1.22.0,<2.0)", "prometheus-client (>=0.17.1,<1.0)"]
-
-[package.source]
-type = "git"
-url = "https://github.com/epam/ai-dial-sdk.git"
-reference = "development"
-resolved_reference = "2a90b8d65da05d6cfdc6da566b89e15ff0a15a18"
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -2109,4 +2105,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "56b50487b904dccc2524056eac5ae2001f6bbe26f0bf8553b719b1733ff10ddc"
+content-hash = "3d5233f787775aa4e4dc2af01ab055f9ba9109592d06ec4e310a16b6dc0833eb"
