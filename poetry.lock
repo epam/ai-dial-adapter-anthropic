@@ -2,14 +2,14 @@
 
 [[package]]
 name = "aidial-sdk"
-version = "0.28.0"
+version = "0.35.0"
 description = "Framework to create applications and model adapters for AI DIAL"
 optional = false
-python-versions = "<4.0,>=3.9"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "aidial_sdk-0.28.0-py3-none-any.whl", hash = "sha256:b579e683f66c30b0d6d76dde3cb039edc49abf56f92a7a503439b1542e15cf3d"},
-    {file = "aidial_sdk-0.28.0.tar.gz", hash = "sha256:2c6764ffa29d45b3779c46a60e555eaf4f75b7e38c27cb87f3820d0ee0830766"},
+    {file = "aidial_sdk-0.35.0-py3-none-any.whl", hash = "sha256:94f9e57284c74231a9a1e6efac22142247059a09892c4166fa05877dfc4263ab"},
+    {file = "aidial_sdk-0.35.0.tar.gz", hash = "sha256:85e2ffdbdf03440970b1550b5181df1ac55179dbfb6b8e68b6a8dbd40fb01727"},
 ]
 
 [package.dependencies]
@@ -19,8 +19,8 @@ uvicorn = ">=0.19,<1.0"
 wrapt = ">=1.10,<2"
 
 [package.extras]
-httpx = ["httpx (>=0.25.0,<1)"]
-telemetry = ["opentelemetry-api (>=1.22.0,<2.0)", "opentelemetry-exporter-otlp-proto-grpc (>=1.22.0,<2.0)", "opentelemetry-exporter-prometheus (>=0.43b0)", "opentelemetry-instrumentation-aiohttp-client (>=0.43b0)", "opentelemetry-instrumentation-fastapi (>=0.43b0)", "opentelemetry-instrumentation-httpx (>=0.43b0)", "opentelemetry-instrumentation-logging (>=0.43b0)", "opentelemetry-instrumentation-requests (>=0.43b0)", "opentelemetry-instrumentation-system-metrics (>=0.43b0)", "opentelemetry-instrumentation-urllib (>=0.43b0)", "opentelemetry-sdk (>=1.22.0,<2.0)", "prometheus-client (>=0.17.1,<=0.21)"]
+httpx = ["httpx (>=0.25.0,<1.0)"]
+telemetry = ["opentelemetry-api (>=1.22.0,<2.0)", "opentelemetry-exporter-otlp-proto-grpc (>=1.22.0,<2.0)", "opentelemetry-exporter-prometheus (>=0.43b0)", "opentelemetry-instrumentation-aiohttp-client (>=0.43b0)", "opentelemetry-instrumentation-fastapi (>=0.43b0)", "opentelemetry-instrumentation-httpx (>=0.43b0)", "opentelemetry-instrumentation-logging (>=0.43b0)", "opentelemetry-instrumentation-requests (>=0.43b0)", "opentelemetry-instrumentation-system-metrics (>=0.43b0)", "opentelemetry-instrumentation-urllib (>=0.43b0)", "opentelemetry-sdk (>=1.22.0,<2.0)", "prometheus-client (>=0.17.1,<1.0)"]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -218,14 +218,14 @@ files = [
 
 [[package]]
 name = "anthropic"
-version = "0.79.0"
+version = "0.95.0"
 description = "The official Python library for the anthropic API"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "anthropic-0.79.0-py3-none-any.whl", hash = "sha256:04cbd473b6bbda4ca2e41dd670fe2f829a911530f01697d0a1e37321eb75f3cf"},
-    {file = "anthropic-0.79.0.tar.gz", hash = "sha256:8707aafb3b1176ed6c13e2b1c9fb3efddce90d17aee5d8b83a86c70dcdcca871"},
+    {file = "anthropic-0.95.0-py3-none-any.whl", hash = "sha256:9fd3503cb666446e28ab5a5d0ec7feda39968399e494bd2cca2f0b927f8aa7a6"},
+    {file = "anthropic-0.95.0.tar.gz", hash = "sha256:e4d815351489e5627f39806f12561c52b574e69be10d12fcab723264f955c11d"},
 ]
 
 [package.dependencies]
@@ -236,11 +236,13 @@ httpx = ">=0.25.0,<1"
 jiter = ">=0.4.0,<1"
 pydantic = ">=1.9.0,<3"
 sniffio = "*"
-typing-extensions = ">=4.10,<5"
+typing-extensions = ">=4.14,<5"
 
 [package.extras]
 aiohttp = ["aiohttp", "httpx-aiohttp (>=0.1.9)"]
+aws = ["boto3 (>=1.28.57)", "botocore (>=1.31.57)"]
 bedrock = ["boto3 (>=1.28.57)", "botocore (>=1.31.57)"]
+mcp = ["mcp (>=1.0) ; python_version >= \"3.10\""]
 vertex = ["google-auth[requests] (>=2,<3)"]
 
 [[package]]
@@ -2103,4 +2105,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "b5f0c0b61b1b03a53ab74c5411c75a5e15ce4a1e86d50a758c5f24bdd2db8d75"
+content-hash = "3d5233f787775aa4e4dc2af01ab055f9ba9109592d06ec4e310a16b6dc0833eb"

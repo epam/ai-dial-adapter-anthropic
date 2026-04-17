@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, assert_never
 
-from aidial_sdk.chat_completion import FinishReason, Tool
+from aidial_sdk.chat_completion import CacheBreakpoint, FinishReason, Tool
 from aidial_sdk.chat_completion import ToolChoice as DialToolChoice
 from aidial_sdk.chat_completion.request import (
     ResponseFormat,
@@ -63,21 +63,28 @@ DialMessage = BaseMessage | HumanToolResultMessage | AIToolCallMessage
 
 ClaudeMessage = WithResources[ContentBlockParam]
 
-_claude_cache_breakpoint = CacheControlEphemeralParam(type="ephemeral")
+
+def to_claude_cache_control(
+    cache_breakpoint: CacheBreakpoint,
+) -> CacheControlEphemeralParam:
+    extra = cache_breakpoint.model_extra or {}
+    return CacheControlEphemeralParam(type="ephemeral", **extra)
 
 
 def _add_cache_control(
     message: DialMessage, claude_messages: Sequence[ContentBlockParam]
 ) -> None:
-    if message.cache_breakpoint is not None:
-        for block in reversed(claude_messages):
-            if (
-                isinstance(block, dict)
-                and block["type"] != "thinking"
-                and block["type"] != "redacted_thinking"
-            ):
-                block["cache_control"] = _claude_cache_breakpoint
-                break
+    if (breakpoint := message.cache_breakpoint) is None:
+        return
+
+    for block in reversed(claude_messages):
+        if (
+            isinstance(block, dict)
+            and block["type"] != "thinking"
+            and block["type"] != "redacted_thinking"
+        ):
+            block["cache_control"] = to_claude_cache_control(breakpoint)
+            return
 
 
 def _get_claude_message_role(
@@ -273,8 +280,10 @@ def _to_claude_tool(tool: Tool) -> ToolParam:
         description=function.description or "",
     )
 
-    if tool.custom_fields and tool.custom_fields.cache_breakpoint:
-        tool_param["cache_control"] = _claude_cache_breakpoint
+    if tool.custom_fields and (
+        breakpoint := tool.custom_fields.cache_breakpoint
+    ):
+        tool_param["cache_control"] = to_claude_cache_control(breakpoint)
 
     return tool_param
 

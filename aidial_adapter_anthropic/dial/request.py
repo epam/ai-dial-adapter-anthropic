@@ -6,6 +6,7 @@ from typing import (
 )
 
 from aidial_sdk.chat_completion import (
+    CacheBreakpoint,
     MessageContentImagePart,
     MessageContentPart,
     MessageContentTextPart,
@@ -49,6 +50,7 @@ class ModelParameters(BaseModel):
     tool_config: ToolsConfig | None = None
     configuration: dict | None = None
     response_format: ResponseFormat | None = None
+    cache_breakpoint: CacheBreakpoint | None = None
 
     @classmethod
     def create(cls, request: ChatCompletionRequest) -> "ModelParameters":
@@ -68,6 +70,12 @@ class ModelParameters(BaseModel):
             else None
         )
 
+        cache_breakpoint = (
+            cf.cache_breakpoint
+            if (cf := request.custom_fields) is not None
+            else None
+        )
+
         return cls(
             temperature=request.temperature,
             top_p=request.top_p,
@@ -80,6 +88,7 @@ class ModelParameters(BaseModel):
             tool_config=ToolsConfig.from_request(request),
             configuration=configuration,
             response_format=request.response_format,
+            cache_breakpoint=cache_breakpoint,
         )
 
     @property

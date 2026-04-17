@@ -17,6 +17,10 @@
 </h4>
 
 - [Overview](#overview)
+- [Prompt caching](#prompt-caching)
+  - [Automatic caching](#automatic-caching)
+  - [Explicit cache breakpoints](#explicit-cache-breakpoints)
+  - [TTL support](#ttl-support)
 - [Development Environment](#development-environment)
   - [Setup](#setup)
   - [Lint](#lint)
@@ -31,6 +35,133 @@
 ## Overview
 
 The framework provides adapter from [AI DIAL Chat Completion API](https://dialx.ai/dial_api#operation/sendChatCompletionRequest) to [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages).
+
+---
+
+## Prompt caching
+
+### Automatic caching
+
+Automatic caching is the simplest way to use prompt caching. A single top-level cache breakpoint instructs Anthropic to automatically apply a cache point to the last cacheable block of the request. This is ideal for multi-turn conversations where the growing message history should be cached automatically. See [Automatic caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#automatic-caching) in the Anthropic docs.
+
+To enable automatic caching, set `custom_fields.cache_breakpoint` at the top level of the Chat Completion request:
+
+<details><summary>Top-level cache breakpoint</summary>
+
+```json
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "messages": [
+    {"role": "user", "content": "Hello!"}
+  ],
+  "custom_fields": {
+    "cache_breakpoint": {}
+  }
+}
+```
+
+</details>
+
+### Explicit cache breakpoints
+
+Explicit cache breakpoints give fine-grained control over which parts of the prompt get cached. You can place a cache breakpoint on individual system messages, user/assistant messages, or tool definitions. See [Explicit cache breakpoints](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#explicit-cache-breakpoints) in the Anthropic docs.
+
+To add a breakpoint, set `custom_fields.cache_breakpoint` on a message or tool object:
+
+<details><summary>System cache breakpoint</summary>
+
+```json
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant with extensive knowledge.",
+      "custom_fields": {
+        "cache_breakpoint": {}
+      }
+    },
+    {"role": "user", "content": "Hello!"}
+  ]
+}
+```
+
+</details>
+
+<details><summary>Message cache breakpoint</summary>
+
+```json
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {
+      "role": "user",
+      "content": "Here is a long document: ...",
+      "custom_fields": {
+        "cache_breakpoint": {}
+      }
+    },
+    {"role": "user", "content": "Summarize it."}
+  ]
+}
+```
+
+</details>
+
+<details><summary>Tools cache breakpoint</summary>
+
+```json
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "messages": [
+    {"role": "user", "content": "What's the weather?"}
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get the current weather",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {"type": "string"}
+          },
+          "required": ["location"]
+        }
+      },
+      "custom_fields": {
+        "cache_breakpoint": {}
+      }
+    }
+  ]
+}
+```
+
+</details>
+
+### TTL support
+
+A cache breakpoint may include an optional `ttl` field. Supported values are `5m` (5 minutes, default) and `1h` (one hour). The `ttl` field is supported on both top-level and explicit breakpoints. See [TTL support](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#ttl-support) in the Anthropic docs.
+
+<details><summary>Top-level cache breakpoint with TTL</summary>
+
+```json
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "messages": [
+    {"role": "user", "content": "Hello!"}
+  ],
+  "custom_fields": {
+    "cache_breakpoint": {
+      "ttl": "1h"
+    }
+  }
+}
+```
+
+</details>
 
 ---
 

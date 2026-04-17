@@ -39,6 +39,9 @@ from typing import Literal, assert_never
 
 from anthropic._types import Base64FileInput
 from anthropic.types.beta import (
+    BetaAdvisorToolResultBlock as AdvisorToolResultBlock,
+)
+from anthropic.types.beta import (
     BetaBashCodeExecutionToolResultBlock as BashCodeExecutionToolResultBlock,
 )
 from anthropic.types.beta import (
@@ -166,6 +169,7 @@ class ApproximateTokenizer:
                     | "tool_search_tool_result"
                     | "tool_reference"
                     | "compaction"
+                    | "advisor_tool_result"
                 ):
                     return 0
                 case _:
@@ -196,6 +200,7 @@ class ApproximateTokenizer:
                     | WebFetchToolResultBlock()
                     | ToolSearchToolResultBlock()
                     | CompactionBlock()
+                    | AdvisorToolResultBlock()
                 ):
                     return 0
                 case _:

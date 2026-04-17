@@ -2,6 +2,9 @@ from typing import TypedDict
 
 from anthropic import Omit
 from anthropic.types.anthropic_beta_param import AnthropicBetaParam
+from anthropic.types.beta import (
+    BetaCacheControlEphemeralParam as CacheControlEphemeralParam,
+)
 from anthropic.types.beta import BetaOutputConfigParam as OutputConfigParam
 from anthropic.types.beta import BetaTextBlockParam as TextBlockParam
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
@@ -12,7 +15,7 @@ from anthropic.types.beta import BetaToolParam as ToolParam
 class ClaudeParameters(TypedDict):
     """
     Subset of parameters to Anthropic Messages API request:
-    https://github.com/anthropics/anthropic-sdk-python/blob/ff83982c44db0920f435916aadb37c3523083079/src/anthropic/resources/messages.py#L1827-L1847
+    https://github.com/anthropics/anthropic-sdk-python/blob/v0.95.0/src/anthropic/resources/beta/messages/messages.py#L1505-L1536
     """
 
     max_tokens: int
@@ -25,3 +28,4 @@ class ClaudeParameters(TypedDict):
     thinking: ThinkingConfigParam | Omit
     betas: list[AnthropicBetaParam] | Omit
     output_config: OutputConfigParam | Omit
+    cache_control: CacheControlEphemeralParam | Omit
