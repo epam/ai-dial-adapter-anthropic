@@ -160,12 +160,10 @@ async def _get_claude_blocks(
             custom_blocks = await handlers.process_attachments(message)
             # Create tool result block with custom content blocks
             tool_result_block = create_tool_result_block(
-                message,
-                custom_blocks=custom_blocks.payload
+                message, custom_blocks=custom_blocks.payload
             )
             return WithResources(
-                payload=[tool_result_block],
-                resources=custom_blocks.resources
+                payload=[tool_result_block], resources=custom_blocks.resources
             )
 
         case AIRegularMessage():

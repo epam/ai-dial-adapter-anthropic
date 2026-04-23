@@ -3,13 +3,12 @@
 import base64
 
 from aidial_sdk.chat_completion import Attachment, CustomContent
+
 from aidial_adapter_anthropic.dial._message import HumanToolResultMessage
 
 
 async def test_tool_result_message_with_custom_content(adapter):
     """Test that tool result messages with custom_content are properly converted."""
-    from aidial_adapter_anthropic.dial.request import ModelParameters
-    from tests.utils.openai import user
 
     # Create a sample image attachment
     image_base64 = base64.b64encode(b"\x89PNG\r\n\x1a\n").decode("utf-8")
@@ -44,7 +43,6 @@ async def test_tool_result_message_with_custom_content(adapter):
 
 async def test_tool_result_message_without_custom_content(adapter):
     """Test that tool result messages without custom_content still work."""
-    from tests.utils.openai import user
 
     # Create a tool result message without custom_content
     tool_result_message = HumanToolResultMessage(
@@ -96,4 +94,3 @@ async def test_tool_result_message_attachments_property(adapter):
     )
 
     assert len(tool_result_no_content.attachments) == 0
-
