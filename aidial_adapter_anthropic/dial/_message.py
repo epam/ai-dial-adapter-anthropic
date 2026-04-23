@@ -131,12 +131,14 @@ class HumanRegularMessage(BaseMessageABC):
 class HumanToolResultMessage(MessageABC):
     id: str
     content: str
+    custom_content: CustomContent | None = None
 
     def to_message(self) -> DialMessage:
         return DialMessage(
             role=Role.TOOL,
             tool_call_id=self.id,
             content=self.content,
+            custom_content=self.custom_content,
             custom_fields=self.custom_fields,
         )
 
@@ -158,7 +160,14 @@ class HumanToolResultMessage(MessageABC):
         return cls(
             id=message.tool_call_id,
             content=message.content,
+            custom_content=message.custom_content,
             cache_breakpoint=_get_cache_breakpoint(message),
+        )
+
+    @property
+    def attachments(self) -> list[Attachment]:
+        return (
+            self.custom_content.attachments or [] if self.custom_content else []
         )
 
 

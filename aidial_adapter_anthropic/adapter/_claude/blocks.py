@@ -27,6 +27,7 @@ from anthropic.types.beta.beta_base64_image_source_param import (
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic.dial._attachments import AttachmentProcessor
 from aidial_adapter_anthropic.dial._message import HumanToolResultMessage
+from typing import Sequence
 
 
 def create_text_block(text: str) -> TextBlockParam:
@@ -83,11 +84,31 @@ def create_tool_use_block(call: ToolCall) -> ContentBlockParam:
 
 def create_tool_result_block(
     message: HumanToolResultMessage,
+    custom_blocks: Sequence[ContentBlockParam] | None = None,
 ) -> ToolResultBlockParam:
+    """Create a tool result block with text content and optional custom blocks.
+
+    Args:
+        message: The tool result message containing the tool_use_id and text content.
+        custom_blocks: Optional sequence of custom content blocks (images, documents, etc.)
+                      to include in the tool result.
+
+    Returns:
+        A ToolResultBlockParam with the tool result and all content blocks.
+    """
+    content_blocks: list[ContentBlockParam] = []
+
+    # Add custom blocks first (if provided)
+    if custom_blocks:
+        content_blocks.extend(custom_blocks)
+
+    # Add text content block
+    content_blocks.append(create_text_block(message.content))
+
     return ToolResultBlockParam(
         tool_use_id=message.id,
         type="tool_result",
-        content=[create_text_block(message.content)],
+        content=content_blocks,
     )
 
 
