@@ -1,5 +1,5 @@
 import json
-from collections.abc import Sequence
+from collections.abc import Iterable
 
 from aidial_sdk.chat_completion import ToolCall
 from anthropic.types.beta import (
@@ -23,6 +23,9 @@ from anthropic.types.beta import (
 from anthropic.types.beta import BetaToolUseBlockParam as ToolUseBlockParam
 from anthropic.types.beta.beta_base64_image_source_param import (
     BetaBase64ImageSourceParam as Base64ImageSourceParam,
+)
+from anthropic.types.beta.beta_tool_result_block_param import (
+    Content as ToolResultContent,
 )
 
 from aidial_adapter_anthropic._utils.resource import Resource
@@ -84,19 +87,18 @@ def create_tool_use_block(call: ToolCall) -> ContentBlockParam:
 
 def create_tool_result_block(
     message: HumanToolResultMessage,
-    custom_blocks: Sequence[ContentBlockParam] | None = None,
+    custom_blocks: Iterable[ToolResultContent] | None = None,
 ) -> ToolResultBlockParam:
     """Create a tool result block with text content and optional custom blocks.
-
     Args:
         message: The tool result message containing the tool_use_id and text content.
-        custom_blocks: Optional sequence of custom content blocks (images, documents, etc.)
-                      to include in the tool result.
-
+        custom_blocks: Optional iterable of custom content blocks (images, documents, etc.)
+                      to include in the tool result. Only blocks valid for tool results
+                      (TextBlock, ImageBlock, DocumentBlock, etc.) are accepted.
     Returns:
         A ToolResultBlockParam with the tool result and all content blocks.
     """
-    content_blocks: list[ContentBlockParam] = []
+    content_blocks: list[ToolResultContent] = []
 
     # Add custom blocks first (if provided)
     if custom_blocks:

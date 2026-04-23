@@ -156,14 +156,32 @@ async def _get_claude_blocks(
             return await handlers.process_attachments(message)
 
         case HumanToolResultMessage():
+            # Process custom_content attachments for tool result message
+            custom_blocks: list = []
+            resources: list = []
+
             # Process attachments from custom_content if present
-            custom_blocks = await handlers.process_attachments(message)
+            for attachment in message.attachments:
+                from aidial_adapter_anthropic.dial.resource import (
+                    AttachmentResource,
+                )
+
+                dial_resource = AttachmentResource(
+                    attachment=attachment,
+                    entity_name="attachment",
+                    supported_types=handlers.supported_mime_types,
+                )
+                attached = await handlers._handle_dial_resource(dial_resource)
+                # Block types from attachment processors are valid for tool results
+                custom_blocks.append(attached.payload)
+                resources.extend(attached.resources)
+
             # Create tool result block with custom content blocks
             tool_result_block = create_tool_result_block(
-                message, custom_blocks=custom_blocks.payload
+                message, custom_blocks=custom_blocks if custom_blocks else None
             )
             return WithResources(
-                payload=[tool_result_block], resources=custom_blocks.resources
+                payload=[tool_result_block], resources=resources
             )
 
         case AIRegularMessage():
