@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 
 from aidial_sdk.chat_completion import ToolCall
 from anthropic.types.beta import (
@@ -27,7 +28,6 @@ from anthropic.types.beta.beta_base64_image_source_param import (
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic.dial._attachments import AttachmentProcessor
 from aidial_adapter_anthropic.dial._message import HumanToolResultMessage
-from typing import Sequence
 
 
 def create_text_block(text: str) -> TextBlockParam:
