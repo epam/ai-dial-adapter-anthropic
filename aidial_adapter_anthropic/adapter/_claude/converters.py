@@ -156,8 +156,11 @@ async def _get_claude_blocks(
             return await handlers.process_attachments(message)
 
         case HumanToolResultMessage():
-            blocks = [create_tool_result_block(message)]
-            return WithResources(payload=blocks)
+            inner = await handlers.process_attachments(message)
+            return WithResources(
+                payload=[create_tool_result_block(message.id, inner.payload)],
+                resources=inner.resources,
+            )
 
         case AIRegularMessage():
             content = await handlers.process_attachments(message)

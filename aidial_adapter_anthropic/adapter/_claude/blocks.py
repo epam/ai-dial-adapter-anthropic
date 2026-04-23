@@ -1,4 +1,5 @@
 import json
+from typing import cast
 
 from aidial_sdk.chat_completion import ToolCall
 from anthropic.types.beta import (
@@ -23,10 +24,12 @@ from anthropic.types.beta import BetaToolUseBlockParam as ToolUseBlockParam
 from anthropic.types.beta.beta_base64_image_source_param import (
     BetaBase64ImageSourceParam as Base64ImageSourceParam,
 )
+from anthropic.types.beta.beta_tool_result_block_param import (
+    Content as ToolResultInnerContent,
+)
 
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic.dial._attachments import AttachmentProcessor
-from aidial_adapter_anthropic.dial._message import HumanToolResultMessage
 
 
 def create_text_block(text: str) -> TextBlockParam:
@@ -82,12 +85,13 @@ def create_tool_use_block(call: ToolCall) -> ContentBlockParam:
 
 
 def create_tool_result_block(
-    message: HumanToolResultMessage,
+    tool_use_id: str,
+    content: list[ContentBlockParam],
 ) -> ToolResultBlockParam:
     return ToolResultBlockParam(
-        tool_use_id=message.id,
+        tool_use_id=tool_use_id,
         type="tool_result",
-        content=[create_text_block(message.content)],
+        content=cast(list[ToolResultInnerContent], content),
     )
 
 

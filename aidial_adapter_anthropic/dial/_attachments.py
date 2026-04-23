@@ -21,7 +21,11 @@ from pydantic import BaseModel
 from aidial_adapter_anthropic._utils.list import aiter_to_list
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic.adapter._errors import UserError, ValidationError
-from aidial_adapter_anthropic.dial._message import BaseMessage, SystemMessage
+from aidial_adapter_anthropic.dial._message import (
+    BaseMessage,
+    HumanToolResultMessage,
+    SystemMessage,
+)
 from aidial_adapter_anthropic.dial.resource import (
     AttachmentResource,
     DialResource,
@@ -33,6 +37,8 @@ from aidial_adapter_anthropic.dial.storage import FileStorage
 _T = TypeVar("_T", covariant=True)
 _Txt = TypeVar("_Txt", covariant=True)
 _Config = TypeVar("_Config", bound=BaseModel, contravariant=True)
+
+AttachmentSourceMessage = BaseMessage | HumanToolResultMessage
 
 
 @runtime_checkable
@@ -130,14 +136,14 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         return list(_gen())
 
     async def process_attachments(
-        self, message: BaseMessage
+        self, message: AttachmentSourceMessage
     ) -> WithResources[list[_T | _Txt]]:
         ret = await aiter_to_list(self._process_attachments_iter(message))
         ret = ret or [self._text_handler(" ")]
         return WithResources.transpose(ret)
 
     async def _process_attachments_iter(
-        self, message: BaseMessage
+        self, message: AttachmentSourceMessage
     ) -> AsyncIterator[WithResources[_T | _Txt]]:
         if not isinstance(message, SystemMessage):
             for attachment in message.attachments:
