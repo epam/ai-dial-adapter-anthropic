@@ -1,5 +1,3 @@
-from typing import Any, cast
-
 import pytest
 from aidial_sdk.chat_completion import Attachment, CustomContent
 
@@ -16,10 +14,7 @@ from aidial_adapter_anthropic.dial._message import (
     parse_dial_message,
 )
 
-_PNG_1X1 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8"
-    "z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-)
+_PNG_ATTACHMENT = Attachment(type="image/png", data="AA==")
 
 
 @pytest.fixture
@@ -35,9 +30,7 @@ async def test_tool_result_round_trip_preserves_custom_content():
     original = HumanToolResultMessage(
         id="toolu_01",
         content="Result text",
-        custom_content=CustomContent(
-            attachments=[Attachment(type="image/png", data=_PNG_1X1)]
-        ),
+        custom_content=CustomContent(attachments=[_PNG_ATTACHMENT]),
     )
     dial = original.to_message()
     restored = parse_dial_message(dial)
@@ -46,47 +39,54 @@ async def test_tool_result_round_trip_preserves_custom_content():
     assert restored.content == original.content
     assert restored.custom_content is not None
     assert restored.custom_content.attachments is not None
-    assert len(restored.custom_content.attachments) == 1
-    att = restored.custom_content.attachments[0]
-    assert att.type == "image/png"
-    assert att.data == _PNG_1X1
+    assert restored.custom_content.attachments == [_PNG_ATTACHMENT]
 
 
-async def test_tool_result_to_claude_includes_image_and_text(
+async def test_tool_result_text_and_image(
     image_handlers: AttachmentProcessors,
 ):
     msg = HumanToolResultMessage(
         id="call_1",
         content="see screenshot",
-        custom_content=CustomContent(
-            attachments=[Attachment(type="image/png", data=_PNG_1X1)]
-        ),
+        custom_content=CustomContent(attachments=[_PNG_ATTACHMENT]),
     )
     _system, claude_msgs = await to_claude_messages(image_handlers, [msg])
-    projected = claude_msgs.raw_list
-    assert len(projected) == 1
-    blocks_raw = projected[0].payload["content"]
-    assert isinstance(blocks_raw, list)
-    assert len(blocks_raw) == 1
-    tool_result = cast(Any, blocks_raw[0])
-    assert tool_result["type"] == "tool_result"
-    assert tool_result["tool_use_id"] == "call_1"
-    inner_raw = tool_result["content"]
-    assert isinstance(inner_raw, list)
-    assert len(inner_raw) == 2
-    assert inner_raw[0]["type"] == "image"
-    assert inner_raw[1]["type"] == "text"
-    assert inner_raw[1]["text"] == "see screenshot"
+    assert claude_msgs.raw_list[0].payload == {
+        "role": "user",
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": "call_1",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "data": _PNG_ATTACHMENT.data,
+                            "media_type": _PNG_ATTACHMENT.type,
+                            "type": "base64",
+                        },
+                    },
+                    {"type": "text", "text": "see screenshot"},
+                ],
+            },
+        ],
+    }
 
 
-async def test_tool_result_text_only_backward_compatible(
+async def test_tool_result_text_only(
     image_handlers: AttachmentProcessors,
 ):
     msg = HumanToolResultMessage(id="call_2", content="plain")
     _system, claude_msgs = await to_claude_messages(image_handlers, [msg])
-    blocks_raw = claude_msgs.raw_list[0].payload["content"]
-    assert isinstance(blocks_raw, list)
-    tool_result = cast(Any, blocks_raw[0])
-    tr_content = tool_result["content"]
-    assert isinstance(tr_content, list)
-    assert tr_content == [create_text_block("plain")]
+    assert claude_msgs.raw_list[0].payload == {
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": "call_2",
+                "content": [
+                    {"type": "text", "text": "plain"},
+                ],
+            },
+        ],
+        "role": "user",
+    }

@@ -85,8 +85,7 @@ def create_tool_use_block(call: ToolCall) -> ContentBlockParam:
 
 
 def create_tool_result_block(
-    tool_use_id: str,
-    content: list[ContentBlockParam],
+    tool_use_id: str, content: list[ContentBlockParam]
 ) -> ToolResultBlockParam:
     return ToolResultBlockParam(
         tool_use_id=tool_use_id,
