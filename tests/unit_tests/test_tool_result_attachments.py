@@ -29,7 +29,7 @@ def image_handlers() -> AttachmentProcessors:
 async def test_tool_result_round_trip_preserves_custom_content():
     original = HumanToolResultMessage(
         id="tool-call-id1",
-        content="tool call text result",
+        content="tool result",
         custom_content=CustomContent(attachments=[_PNG_ATTACHMENT]),
     )
     dial = original.to_message()
@@ -44,7 +44,7 @@ async def test_tool_result_round_trip_preserves_custom_content():
 async def test_tool_result_text_and_image(image_handlers: AttachmentProcessors):
     msg = HumanToolResultMessage(
         id="tool-call-id1",
-        content="text content",
+        content="tool result",
         custom_content=CustomContent(attachments=[_PNG_ATTACHMENT]),
     )
     system, claude_msgs = await to_claude_messages(image_handlers, [msg])
@@ -64,7 +64,7 @@ async def test_tool_result_text_and_image(image_handlers: AttachmentProcessors):
                             "type": "base64",
                         },
                     },
-                    {"type": "text", "text": "text content"},
+                    {"type": "text", "text": "tool result"},
                 ],
             },
         ],
@@ -72,7 +72,7 @@ async def test_tool_result_text_and_image(image_handlers: AttachmentProcessors):
 
 
 async def test_tool_result_text_only(image_handlers: AttachmentProcessors):
-    msg = HumanToolResultMessage(id="tool-call-id1", content="text content")
+    msg = HumanToolResultMessage(id="tool-call-id1", content="tool result")
     system, claude_msgs = await to_claude_messages(image_handlers, [msg])
     assert system == []
     assert claude_msgs.raw_list[0].payload == {
@@ -81,7 +81,7 @@ async def test_tool_result_text_only(image_handlers: AttachmentProcessors):
                 "type": "tool_result",
                 "tool_use_id": "tool-call-id1",
                 "content": [
-                    {"type": "text", "text": "text content"},
+                    {"type": "text", "text": "tool result"},
                 ],
             },
         ],
