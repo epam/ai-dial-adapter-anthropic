@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import AsyncIterator, Callable, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import (
     Generic,
@@ -12,6 +13,11 @@ from typing import (
 )
 
 from aidial_sdk.chat_completion import (
+    Attachment,
+    InputAudio,
+    InputFile,
+    MessageContentAudioPart,
+    MessageContentFilePart,
     MessageContentImagePart,
     MessageContentRefusalPart,
     MessageContentTextPart,
@@ -171,8 +177,30 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
                             yield await self._handle_dial_resource(
                                 URLResource(
                                     url=image_url.url,
-                                    entity_name="image url",
+                                    entity_name="image content part",
                                     supported_types=self.supported_image_types,
+                                ),
+                            )
+                        case MessageContentFilePart(file=file):
+                            attachment = _file_content_part_to_attachment(file)
+                            yield await self._handle_dial_resource(
+                                AttachmentResource(
+                                    attachment=attachment,
+                                    entity_name="file content part",
+                                    supported_types=self.supported_mime_types,
+                                ),
+                            )
+                        case MessageContentAudioPart(
+                            input_audio=InputAudio(data=data, format=format)
+                        ):
+                            attachment = Attachment(
+                                data=data, type=f"audio/{format}"
+                            )
+                            yield await self._handle_dial_resource(
+                                AttachmentResource(
+                                    attachment=attachment,
+                                    entity_name="audio content part",
+                                    supported_types=self.supported_mime_types,
                                 ),
                             )
                         case MessageContentRefusalPart():
@@ -217,6 +245,24 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
             if mime_type in mime_types
             for file_ext in file_exts
         ]
+
+
+def _file_content_part_to_attachment(file: InputFile) -> Attachment:
+    if (file_data := file.file_data) is None:
+        raise ValidationError("File content part must have file_data field")
+
+    resource = None
+    with suppress(Exception):
+        resource = Resource.from_data_url(file_data) or Resource.from_base64(
+            "application/pdf", file_data
+        )
+
+    if resource is None:
+        raise ValidationError(
+            f"Invalid file content part: file_data must be a valid data URL or base64 string: {file_data[:30]}..."
+        ) from None
+
+    return Attachment(data=resource.data_base64, type=resource.type)
 
 
 def _get_usage_message(supported_exts: list[str]) -> str:

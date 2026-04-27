@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import base64
 import re
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -10,7 +11,7 @@ class Resource(BaseModel):
     data: bytes
 
     @classmethod
-    def from_base64(cls, type: str, data_base64: str) -> "Resource":
+    def from_base64(cls, type: str, data_base64: str) -> Resource:
         try:
             data = base64.b64decode(data_base64, validate=True)
         except Exception:
@@ -19,7 +20,7 @@ class Resource(BaseModel):
         return cls(type=type, data=data)
 
     @classmethod
-    def from_data_url(cls, data_url: str) -> Optional["Resource"]:
+    def from_data_url(cls, data_url: str) -> Resource | None:
         """
         Parsing a resource encoded as a data URL.
         See https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/Data_URLs for reference.

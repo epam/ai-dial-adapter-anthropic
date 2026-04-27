@@ -7,6 +7,8 @@ from typing import (
 
 from aidial_sdk.chat_completion import (
     CacheBreakpoint,
+    MessageContentAudioPart,
+    MessageContentFilePart,
     MessageContentImagePart,
     MessageContentPart,
     MessageContentTextPart,
@@ -128,6 +130,14 @@ def collect_text_content(
                     case MessageContentImagePart():
                         raise ValidationError(
                             "Can't extract text from an image content part"
+                        )
+                    case MessageContentAudioPart():
+                        raise ValidationError(
+                            "Can't extract text from an audio content part"
+                        )
+                    case MessageContentFilePart():
+                        raise ValidationError(
+                            "Can't extract text from a file content part"
                         )
                     case MessageContentRefusalPart():
                         raise ValidationError(
