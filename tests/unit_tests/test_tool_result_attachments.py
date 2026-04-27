@@ -28,8 +28,8 @@ def image_handlers() -> AttachmentProcessors:
 
 async def test_tool_result_round_trip_preserves_custom_content():
     original = HumanToolResultMessage(
-        id="toolu_01",
-        content="Result text",
+        id="tool-call-id1",
+        content="tool result",
         custom_content=CustomContent(attachments=[_PNG_ATTACHMENT]),
     )
     dial = original.to_message()
@@ -38,25 +38,23 @@ async def test_tool_result_round_trip_preserves_custom_content():
     assert restored.id == original.id
     assert restored.content == original.content
     assert restored.custom_content is not None
-    assert restored.custom_content.attachments is not None
     assert restored.custom_content.attachments == [_PNG_ATTACHMENT]
 
 
-async def test_tool_result_text_and_image(
-    image_handlers: AttachmentProcessors,
-):
+async def test_tool_result_text_and_image(image_handlers: AttachmentProcessors):
     msg = HumanToolResultMessage(
-        id="call_1",
-        content="see screenshot",
+        id="tool-call-id1",
+        content="tool result",
         custom_content=CustomContent(attachments=[_PNG_ATTACHMENT]),
     )
-    _system, claude_msgs = await to_claude_messages(image_handlers, [msg])
+    system, claude_msgs = await to_claude_messages(image_handlers, [msg])
+    assert system == []
     assert claude_msgs.raw_list[0].payload == {
         "role": "user",
         "content": [
             {
                 "type": "tool_result",
-                "tool_use_id": "call_1",
+                "tool_use_id": "tool-call-id1",
                 "content": [
                     {
                         "type": "image",
@@ -66,25 +64,24 @@ async def test_tool_result_text_and_image(
                             "type": "base64",
                         },
                     },
-                    {"type": "text", "text": "see screenshot"},
+                    {"type": "text", "text": "tool result"},
                 ],
             },
         ],
     }
 
 
-async def test_tool_result_text_only(
-    image_handlers: AttachmentProcessors,
-):
-    msg = HumanToolResultMessage(id="call_2", content="plain")
-    _system, claude_msgs = await to_claude_messages(image_handlers, [msg])
+async def test_tool_result_text_only(image_handlers: AttachmentProcessors):
+    msg = HumanToolResultMessage(id="tool-call-id1", content="tool result")
+    system, claude_msgs = await to_claude_messages(image_handlers, [msg])
+    assert system == []
     assert claude_msgs.raw_list[0].payload == {
         "content": [
             {
                 "type": "tool_result",
-                "tool_use_id": "call_2",
+                "tool_use_id": "tool-call-id1",
                 "content": [
-                    {"type": "text", "text": "plain"},
+                    {"type": "text", "text": "tool result"},
                 ],
             },
         ],
