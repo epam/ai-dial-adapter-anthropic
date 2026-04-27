@@ -10,7 +10,7 @@ from aidial_sdk.chat_completion import (
 )
 
 from aidial_adapter_anthropic._utils.resource import Resource
-from aidial_adapter_anthropic.adapter._errors import ValidationError
+from aidial_adapter_anthropic.adapter._errors import UserError, ValidationError
 from aidial_adapter_anthropic.dial._attachments import (
     AttachmentProcessor,
     AttachmentProcessors,
@@ -79,6 +79,31 @@ async def test_rejects_invalid_file_content_part(
         await _process_part(
             attachment_processors,
             MessageContentFilePart(type="file", file=InputFile(file_data="?!")),
+        )
+
+
+async def test_rejects_file_content_part_without_file_data(
+    attachment_processors: AttachmentProcessors,
+):
+    with pytest.raises(
+        ValidationError, match="File content part must have file_data field"
+    ):
+        await _process_part(
+            attachment_processors,
+            MessageContentFilePart(type="file", file=InputFile()),
+        )
+
+
+async def test_rejects_unsupported_file_content_part_mime_type(
+    attachment_processors: AttachmentProcessors,
+):
+    data_url = Resource(type="text/html", data=b"html-data").to_data_url()
+    with pytest.raises(UserError, match="Unsupported media type: text/html"):
+        await _process_part(
+            attachment_processors,
+            MessageContentFilePart(
+                type="file", file=InputFile(file_data=data_url)
+            ),
         )
 
 
