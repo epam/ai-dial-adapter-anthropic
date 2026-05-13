@@ -25,7 +25,7 @@ class CachingDecorator(ChatCompletionDecorator):
         params: ModelParameters,
         messages: list[Message],
     ) -> None:
-        tools = params.tool_config.tools if params.tool_config else None
+        tools = params.tool_config.tools if params.tool_config else []
         if headers := get_response_headers_for_caching(
             params.cache_breakpoint, messages, tools
         ):

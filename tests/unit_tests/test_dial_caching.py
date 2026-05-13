@@ -248,3 +248,58 @@ async def test_adapter_chat_uses_default_ttl_for_invalid_breakpoint_ttl(
         (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
         (_DIAL_CACHE_EXPIRE_AT, "1300"),
     ]
+
+
+async def test_adapter_chat_prefers_message_path_over_tool_breakpoint(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "tools": [_tool(cache_breakpoint={"ttl": "1h"})],
+            "messages": [_user("first", cache_breakpoint={"ttl": "5m"})],
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[0]"),
+        (_DIAL_CACHE_EXPIRE_AT, "4600"),
+    ]
+
+
+async def test_adapter_chat_prefers_automatic_message_path_over_tool_breakpoint(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "tools": [_tool(cache_breakpoint={"ttl": "1h"})],
+            "messages": [_user("first"), _user("second")],
+            "custom_fields": {"cache_breakpoint": {"ttl": "5m"}},
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "4600"),
+    ]
+
+
+async def test_adapter_chat_prefers_last_message_path_over_automatic_breakpoint(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [
+                _user("first", cache_breakpoint={"ttl": "5m"}),
+                _user("second"),
+            ],
+            "custom_fields": {"cache_breakpoint": {"ttl": "1h"}},
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "4600"),
+    ]

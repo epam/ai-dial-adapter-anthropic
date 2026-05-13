@@ -31,14 +31,16 @@ def _ttl_from_breakpoint(breakpoint: CacheBreakpoint) -> int:
 def get_response_headers_for_caching(
     automatic_cache_breakpoint: CacheBreakpoint | None,
     messages: list[DialMessage],
-    tools: list[DialTool] | None = None,
+    tools: list[DialTool],
 ) -> dict | None:
     ttl = 0
-    path = None
+    automatic_path = None
+    message_path = None
+    tool_path = None
 
     if automatic_cache_breakpoint is not None:
         ttl = _ttl_from_breakpoint(automatic_cache_breakpoint)
-        path = f"prefix.body.messages[{len(messages) - 1}]"
+        automatic_path = f"prefix.body.messages[{len(messages) - 1}]"
 
     for i, message in enumerate(messages):
         if (
@@ -47,16 +49,18 @@ def get_response_headers_for_caching(
             and (msg_ttl := _ttl_from_breakpoint(breakpoint))
         ):
             ttl = max(ttl, msg_ttl)
-            path = f"prefix.body.messages[{i}]"
+            message_path = f"prefix.body.messages[{i}]"
 
-    for i, tool in enumerate(tools or []):
+    for i, tool in enumerate(tools):
         if (
             (cf := tool.custom_fields)
             and (breakpoint := cf.cache_breakpoint)
             and (tool_ttl := _ttl_from_breakpoint(breakpoint))
         ):
             ttl = max(ttl, tool_ttl)
-            path = f"prefix.body.tools[{i}]"
+            tool_path = f"prefix.body.tools[{i}]"
+
+    path = automatic_path or message_path or tool_path
 
     if path is None:
         return None
