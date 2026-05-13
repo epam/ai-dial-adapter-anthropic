@@ -60,36 +60,34 @@ async def adapter() -> ChatCompletionAdapter:
     )
 
 
+@pytest.fixture(autouse=True)
+def mock_current_time_1000s(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(caching_module.time, "time", lambda: 1000)
+
+
+@pytest.fixture(autouse=True)
+def mock_adapter_chat(monkeypatch: pytest.MonkeyPatch):
+    async def _fake_chat(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(Adapter, "chat", _fake_chat)
+
+
 async def _invoke_chat(
     adapter: ChatCompletionAdapter,
-    monkeypatch: pytest.MonkeyPatch,
     request: dict,
 ) -> ChoiceConsumer:
     req = _request(request)
     consumer = ChoiceConsumer(_response(req))
-
-    async def _fake_chat(
-        self: Adapter,
-        consumer: ChoiceConsumer,
-        params: ModelParameters,
-        messages: list,
-    ) -> None:
-        return None
-
-    monkeypatch.setattr(Adapter, "chat", _fake_chat)
     await adapter.chat(consumer, ModelParameters.create(req), req.messages)
     return consumer
 
 
 async def test_adapter_chat_sets_headers_for_top_level_breakpoint(
     adapter: ChatCompletionAdapter,
-    monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(caching_module.time, "time", lambda: 1000)
-
     consumer = await _invoke_chat(
         adapter,
-        monkeypatch,
         {
             "messages": [_user("first"), _user("second")],
             "custom_fields": {"cache_breakpoint": {"ttl": "1h"}},
@@ -104,13 +102,9 @@ async def test_adapter_chat_sets_headers_for_top_level_breakpoint(
 
 async def test_adapter_chat_sets_headers_for_last_message_breakpoint(
     adapter: ChatCompletionAdapter,
-    monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(caching_module.time, "time", lambda: 1000)
-
     consumer = await _invoke_chat(
         adapter,
-        monkeypatch,
         {
             "messages": [
                 _user("first", cache_breakpoint={"ttl": "1h"}),
@@ -128,11 +122,9 @@ async def test_adapter_chat_sets_headers_for_last_message_breakpoint(
 
 async def test_adapter_chat_does_not_set_headers_without_breakpoints(
     adapter: ChatCompletionAdapter,
-    monkeypatch: pytest.MonkeyPatch,
 ):
     consumer = await _invoke_chat(
         adapter,
-        monkeypatch,
         {"messages": [_user("first"), _user("second")]},
     )
 
