@@ -13,7 +13,7 @@ _DEFAULT_TTL_SEC = 5 * 60
 
 def _parse_ttl(ttl: str) -> int | None:
     try:
-        for unit, secs in {"h": 3600, "m": 60}.items():
+        for unit, secs in {"h": 3600, "m": 60, "s": 1}.items():
             if ttl[-1] == unit:
                 return secs * int(ttl[:-1])
     except Exception:
