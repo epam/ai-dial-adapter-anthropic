@@ -35,20 +35,19 @@ def get_response_headers_for_caching(
         ttl = _ttl_from_breakpoint(automatic_cache_breakpoint)
         idx = len(messages) - 1
     else:
-        max_ttl = 0
-        last_idx = None
+        ttl = 0
+        idx = None
         for i, message in enumerate(messages):
             if (
                 (cf := message.custom_fields)
                 and (breakpoint := cf.cache_breakpoint)
                 and (msg_ttl := _ttl_from_breakpoint(breakpoint))
             ):
-                max_ttl = max(max_ttl, msg_ttl)
-                last_idx = i
+                ttl = max(ttl, msg_ttl)
+                idx = i
 
-        if last_idx is not None:
-            ttl = max_ttl
-            idx = last_idx
+        if idx is None:
+            return None
 
     return {
         _DIAL_CACHE_BREAKPOINT_PATH: f"prefix.body.messages[{idx}]",
