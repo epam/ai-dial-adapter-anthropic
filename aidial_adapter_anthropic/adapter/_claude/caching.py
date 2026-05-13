@@ -31,23 +31,24 @@ def get_response_headers_for_caching(
     automatic_cache_breakpoint: CacheBreakpoint | None,
     messages: list[DialMessage],
 ) -> dict | None:
+    ttl = 0
+    idx = None
+
     if automatic_cache_breakpoint is not None:
         ttl = _ttl_from_breakpoint(automatic_cache_breakpoint)
         idx = len(messages) - 1
-    else:
-        ttl = 0
-        idx = None
-        for i, message in enumerate(messages):
-            if (
-                (cf := message.custom_fields)
-                and (breakpoint := cf.cache_breakpoint)
-                and (msg_ttl := _ttl_from_breakpoint(breakpoint))
-            ):
-                ttl = max(ttl, msg_ttl)
-                idx = i
 
-        if idx is None:
-            return None
+    for i, message in enumerate(messages):
+        if (
+            (cf := message.custom_fields)
+            and (breakpoint := cf.cache_breakpoint)
+            and (msg_ttl := _ttl_from_breakpoint(breakpoint))
+        ):
+            ttl = max(ttl, msg_ttl)
+            idx = max(idx or 0, i)
+
+    if idx is None:
+        return None
 
     return {
         _DIAL_CACHE_BREAKPOINT_PATH: f"prefix.body.messages[{idx}]",
