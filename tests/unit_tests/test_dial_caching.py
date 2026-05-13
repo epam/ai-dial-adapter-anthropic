@@ -29,6 +29,33 @@ def _user(content: str, *, cache_breakpoint: dict | None = None) -> dict:
     return msg
 
 
+def _sys(content: str, *, cache_breakpoint: dict | None = None) -> dict:
+    msg: dict = {"role": "system", "content": content}
+    if cache_breakpoint is not None:
+        msg["custom_fields"] = {"cache_breakpoint": cache_breakpoint}
+    return msg
+
+
+def _tool(cache_breakpoint: dict | None = None) -> dict:
+    tool: dict = {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"},
+                },
+                "required": ["location"],
+            },
+        },
+    }
+    if cache_breakpoint is not None:
+        tool["custom_fields"] = {"cache_breakpoint": cache_breakpoint}
+    return tool
+
+
 def _request(request: dict) -> ChatCompletionRequest:
     return ChatCompletionRequest.model_validate(request)
 
@@ -129,3 +156,95 @@ async def test_adapter_chat_does_not_set_headers_without_breakpoints(
     )
 
     assert consumer.response.headers == []
+
+
+async def test_adapter_chat_sets_headers_for_system_message_breakpoint(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [
+                _sys("be helpful", cache_breakpoint={"ttl": "5m"}),
+                _user("hello"),
+            ]
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[0]"),
+        (_DIAL_CACHE_EXPIRE_AT, "1300"),
+    ]
+
+
+async def test_adapter_chat_uses_default_ttl_for_automatic_breakpoint(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [_user("first"), _user("second")],
+            "custom_fields": {"cache_breakpoint": {}},
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "1300"),
+    ]
+
+
+async def test_adapter_chat_uses_max_ttl_across_automatic_and_message_breakpoints(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [
+                _user("first"),
+                _user("second", cache_breakpoint={"ttl": "1h"}),
+            ],
+            "custom_fields": {"cache_breakpoint": {"ttl": "5m"}},
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "4600"),
+    ]
+
+
+async def test_adapter_chat_sets_headers_for_tool_breakpoint(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [_user("What's the weather?")],
+            "tools": [_tool(cache_breakpoint={})],
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.tools[0]"),
+        (_DIAL_CACHE_EXPIRE_AT, "1300"),
+    ]
+
+
+async def test_adapter_chat_uses_default_ttl_for_invalid_breakpoint_ttl(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [
+                _user("first"),
+                _user("second", cache_breakpoint={"ttl": "invalid"}),
+            ]
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "1300"),
+    ]

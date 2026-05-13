@@ -2,6 +2,7 @@ import time
 
 from aidial_sdk.chat_completion import CacheBreakpoint
 from aidial_sdk.chat_completion import Message as DialMessage
+from aidial_sdk.chat_completion import Tool as DialTool
 
 _DIAL_CACHE_BREAKPOINT_PATH = "X-DIAL-CACHE-BREAKPOINT-PATH"
 _DIAL_CACHE_EXPIRE_AT = "X-DIAL-CACHE-EXPIRE-AT"
@@ -30,13 +31,14 @@ def _ttl_from_breakpoint(breakpoint: CacheBreakpoint) -> int:
 def get_response_headers_for_caching(
     automatic_cache_breakpoint: CacheBreakpoint | None,
     messages: list[DialMessage],
+    tools: list[DialTool] | None = None,
 ) -> dict | None:
     ttl = 0
-    idx = None
+    path = None
 
     if automatic_cache_breakpoint is not None:
         ttl = _ttl_from_breakpoint(automatic_cache_breakpoint)
-        idx = len(messages) - 1
+        path = f"prefix.body.messages[{len(messages) - 1}]"
 
     for i, message in enumerate(messages):
         if (
@@ -45,12 +47,21 @@ def get_response_headers_for_caching(
             and (msg_ttl := _ttl_from_breakpoint(breakpoint))
         ):
             ttl = max(ttl, msg_ttl)
-            idx = max(idx or 0, i)
+            path = f"prefix.body.messages[{i}]"
 
-    if idx is None:
+    for i, tool in enumerate(tools or []):
+        if (
+            (cf := tool.custom_fields)
+            and (breakpoint := cf.cache_breakpoint)
+            and (tool_ttl := _ttl_from_breakpoint(breakpoint))
+        ):
+            ttl = max(ttl, tool_ttl)
+            path = f"prefix.body.tools[{i}]"
+
+    if path is None:
         return None
 
     return {
-        _DIAL_CACHE_BREAKPOINT_PATH: f"prefix.body.messages[{idx}]",
+        _DIAL_CACHE_BREAKPOINT_PATH: path,
         _DIAL_CACHE_EXPIRE_AT: str(int(time.time()) + ttl),
     }
