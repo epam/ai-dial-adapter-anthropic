@@ -51,6 +51,9 @@ class Consumer(ContextManager, ABC):
     def close_content(self, finish_reason: FinishReason | None = None): ...
 
     @abstractmethod
+    def set_response_headers(self, headers: dict[str, str]): ...
+
+    @abstractmethod
     def append_content(self, content: str): ...
 
     @abstractmethod
@@ -157,6 +160,10 @@ class ChoiceConsumer(Consumer):
                 self.response.set_discarded_messages(self.discarded_messages)
 
         return False
+
+    def set_response_headers(self, headers: dict[str, str]):
+        for k, v in headers.items():
+            self.response.append_header(k, v)
 
     def close_content(self, finish_reason: FinishReason | None = None):
         # Choice.close(finish_reason: Optional[FinishReason]) can be called only once

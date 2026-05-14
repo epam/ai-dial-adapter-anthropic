@@ -119,6 +119,9 @@ from aidial_adapter_anthropic.adapter._claude.tools import (
     process_tools_block,
 )
 from aidial_adapter_anthropic.adapter._decorator.base import compose_decorators
+from aidial_adapter_anthropic.adapter._decorator.caching import (
+    caching_decorator,
+)
 from aidial_adapter_anthropic.adapter._decorator.preprocess import (
     preprocess_messages_decorator,
 )
@@ -212,6 +215,7 @@ async def create_adapter(
     return compose_decorators(
         preprocess_messages_decorator(default_preprocess_messages),
         replicator_decorator(),
+        caching_decorator(),
     )(model)
 
 
