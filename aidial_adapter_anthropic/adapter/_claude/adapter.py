@@ -279,17 +279,29 @@ class Adapter(ChatCompletionAdapter):
             isinstance(configuration, ClaudeConfigurationWithThinking)
             and configuration.thinking is not None
         ):
-            thinking = configuration.thinking.to_claude()
+            if isinstance(configuration.thinking, dict):
+                # Passthrough for forward compatibility
+                thinking = configuration.thinking  # type: ignore
+            else:
+                thinking = configuration.thinking.to_claude()
 
         temperature = omit
         if params.temperature is not None:
             # Mapping OpenAI temp [0,2] range to Anthropic temp [0,1] range
             temperature = params.temperature / 2
 
-        if not isinstance(thinking, Omit) and thinking["type"] == "enabled":
-            # Thinking isn’t compatible with temperature, top_p, or top_k
-            # modifications as well as forced tool use.
-            temperature = omit
+        top_p = params.top_p
+        match thinking:
+            case {"type": "enabled"}:
+                # Thinking isn’t compatible with temperature, top_p, or top_k
+                # modifications as well as forced tool use.
+                temperature = omit
+            case {"type": "adaptive"}:
+                # Setting temperature or top_p to any non-default value on
+                # Claude Opus 4.7+ returns a 400 error.
+                temperature = top_p = omit
+            case _:
+                pass
 
         max_tokens = params.max_tokens or self.default_max_tokens
         output_config = to_claude_output_config(params.response_format)
@@ -303,7 +315,7 @@ class Adapter(ChatCompletionAdapter):
             stop_sequences=params.stop,
             system=system_prompt or omit,
             temperature=temperature,
-            top_p=params.top_p or omit,
+            top_p=top_p or omit,
             tools=(tools_config and tools_config.tools) or omit,
             tool_choice=(tools_config and tools_config.tool_choice) or omit,
             thinking=thinking,
