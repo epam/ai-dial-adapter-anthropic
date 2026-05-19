@@ -24,6 +24,15 @@ class ThinkingConfigDisabled(ExtraForbidModel):
         return {"type": "disabled"}
 
 
+class ThinkingConfigAdaptive(ExtraForbidModel):
+    # Claude Opus 4.7 and later only
+    type: Literal["adaptive"]
+    display: Literal["summarized", "omitted"] = "omitted"
+
+    def to_claude(self) -> ThinkingConfigParam:
+        return {"type": "adaptive", "display": self.display}
+
+
 class ClaudeConfiguration(ExtraForbidModel):
     betas: list[AnthropicBetaParam] | None = Field(
         default=None,
@@ -32,10 +41,15 @@ class ClaudeConfiguration(ExtraForbidModel):
     enable_citations: bool = False
 
 
+_thinking_options = (
+    ThinkingConfigEnabled | ThinkingConfigDisabled | ThinkingConfigAdaptive
+)
+
+
 class ClaudeConfigurationWithThinking(ClaudeConfiguration):
     # NOTE: once migrated to Pydantic v2 we can use TypeAdapter over
     # the anthropic's ThinkingConfigParam class directly.
-    thinking: ThinkingConfigEnabled | ThinkingConfigDisabled | None = None
+    thinking: _thinking_options | None = None
 
 
 Configuration = ClaudeConfiguration | ClaudeConfigurationWithThinking
