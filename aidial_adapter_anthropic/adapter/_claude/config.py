@@ -18,8 +18,6 @@ class ClaudeConfiguration(ExtraForbidModel):
 
 
 class ClaudeConfigurationWithThinking(ClaudeConfiguration):
-    # NOTE: once migrated to Pydantic v2 we can use TypeAdapter over
-    # the anthropic's ThinkingConfigParam class directly.
     thinking: ThinkingConfigParam | dict[str, Any] | None = None
 
 
