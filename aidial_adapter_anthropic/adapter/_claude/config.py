@@ -41,15 +41,10 @@ class ClaudeConfiguration(ExtraForbidModel):
     enable_citations: bool = False
 
 
-_thinking_options = (
-    ThinkingConfigEnabled | ThinkingConfigDisabled | ThinkingConfigAdaptive
-)
-
-
 class ClaudeConfigurationWithThinking(ClaudeConfiguration):
     # NOTE: once migrated to Pydantic v2 we can use TypeAdapter over
     # the anthropic's ThinkingConfigParam class directly.
-    thinking: _thinking_options | dict[str, Any] | None = None
+    thinking: ThinkingConfigParam | dict[str, Any] | None = None
 
 
 Configuration = ClaudeConfiguration | ClaudeConfigurationWithThinking
