@@ -42,6 +42,6 @@ resolutions:
     - message: ".*PyPI::typing-inspection:0\\.4\\.2.*"
       reason: "CANT_FIX_EXCEPTION"
       comment: "MIT License: https://github.com/pydantic/typing-inspection/blob/v0.4.2/LICENSE"
-    - message: ".*PyPI::(pillow|typing-extensions|aidial-sdk):.*"
+    - message: ".*PyPI::(pillow|typing-extensions|aidial-sdk|idna):.*"
       reason: "CANT_FIX_EXCEPTION"
       comment: "ORT doesn't pick up the package license"
