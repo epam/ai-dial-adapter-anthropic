@@ -27,7 +27,7 @@ def _ttl_from_breakpoint(breakpoint: CacheBreakpoint) -> int:
 
 
 @dataclass
-class CachingInfo:
+class CacheInfo:
     breakpoint_path: CacheBreakpointPath
     expired_at: str
 
@@ -36,7 +36,7 @@ def get_caching_info(
     automatic_cache_breakpoint: CacheBreakpoint | None,
     messages: list[DialMessage],
     tools: list[DialTool],
-) -> CachingInfo | None:
+) -> CacheInfo | None:
     ttl = 0
     automatic_path = None
     message_path = None
@@ -69,4 +69,4 @@ def get_caching_info(
     if path is None:
         return None
 
-    return CachingInfo(path, str(int(time.time()) + ttl))
+    return CacheInfo(path, str(int(time.time()) + ttl))
