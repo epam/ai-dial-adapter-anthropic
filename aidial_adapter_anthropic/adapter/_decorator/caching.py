@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from aidial_sdk.chat_completion import Message
 
 from aidial_adapter_anthropic.adapter._claude.caching import (
-    get_caching_info,
+    get_cache_info,
 )
 from aidial_adapter_anthropic.adapter._decorator.base import (
     ChatCompletionDecorator,
@@ -26,7 +26,7 @@ class CachingDecorator(ChatCompletionDecorator):
         messages: list[Message],
     ) -> None:
         tools = params.tool_config.tools if params.tool_config else []
-        if info := get_caching_info(params.cache_breakpoint, messages, tools):
+        if info := get_cache_info(params.cache_breakpoint, messages, tools):
             consumer.get_response().set_cache_breakpoint(
                 cache_breakpoint_path=info.breakpoint_path,
                 cache_expire_at=info.expired_at,

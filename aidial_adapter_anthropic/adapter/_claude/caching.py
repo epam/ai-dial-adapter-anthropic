@@ -32,7 +32,7 @@ class CacheInfo:
     expired_at: str
 
 
-def get_caching_info(
+def get_cache_info(
     automatic_cache_breakpoint: CacheBreakpoint | None,
     messages: list[DialMessage],
     tools: list[DialTool],
