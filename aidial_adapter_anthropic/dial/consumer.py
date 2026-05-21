@@ -54,7 +54,7 @@ class Consumer(AbstractAsyncContextManager, ABC):
     ): ...
 
     @abstractmethod
-    async def set_response_headers(self, headers: dict[str, str]): ...
+    def get_response(self) -> Response: ...
 
     @abstractmethod
     async def append_content(self, content: str): ...
@@ -183,9 +183,8 @@ class ChoiceConsumer(Consumer):
 
         return False
 
-    async def set_response_headers(self, headers: dict[str, str]):
-        for k, v in headers.items():
-            self.response.append_header(k, v)
+    def get_response(self) -> Response:
+        return self.response
 
     async def close_content(self, finish_reason: FinishReason | None = None):
         # Choice.close(finish_reason: Optional[FinishReason]) can be called only once
