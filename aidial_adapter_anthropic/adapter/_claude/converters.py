@@ -354,11 +354,10 @@ def to_claude_output_config(
         case ResponseFormatText():
             return None
 
-        case ResponseFormatJsonObject():
-            _log.warning(
-                "JSON object response format is not supported and will be ignored."
-            )
-            return None
+        case ResponseFormatJsonObject(model_extra=extra):
+            if not extra:
+                return None
+            return OutputConfigParam(**extra)
 
         case ResponseFormatJsonSchema():
             schema = response_format.json_schema.schema_

@@ -1,3 +1,4 @@
+from aidial_sdk.chat_completion import ResponseFormatJsonObject
 from anthropic import Omit
 
 from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
@@ -56,6 +57,18 @@ async def test_thinking_configuration_free_format(adapter: Adapter):
         "my": "very",
         "secret": "configuration",
     }
+
+
+async def test_thinking_with_effort(adapter: Adapter):
+    config = {"thinking": {"type": "adaptive"}}
+    effort = {"effort": "medium"}
+    response_format = ResponseFormatJsonObject(type="json_object", **effort)
+    request = await adapter._prepare_claude_request(
+        ModelParameters(configuration=config, response_format=response_format),
+        [user("hello")],
+    )
+    assert request.params["thinking"] == {"type": "adaptive"}
+    assert request.params["output_config"] == {"effort": "medium"}
 
 
 async def test_configuration_schema_top_level_properties(adapter: Adapter):
