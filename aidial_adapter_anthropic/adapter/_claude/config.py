@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from anthropic.types.anthropic_beta_param import AnthropicBetaParam
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
@@ -19,6 +19,7 @@ class ClaudeConfiguration(ExtraForbidModel):
 
 class ClaudeConfigurationWithThinking(ClaudeConfiguration):
     thinking: ThinkingConfigParam | dict[str, Any] | None = None
+    effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
 
 
 Configuration = ClaudeConfiguration | ClaudeConfigurationWithThinking

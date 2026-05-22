@@ -55,6 +55,7 @@ from anthropic.types.beta import BetaMCPToolResultBlock as MCPToolResultBlock
 from anthropic.types.beta import BetaMCPToolUseBlock as MCPToolUseBlock
 from anthropic.types.beta import BetaMessage as ClaudeResponseMessage
 from anthropic.types.beta import BetaMessageParam as ClaudeMessageParam
+from anthropic.types.beta import BetaOutputConfigParam as OutputConfigParam
 from anthropic.types.beta import (
     BetaRawContentBlockDeltaEvent as ContentBlockDeltaEvent,
 )
@@ -304,7 +305,24 @@ class Adapter(ChatCompletionAdapter):
                 pass
 
         max_tokens = params.max_tokens or self.default_max_tokens
+
+        reasoning_effort = params.reasoning_effort
+        effort_from_config = (
+            params.configuration.get("effort") if params.configuration else None
+        )
+        if reasoning_effort and effort_from_config:
+            raise ValidationError(
+                'Both "reasoning_effort" and "configuration.effort" detected. Only one allowed.'
+            )
+        effort = reasoning_effort or effort_from_config
+
         output_config = to_claude_output_config(params.response_format)
+        if effort:
+            # https://platform.claude.com/docs/en/build-with-claude/effort#effort-levels
+            if output_config is None:
+                output_config = OutputConfigParam(effort=effort)  # pyright: ignore SDK and docs inconsistency
+            elif output_config:
+                output_config["effort"] = effort  # pyright: ignore SDK and docs inconsistency
 
         cache_control: CacheControlEphemeralParam | Omit = omit
         if params.cache_breakpoint:

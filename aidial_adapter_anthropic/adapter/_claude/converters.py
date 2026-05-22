@@ -37,7 +37,9 @@ from aidial_adapter_anthropic.adapter._claude.blocks import (
     create_tool_result_block,
     create_tool_use_block,
 )
-from aidial_adapter_anthropic.adapter._claude.config import Configuration
+from aidial_adapter_anthropic.adapter._claude.config import (
+    Configuration,
+)
 from aidial_adapter_anthropic.adapter._claude.state import (
     get_message_content_from_state,
 )
@@ -354,10 +356,11 @@ def to_claude_output_config(
         case ResponseFormatText():
             return None
 
-        case ResponseFormatJsonObject(model_extra=extra):
-            if not extra:
-                return None
-            return OutputConfigParam(**extra)
+        case ResponseFormatJsonObject():
+            _log.warning(
+                "JSON object response format is not supported and will be ignored."
+            )
+            return None
 
         case ResponseFormatJsonSchema():
             schema = response_format.json_schema.schema_

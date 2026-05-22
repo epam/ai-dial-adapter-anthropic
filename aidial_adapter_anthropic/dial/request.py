@@ -17,6 +17,7 @@ from aidial_sdk.chat_completion import (
 from aidial_sdk.chat_completion.request import (
     ChatCompletionRequest,
     MessageContentRefusalPart,
+    ReasoningEffort,
     ResponseFormat,
 )
 from aidial_sdk.exceptions import RequestValidationError
@@ -53,6 +54,7 @@ class ModelParameters(BaseModel):
     configuration: dict | None = None
     response_format: ResponseFormat | None = None
     cache_breakpoint: CacheBreakpoint | None = None
+    reasoning_effort: ReasoningEffort | None = None
 
     @classmethod
     def create(cls, request: ChatCompletionRequest) -> "ModelParameters":
@@ -91,6 +93,7 @@ class ModelParameters(BaseModel):
             configuration=configuration,
             response_format=request.response_format,
             cache_breakpoint=cache_breakpoint,
+            reasoning_effort=request.reasoning_effort,
         )
 
     @property
