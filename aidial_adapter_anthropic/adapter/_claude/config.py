@@ -4,6 +4,8 @@ from anthropic.types.anthropic_beta_param import AnthropicBetaParam
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
 from pydantic import BaseModel, ConfigDict, Field
 
+ClaudeEffort = Literal["low", "medium", "high", "xhigh", "max"]
+
 
 class ExtraForbidModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -19,7 +21,7 @@ class ClaudeConfiguration(ExtraForbidModel):
 
 class ClaudeConfigurationWithThinking(ClaudeConfiguration):
     thinking: ThinkingConfigParam | dict[str, Any] | None = None
-    effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
+    effort: ClaudeEffort | None = None
 
 
 Configuration = ClaudeConfiguration | ClaudeConfigurationWithThinking

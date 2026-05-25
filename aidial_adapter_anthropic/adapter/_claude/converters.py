@@ -6,6 +6,7 @@ from typing import Literal, assert_never
 from aidial_sdk.chat_completion import CacheBreakpoint, FinishReason, Tool
 from aidial_sdk.chat_completion import ToolChoice as DialToolChoice
 from aidial_sdk.chat_completion.request import (
+    ReasoningEffort,
     ResponseFormat,
     ResponseFormatJsonObject,
     ResponseFormatJsonSchema,
@@ -38,6 +39,9 @@ from aidial_adapter_anthropic.adapter._claude.blocks import (
     create_tool_use_block,
 )
 from aidial_adapter_anthropic.adapter._claude.config import (
+    ClaudeConfiguration,
+    ClaudeConfigurationWithThinking,
+    ClaudeEffort,
     Configuration,
 )
 from aidial_adapter_anthropic.adapter._claude.state import (
@@ -56,6 +60,7 @@ from aidial_adapter_anthropic.dial._message import (
     HumanToolResultMessage,
     SystemMessage,
 )
+from aidial_adapter_anthropic.dial.request import ModelParameters
 from aidial_adapter_anthropic.dial.token_usage import TokenUsage
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 
@@ -348,26 +353,56 @@ def _set_additional_properties_false(obj: dict) -> None:
 
 def to_claude_output_config(
     response_format: ResponseFormat | None,
+    effort: ClaudeEffort | ReasoningEffort | None,
 ) -> OutputConfigParam | None:
-    if response_format is None:
-        return None
-
     match response_format:
-        case ResponseFormatText():
-            return None
+        case ResponseFormatText() | None:
+            output_config = None
 
         case ResponseFormatJsonObject():
             _log.warning(
                 "JSON object response format is not supported and will be ignored."
             )
-            return None
+            output_config = None
 
         case ResponseFormatJsonSchema():
             schema = response_format.json_schema.schema_
             _set_additional_properties_false(schema)
-            return OutputConfigParam(
+            output_config = OutputConfigParam(
                 format=JSONOutputFormatParam(type="json_schema", schema=schema)
             )
 
         case _:
             assert_never(response_format)
+
+    if effort:
+        # https://platform.claude.com/docs/en/build-with-claude/effort#effort-levels
+        if output_config is None:
+            output_config = OutputConfigParam(effort=effort)  # pyright: ignore SDK and docs inconsistency
+        elif output_config:
+            output_config["effort"] = effort  # pyright: ignore SDK and docs inconsistency
+
+    return output_config
+
+
+def to_claude_effort(
+    params: ModelParameters, configuration: ClaudeConfiguration
+) -> ClaudeEffort | ReasoningEffort | None:
+    reasoning_effort = params.reasoning_effort
+
+    effort_from_config = None
+    if isinstance(configuration, ClaudeConfigurationWithThinking):
+        effort_from_config = configuration.effort
+
+    if reasoning_effort is None and effort_from_config is None:
+        return None
+
+    if reasoning_effort == effort_from_config:
+        raise ValidationError(
+            f"Conflicting reasoning effort values: "
+            f'"reasoning_effort"={reasoning_effort} and '
+            f'"custom_fields.configuration.effort"={effort_from_config}. '
+            f"Only one may be specified."
+        )
+
+    return reasoning_effort or effort_from_config

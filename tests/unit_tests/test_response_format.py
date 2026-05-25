@@ -11,19 +11,23 @@ from aidial_adapter_anthropic.adapter._claude.converters import (
 
 
 class TestResponseFormatConversion:
+    _EMPTY_EFFORT = None
+
     def test_no_response_format(self):
-        output_config = to_claude_output_config(None)
+        output_config = to_claude_output_config(None, None)
 
         assert output_config is None
 
     def test_text_response_format(self):
-        output_config = to_claude_output_config(ResponseFormatText(type="text"))
+        output_config = to_claude_output_config(
+            ResponseFormatText(type="text"), self._EMPTY_EFFORT
+        )
 
         assert output_config is None
 
     def test_json_object_response_format(self):
         output_config = to_claude_output_config(
-            ResponseFormatJsonObject(type="json_object")
+            ResponseFormatJsonObject(type="json_object"), self._EMPTY_EFFORT
         )
 
         assert output_config is None
@@ -46,7 +50,8 @@ class TestResponseFormatConversion:
                     name="PersonSchema",
                     schema=test_schema,
                 ),
-            )
+            ),
+            self._EMPTY_EFFORT,
         )
 
         assert output_config == {
@@ -75,7 +80,8 @@ class TestResponseFormatConversion:
                     name="PersonSchema",
                     schema=test_schema,
                 ),
-            )
+            ),
+            self._EMPTY_EFFORT,
         )
 
         assert output_config == {
@@ -115,7 +121,8 @@ class TestResponseFormatConversion:
                     name="PersonSchema",
                     schema=test_schema,
                 ),
-            )
+            ),
+            self._EMPTY_EFFORT,
         )
 
         assert output_config == {
@@ -148,7 +155,8 @@ class TestResponseFormatConversion:
                     name="PersonSchema",
                     schema=test_schema,
                 ),
-            )
+            ),
+            self._EMPTY_EFFORT,
         )
 
         assert output_config == {
