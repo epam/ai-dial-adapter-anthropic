@@ -89,14 +89,19 @@ async def test_thinking_effort_from_model_params(adapter: Adapter):
 
 
 async def test_thinking_effort_both_provided(adapter: Adapter):
-    config = {"thinking": {"type": "adaptive"}, "effort": "medium"}
+    config = {"thinking": {"type": "adaptive"}, "effort": "high"}
     request = adapter._prepare_claude_request(
         ModelParameters(
             configuration=config, reasoning_effort=ReasoningEffort.MEDIUM
         ),
         [user("hello")],
     )
-    with pytest.raises(ValidationError):
+    msg = (
+        'Conflicting reasoning effort values: "reasoning_effort"=ReasoningEffort.MEDIUM '
+        'and "custom_fields.configuration.effort"=high. '
+        "Only one may be specified."
+    )
+    with pytest.raises(ValidationError, match=msg):
         await request
 
 

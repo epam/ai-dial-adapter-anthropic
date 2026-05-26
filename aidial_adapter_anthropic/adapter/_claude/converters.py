@@ -389,15 +389,17 @@ def to_claude_effort(
     params: ModelParameters, configuration: ClaudeConfiguration
 ) -> ClaudeEffort | ReasoningEffort | None:
     reasoning_effort = params.reasoning_effort
+    effort_from_config = (
+        configuration.effort
+        if isinstance(configuration, ClaudeConfigurationWithThinking)
+        else None
+    )
 
-    effort_from_config = None
-    if isinstance(configuration, ClaudeConfigurationWithThinking):
-        effort_from_config = configuration.effort
-
-    if reasoning_effort is None and effort_from_config is None:
-        return None
-
-    if reasoning_effort == effort_from_config:
+    if reasoning_effort is None:
+        return effort_from_config
+    if effort_from_config is None:
+        return reasoning_effort
+    if reasoning_effort != effort_from_config:
         raise ValidationError(
             f"Conflicting reasoning effort values: "
             f'"reasoning_effort"={reasoning_effort} and '
@@ -405,4 +407,4 @@ def to_claude_effort(
             f"Only one may be specified."
         )
 
-    return reasoning_effort or effort_from_config
+    return reasoning_effort
