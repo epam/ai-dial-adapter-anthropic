@@ -6,7 +6,6 @@ from typing import Literal, assert_never
 from aidial_sdk.chat_completion import CacheBreakpoint, FinishReason, Tool
 from aidial_sdk.chat_completion import ToolChoice as DialToolChoice
 from aidial_sdk.chat_completion.request import (
-    ReasoningEffort,
     ResponseFormat,
     ResponseFormatJsonObject,
     ResponseFormatJsonSchema,
@@ -353,7 +352,7 @@ def _set_additional_properties_false(obj: dict) -> None:
 
 def to_claude_output_config(
     response_format: ResponseFormat | None,
-    effort: ClaudeEffort | ReasoningEffort | None,
+    effort: ClaudeEffort | str | None,
 ) -> OutputConfigParam | None:
     match response_format:
         case ResponseFormatText() | None:
@@ -376,19 +375,18 @@ def to_claude_output_config(
             assert_never(response_format)
 
     if effort:
-        # https://platform.claude.com/docs/en/build-with-claude/effort#effort-levels
-        if output_config is None:
-            output_config = OutputConfigParam(effort=effort)  # pyright: ignore SDK and docs inconsistency
-        elif output_config:
-            output_config["effort"] = effort  # pyright: ignore SDK and docs inconsistency
+        output_config = output_config or OutputConfigParam()
+        output_config["effort"] = effort  # type: ignore
 
     return output_config
 
 
 def to_claude_effort(
     params: ModelParameters, configuration: ClaudeConfiguration
-) -> ClaudeEffort | ReasoningEffort | None:
-    reasoning_effort = params.reasoning_effort
+) -> ClaudeEffort | str | None:
+    reasoning_effort = (
+        params.reasoning_effort.value if params.reasoning_effort else None
+    )
     effort_from_config = (
         configuration.effort
         if isinstance(configuration, ClaudeConfigurationWithThinking)

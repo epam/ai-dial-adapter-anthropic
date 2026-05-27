@@ -21,7 +21,7 @@ class ClaudeConfiguration(ExtraForbidModel):
 
 class ClaudeConfigurationWithThinking(ClaudeConfiguration):
     thinking: ThinkingConfigParam | dict[str, Any] | None = None
-    effort: ClaudeEffort | None = None
+    effort: ClaudeEffort | str | None = None
 
 
 Configuration = ClaudeConfiguration | ClaudeConfigurationWithThinking

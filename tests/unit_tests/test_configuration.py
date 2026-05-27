@@ -97,7 +97,7 @@ async def test_thinking_effort_both_provided(adapter: Adapter):
         [user("hello")],
     )
     msg = (
-        'Conflicting reasoning effort values: "reasoning_effort"=ReasoningEffort.MEDIUM '
+        'Conflicting reasoning effort values: "reasoning_effort"=medium '
         'and "custom_fields.configuration.effort"=high. '
         "Only one may be specified."
     )
