@@ -108,6 +108,7 @@ from aidial_adapter_anthropic.adapter._claude.config import (
 )
 from aidial_adapter_anthropic.adapter._claude.converters import (
     to_claude_cache_control,
+    to_claude_effort,
     to_claude_messages,
     to_claude_output_config,
     to_claude_tool_config,
@@ -303,15 +304,17 @@ class Adapter(ChatCompletionAdapter):
             case _:
                 pass
 
-        max_tokens = params.max_tokens or self.default_max_tokens
-        output_config = to_claude_output_config(params.response_format)
+        output_config = to_claude_output_config(
+            response_format=params.response_format,
+            effort=to_claude_effort(params, configuration),
+        )
 
         cache_control: CacheControlEphemeralParam | Omit = omit
         if params.cache_breakpoint:
             cache_control = to_claude_cache_control(params.cache_breakpoint)
 
         claude_params = ClaudeParameters(
-            max_tokens=max_tokens,
+            max_tokens=params.max_tokens or self.default_max_tokens,
             stop_sequences=params.stop,
             system=system_prompt or omit,
             temperature=temperature,
