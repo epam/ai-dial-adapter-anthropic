@@ -87,6 +87,117 @@ def trivial_partitioner(messages: list[Any]) -> list[int]:
     return [1] * len(messages)
 
 
-def turn_based_partitioner(messages: list[Any]) -> list[int]:
+def _raw_message(message: Any) -> dict:
+    match message:
+        case tuple():
+            return message[0].payload
+        case dict():
+            return message
+        case BaseModel():
+            return message.model_dump()
+        case _:
+            return {}
+
+
+def _role(message: dict) -> str | None:
+    role = message.get("role")
+    match role:
+        case str():
+            return role
+        case _:
+            return None
+
+
+def _has_content_block(message: dict, block_type: str) -> bool:
+    content = message.get("content")
+    if not isinstance(content, list):
+        return False
+
+    return any(
+        isinstance(block, dict) and block.get("type") == block_type
+        for block in content
+    )
+
+
+def _is_assistant_tool_call(message: dict) -> bool:
+    if _role(message) != "assistant":
+        return False
+
+    return bool(message.get("tool_calls")) or _has_content_block(
+        message, "tool_use"
+    )
+
+
+def _is_tool_result(message: dict) -> bool:
+    role = _role(message)
+    return (
+        role == "tool"
+        or bool(message.get("tool_result"))
+        or _has_content_block(message, "tool_result")
+    )
+
+
+def claude_partitioner(messages: list[Any]) -> list[int]:
+    """
+    Build truncation partitions for Claude history.
+
+    Messages in the same partition are removed/kept atomically by the
+    truncation algorithm.
+
+    Partitioning rules:
+    - Default behavior follows turn-based truncation (pairs of two).
+    - Tool-call flows are grouped as transactions:
+      `user -> assistant(tool_call)+ -> tool_result+ -> assistant?`.
+      This prevents orphan tool-result blocks when earlier history is dropped.
+    """
     n = len(messages)
-    return [2] * (n // 2) + [1] * (n % 2)
+    if n == 0:
+        return []
+
+    raw_messages = [_raw_message(message) for message in messages]
+    chunks: list[int] = []
+    idx = 0
+
+    while idx < n:
+        current = raw_messages[idx]
+        current_role = _role(current)
+
+        if current_role == "system":
+            chunks.append(1)
+            idx += 1
+            continue
+
+        if (
+            idx + 1 < n
+            and current_role == "user"
+            and _is_assistant_tool_call(raw_messages[idx + 1])
+        ):
+            end = idx + 1
+            while end < n and _is_assistant_tool_call(raw_messages[end]):
+                end += 1
+                while end < n and _is_tool_result(raw_messages[end]):
+                    end += 1
+
+            if end < n and _role(raw_messages[end]) == "assistant":
+                end += 1
+
+            chunks.append(end - idx)
+            idx = end
+            continue
+
+        if _is_assistant_tool_call(current):
+            end = idx + 1
+            while end < n and _is_tool_result(raw_messages[end]):
+                end += 1
+
+            if end < n and _role(raw_messages[end]) == "assistant":
+                end += 1
+
+            chunks.append(end - idx)
+            idx = end
+            continue
+
+        size = 2 if idx + 1 < n else 1
+        chunks.append(size)
+        idx += size
+    return chunks

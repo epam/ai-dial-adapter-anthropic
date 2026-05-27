@@ -15,7 +15,14 @@ from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
 from aidial_adapter_anthropic.adapter.claude import create_adapter
 from aidial_adapter_anthropic.dial.request import ModelParameters
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
-from tests.utils.openai import ai, sys, user, user_with_image
+from tests.utils.openai import (
+    ai,
+    ai_tool_call,
+    sys,
+    tool_result,
+    user,
+    user_with_image,
+)
 
 _TOOL_SYSTEM_MESSAGE = 55
 
@@ -71,6 +78,10 @@ async def compute_discarded_messages(
         return await model.compute_discarded_messages(params, messages) or []
     except DialException as e:
         return e.message
+
+
+def _index_range(start: int, end: int) -> list[int]:
+    return list(range(start, end + 1))
 
 
 _TOOL_CONFIG = ToolsConfig(
@@ -349,3 +360,55 @@ async def test_chat_history_overflow_2(model):
         truncation_error
         == f"The requested maximum prompt tokens is 1. However, the system messages and the last user message resulted in {min_possible_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
     )
+
+
+@pytest.mark.parametrize(
+    ("max_prompt_tokens", "expected_discarded"),
+    [
+        # minimal feasible prompt:
+        # system(1) + last_user(5 + 1) = 7
+        # => trunc block_1, intermediate messages and block_2
+        (7, _index_range(1, 12)),
+        (32, _index_range(1, 12)),
+        # trunc block_1 + intermediate msgs:
+        # system(1) + block_2(user=6 + tool_call=7 + tool_result=7 + ai=6)
+        # + last_user(6) = 33.
+        (33, _index_range(1, 8)),
+        (44, _index_range(1, 8)),
+        # trunc only block_1:
+        # full_prompt(85) - block_1(40) = 45
+        (45, _index_range(1, 6)),
+        (46, _index_range(1, 6)),
+        # full prompt / no trunc
+        # system(1) + 13 messages * 5 + content(19) = 85
+        (85, []),
+    ],
+)
+async def test_truncate_tool_call_cascade(
+    model, max_prompt_tokens: int, expected_discarded: list[int]
+):
+    messages = [
+        sys("system"),
+        # <block_1>
+        user("user"),
+        ai_tool_call("tool_1"),
+        tool_result("tool_1"),
+        ai_tool_call("tool_2"),
+        tool_result("tool_2"),
+        ai("ai"),
+        # </block_1>
+        user("user"),
+        ai("ai"),
+        # <block_2>
+        user("user"),
+        ai_tool_call("tool_3"),
+        tool_result("tool_3"),
+        ai("ai"),
+        # </block_2>
+        user("user"),
+    ]
+    discarded_messages = await compute_discarded_messages(
+        model=model, messages=messages, max_prompt_tokens=max_prompt_tokens
+    )
+
+    assert discarded_messages == expected_discarded

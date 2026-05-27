@@ -91,9 +91,9 @@ from aidial_adapter_anthropic._utils.json import json_dumps_short
 from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter._base import (
     ChatCompletionAdapter,
+    claude_partitioner,
     default_preprocess_messages,
     keep_last,
-    turn_based_partitioner,
 )
 from aidial_adapter_anthropic.adapter._claude.blocks import (
     IMAGE_ATTACHMENT_PROCESSOR,
@@ -336,7 +336,7 @@ class Adapter(ChatCompletionAdapter):
             messages=request.messages.lst,
             tokenizer=create_tokenizer(self.tokenizer, request.params),
             keep_message=keep_last,
-            partitioner=turn_based_partitioner,
+            partitioner=claude_partitioner,
             model_limit=None,
             user_limit=max_prompt_tokens,
         )
