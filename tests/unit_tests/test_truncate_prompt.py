@@ -1,7 +1,6 @@
-from aidial_sdk.chat_completion import Message
+from typing import TypedDict
 
 from aidial_adapter_anthropic.adapter._base import (
-    keep_last_and_system_messages,
     trivial_partitioner,
 )
 from aidial_adapter_anthropic.adapter._truncate_prompt import (
@@ -10,16 +9,32 @@ from aidial_adapter_anthropic.adapter._truncate_prompt import (
     _partition_indexer,
     compute_discarded_messages,
 )
-from tests.utils.openai import ai, sys, user
+
+
+class _Message(TypedDict):
+    is_system: bool
+    content: str
+
+
+def _msg(content: str) -> _Message:
+    return {"content": content, "is_system": False}
+
+
+def _sys(content: str) -> _Message:
+    return {"content": content, "is_system": True}
+
+
+def keep_last_and_system_messages(messages: list[_Message], idx: int) -> bool:
+    return messages[idx]["is_system"] or idx == len(messages) - 1
 
 
 async def truncate_prompt_by_words(
-    messages: list[Message],
+    messages: list[_Message],
     user_limit: int,
     model_limit: int | None = None,
 ) -> DiscardedMessages | TruncatePromptError:
-    async def _tokenize_by_words(messages: list[Message]) -> int:
-        return sum(len(msg.text().split()) for msg in messages)
+    async def _tokenize_by_words(messages: list[_Message]) -> int:
+        return sum(len(msg["content"].split()) for msg in messages)
 
     return await compute_discarded_messages(
         messages=messages,
@@ -43,9 +58,9 @@ def test_partition_indexer():
 
 async def test_no_truncation():
     messages = [
-        sys("text1"),
-        user("text2"),
-        ai("text3"),
+        _sys("text1"),
+        _msg("text2"),
+        _msg("text3"),
     ]
 
     discarded_messages = await truncate_prompt_by_words(
@@ -57,11 +72,11 @@ async def test_no_truncation():
 
 async def test_truncation():
     messages = [
-        sys("system1"),
-        user("remove1"),
-        sys("system2"),
-        user("remove2"),
-        user("query"),
+        _sys("system1"),
+        _msg("remove1"),
+        _sys("system2"),
+        _msg("remove2"),
+        _msg("query"),
     ]
     discarded_messages = await truncate_prompt_by_words(
         messages=messages, user_limit=3
@@ -72,8 +87,8 @@ async def test_truncation():
 
 async def test_truncation_with_one_message_left():
     messages = [
-        ai("reply"),
-        user("query"),
+        _msg("reply"),
+        _msg("query"),
     ]
 
     discarded_messages = await truncate_prompt_by_words(
@@ -85,8 +100,8 @@ async def test_truncation_with_one_message_left():
 
 async def test_truncation_with_one_message_accepted_after_second_check():
     messages = [
-        ai("hello world"),
-        user("query"),
+        _msg("hello world"),
+        _msg("query"),
     ]
 
     discarded_messages = await truncate_prompt_by_words(
@@ -98,9 +113,9 @@ async def test_truncation_with_one_message_accepted_after_second_check():
 
 async def test_prompt_is_too_big():
     messages = [
-        sys("text1"),
-        sys("text2"),
-        user("text3"),
+        _sys("text1"),
+        _sys("text2"),
+        _msg("text3"),
     ]
 
     truncation_error = await truncate_prompt_by_words(
@@ -116,9 +131,9 @@ async def test_prompt_is_too_big():
 
 async def test_prompt_with_history_is_too_big():
     messages = [
-        sys("text1"),
-        ai("text2"),
-        user("text3"),
+        _sys("text1"),
+        _msg("text2"),
+        _msg("text3"),
     ]
 
     truncation_error = await truncate_prompt_by_words(
@@ -133,7 +148,7 @@ async def test_prompt_with_history_is_too_big():
 
 
 async def test_inconsistent_limits():
-    messages = [ai("text2")]
+    messages = [_msg("text2")]
 
     truncation_error = await truncate_prompt_by_words(
         messages=messages, user_limit=10, model_limit=5
