@@ -378,7 +378,7 @@ async def test_chat_history_overflow_2(model):
         # trunc only block_1:
         # full_prompt(85) - block_1(40) = 45
         (45, _index_range(1, 6)),
-        (46, _index_range(1, 6)),
+        (84, _index_range(1, 6)),
         # full prompt / no trunc
         # system(1) + 13 messages * 5 + content(19) = 85
         (85, []),
