@@ -1,10 +1,18 @@
-from aidial_sdk.chat_completion import Attachment, CustomContent, Message
+from aidial_sdk.chat_completion import (
+    Attachment,
+    CustomContent,
+    FunctionCall,
+    Message,
+    ToolCall,
+)
 from openai.types.chat import ChatCompletionToolParam
 from openai.types.shared_params.function_definition import FunctionDefinition
 
 from aidial_adapter_anthropic.dial._message import (
     AIRegularMessage,
+    AIToolCallMessage,
     HumanRegularMessage,
+    HumanToolResultMessage,
     SystemMessage,
 )
 
@@ -28,6 +36,25 @@ def user_with_image(content: str, image_base64: str) -> Message:
     return HumanRegularMessage(
         content=content, custom_content=custom_content
     ).to_message()
+
+
+def ai_tool_call(
+    message_id: str, content: str = "call", name: str = "test_tool"
+) -> Message:
+    return AIToolCallMessage(
+        content=content,
+        calls=[
+            ToolCall(
+                id=message_id,
+                type="function",
+                function=FunctionCall(name=name, arguments="{}"),
+            )
+        ],
+    ).to_message()
+
+
+def tool_result(message_id: str, content: str = "result") -> Message:
+    return HumanToolResultMessage(id=message_id, content=content).to_message()
 
 
 def function_to_tool(function: FunctionDefinition) -> ChatCompletionToolParam:

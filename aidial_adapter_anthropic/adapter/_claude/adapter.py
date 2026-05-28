@@ -93,7 +93,6 @@ from aidial_adapter_anthropic.adapter._base import (
     ChatCompletionAdapter,
     default_preprocess_messages,
     keep_last,
-    turn_based_partitioner,
 )
 from aidial_adapter_anthropic.adapter._claude.blocks import (
     IMAGE_ATTACHMENT_PROCESSOR,
@@ -137,6 +136,7 @@ from aidial_adapter_anthropic.adapter._decorator.replicator import (
     replicator_decorator,
 )
 from aidial_adapter_anthropic.adapter._errors import ValidationError
+from aidial_adapter_anthropic.adapter._partitioner import claude_partitioner
 from aidial_adapter_anthropic.adapter._truncate_prompt import (
     DiscardedMessages,
     truncate_prompt,
@@ -339,7 +339,7 @@ class Adapter(ChatCompletionAdapter):
             messages=request.messages.lst,
             tokenizer=create_tokenizer(self.tokenizer, request.params),
             keep_message=keep_last,
-            partitioner=turn_based_partitioner,
+            partitioner=claude_partitioner,
             model_limit=None,
             user_limit=max_prompt_tokens,
         )

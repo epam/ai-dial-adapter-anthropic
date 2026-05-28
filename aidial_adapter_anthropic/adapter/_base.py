@@ -81,12 +81,3 @@ def keep_last(messages: list[Any], idx: int) -> bool:
 
 def keep_last_and_system_messages(messages: list[Message], idx: int) -> bool:
     return is_system_role(messages[idx].role) or keep_last(messages, idx)
-
-
-def trivial_partitioner(messages: list[Any]) -> list[int]:
-    return [1] * len(messages)
-
-
-def turn_based_partitioner(messages: list[Any]) -> list[int]:
-    n = len(messages)
-    return [2] * (n // 2) + [1] * (n % 2)
