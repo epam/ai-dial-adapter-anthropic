@@ -1,6 +1,6 @@
 from typing import TypedDict
 
-from aidial_adapter_anthropic.adapter._base import (
+from aidial_adapter_anthropic.adapter._partitioner import (
     trivial_partitioner,
 )
 from aidial_adapter_anthropic.adapter._truncate_prompt import (

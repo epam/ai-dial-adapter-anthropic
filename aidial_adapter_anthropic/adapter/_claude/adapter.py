@@ -91,7 +91,6 @@ from aidial_adapter_anthropic._utils.json import json_dumps_short
 from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter._base import (
     ChatCompletionAdapter,
-    claude_partitioner,
     default_preprocess_messages,
     keep_last,
 )
@@ -137,6 +136,7 @@ from aidial_adapter_anthropic.adapter._decorator.replicator import (
     replicator_decorator,
 )
 from aidial_adapter_anthropic.adapter._errors import ValidationError
+from aidial_adapter_anthropic.adapter._partitioner import claude_partitioner
 from aidial_adapter_anthropic.adapter._truncate_prompt import (
     DiscardedMessages,
     truncate_prompt,
