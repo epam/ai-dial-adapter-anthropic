@@ -16,27 +16,20 @@ def _has_content_block(message: BetaMessageParam, block_type: str) -> bool:
     )
 
 
-def _is_assistant_tool_call(payload: BetaMessageParam) -> bool:
-    if payload["role"] != "assistant":
-        return False
-
-    return _has_content_block(payload, "tool_use")
-
-
-def _is_tool_result(payload: BetaMessageParam) -> bool:
-    return payload["role"] == "tool" or _has_content_block(
-        payload, "tool_result"
+def _is_assistant_tool_call(message: BetaMessageParam) -> bool:
+    return _role(message) == "assistant" and _has_content_block(
+        message, "tool_use"
     )
 
 
-def _role(payload: BetaMessageParam) -> Literal["user", "assistant"]:
-    return payload["role"]
+def _is_tool_result(message: BetaMessageParam) -> bool:
+    return _role(message) == "user" and _has_content_block(
+        message, "tool_result"
+    )
 
 
-def _payload(
-    i: tuple[WithResources[BetaMessageParam], set[int]],
-) -> BetaMessageParam:
-    return i[0].payload
+def _role(message: BetaMessageParam) -> Literal["user", "assistant"]:
+    return message["role"]
 
 
 def claude_partitioner(
@@ -51,24 +44,24 @@ def claude_partitioner(
     Partitioning rules:
     - Default behavior follows turn-based truncation (pairs of two).
     - Tool-call flows are grouped as transactions:
-      `user -> assistant(tool_call)+ -> tool_result+ -> assistant?`.
+      `user* -> (assistant(tool_call) | tool_result)* -> assistant*`.
       This prevents orphan tool-result blocks when earlier history is dropped.
     """
     n = len(messages)
-    payloads = [_payload(msg) for msg in messages]
+    unwrapped = [m[0].payload for m in messages]
     ret: list[int] = []
     idx = 0
 
     while idx < n:
         end = idx
-        while end < n and _role(payloads[end]) == "user":
+        while end < n and _role(unwrapped[end]) == "user":
             end += 1
         while end < n and (
-            _is_assistant_tool_call(payloads[end])
-            or _is_tool_result(payloads[end])
+            _is_assistant_tool_call(unwrapped[end])
+            or _is_tool_result(unwrapped[end])
         ):
             end += 1
-        while end < n and _role(payloads[end]) == "assistant":
+        while end < n and _role(unwrapped[end]) == "assistant":
             end += 1
 
         ret.append(end - idx)
