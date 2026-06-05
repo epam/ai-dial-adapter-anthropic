@@ -13,7 +13,7 @@ dependencies = [
   "anthropic (>=0.95.0,<1)",
   "pydantic (>=2.8.2,<3)",
   "pillow (>=10.4.0,<13)",
-  "aiohttp (>=3.14.0,<4)",
+  "aiohttp (>=3.13.3,<4)",
 ]
 
 [project.urls]
