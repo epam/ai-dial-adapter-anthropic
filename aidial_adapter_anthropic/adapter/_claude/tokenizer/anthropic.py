@@ -4,6 +4,7 @@ from aidial_sdk.exceptions import InternalServerError
 from anthropic import (
     AsyncAnthropic,
     AsyncAnthropicBedrock,
+    AsyncAnthropicBedrockMantle,
     AsyncAnthropicFoundry,
     AsyncAnthropicVertex,
 )
@@ -16,6 +17,7 @@ from aidial_adapter_anthropic.adapter._claude.params import ClaudeParameters
 AnthropicClient = (
     AsyncAnthropic
     | AsyncAnthropicBedrock
+    | AsyncAnthropicBedrockMantle
     | AsyncAnthropicVertex
     | AsyncAnthropicFoundry
 )
