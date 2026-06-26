@@ -8,6 +8,7 @@ from aidial_sdk.chat_completion import Message as DialMessage
 from anthropic import (
     AsyncAnthropic,
     AsyncAnthropicBedrock,
+    AsyncAnthropicBedrockMantle,
     AsyncAnthropicFoundry,
     AsyncAnthropicVertex,
     Omit,
@@ -194,6 +195,7 @@ class ClaudeRequest:
 AnthropicClient = (
     AsyncAnthropic
     | AsyncAnthropicBedrock
+    | AsyncAnthropicBedrockMantle
     | AsyncAnthropicVertex
     | AsyncAnthropicFoundry
 )
