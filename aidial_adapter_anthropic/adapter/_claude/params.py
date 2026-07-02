@@ -10,6 +10,14 @@ from anthropic.types.beta import BetaTextBlockParam as TextBlockParam
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
 from anthropic.types.beta import BetaToolChoiceParam as ToolChoice
 from anthropic.types.beta import BetaToolParam as ToolParam
+from anthropic.types.beta import (
+    BetaWebSearchTool20250305Param,
+    BetaWebSearchTool20260209Param,
+)
+
+WebSearchToolParam = (
+    BetaWebSearchTool20250305Param | BetaWebSearchTool20260209Param
+)
 
 
 class ClaudeParameters(TypedDict):
@@ -23,7 +31,7 @@ class ClaudeParameters(TypedDict):
     system: str | list[TextBlockParam] | Omit
     temperature: float | Omit
     top_p: float | Omit
-    tools: list[ToolParam] | Omit
+    tools: list[ToolParam | WebSearchToolParam] | Omit
     tool_choice: ToolChoice | Omit
     thinking: ThinkingConfigParam | Omit
     betas: list[AnthropicBetaParam] | Omit

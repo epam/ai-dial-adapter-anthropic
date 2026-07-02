@@ -84,7 +84,10 @@ from anthropic.types.beta.beta_tool_result_block_param import (
 )
 from PIL import Image
 
-from aidial_adapter_anthropic.adapter._claude.params import ClaudeParameters
+from aidial_adapter_anthropic.adapter._claude.params import (
+    ClaudeParameters,
+    WebSearchToolParam,
+)
 from aidial_adapter_anthropic.adapter._tokenize import default_tokenize_string
 
 _log = logging.getLogger(__name__)
@@ -228,7 +231,7 @@ class ApproximateTokenizer:
             tokens += self._tokenize_message(message) + per_message_tokens
         return tokens
 
-    def _tokenize_tool_param(self, tool: ToolParam) -> int:
+    def _tokenize_tool_param(self, tool: ToolParam | WebSearchToolParam) -> int:
         return self.tokenize_text(json.dumps(tool))
 
     def tokenize_tool_system_message(

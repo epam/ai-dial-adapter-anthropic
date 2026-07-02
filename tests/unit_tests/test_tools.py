@@ -1,14 +1,34 @@
+import pytest
 from aidial_sdk.chat_completion.request import AzureChatCompletionRequest
+from aidial_sdk.exceptions import RequestValidationError
+from anthropic import Omit
 from openai.types.chat import ChatCompletionToolParam
 
+from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.adapter._claude.converters import (
     to_claude_tool_config,
 )
+from aidial_adapter_anthropic.dial.request import ModelParameters
 from aidial_adapter_anthropic.dial.tools import ToolsConfig
 from tests.utils.openai import (
     GET_WEATHER_TOOL,
     GET_WEATHER_TOOL_WITH_REFERENCES,
+    user,
 )
+
+WEB_SEARCH_TOOL_REQUEST = {
+    "type": "web_search_20250305",
+    "name": "web_search",
+    "max_uses": 5,
+    "allowed_domains": ["example.com", "example.org"],
+    "user_location": {
+        "type": "approximate",
+        "city": "San Francisco",
+        "region": "California",
+        "country": "US",
+        "timezone": "America/Los_Angeles",
+    },
+}
 
 
 def _run_schema_references_check(tool: ChatCompletionToolParam, has_refs: bool):
@@ -34,3 +54,87 @@ def test_tools_schemas_with_references():
 
 def test_tools_schemas_without_references():
     _run_schema_references_check(GET_WEATHER_TOOL, False)
+
+
+@pytest.mark.parametrize(
+    "tool_type",
+    ["web_search_20250305", "web_search_20260209"],
+)
+async def test_web_search_minimal_passthrough(adapter: Adapter, tool_type: str):
+    tool = {"type": tool_type, "name": "web_search"}
+    request = await adapter._prepare_claude_request(
+        ModelParameters(configuration={"web_search": tool}),
+        [user("What is the weather in NYC?")],
+    )
+
+    assert request.params["tools"] == [tool]
+
+
+async def test_web_search_all_optional_fields_preserved(adapter: Adapter):
+    request = await adapter._prepare_claude_request(
+        ModelParameters(configuration={"web_search": WEB_SEARCH_TOOL_REQUEST}),
+        [user("What is the weather in NYC?")],
+    )
+
+    tools = request.params["tools"]
+    assert not isinstance(tools, Omit)
+    assert tools == [WEB_SEARCH_TOOL_REQUEST]
+
+
+async def test_web_search_tool_choice_left_default(adapter: Adapter):
+    # Web search is a server tool: enabling it must not force a tool_choice.
+    request = await adapter._prepare_claude_request(
+        ModelParameters(configuration={"web_search": WEB_SEARCH_TOOL_REQUEST}),
+        [user("hello")],
+    )
+
+    assert isinstance(request.params["tool_choice"], Omit)
+
+
+async def test_web_search_appended_after_function_tools(adapter: Adapter):
+    dial_request = AzureChatCompletionRequest.model_validate(
+        {"messages": [], "tools": [GET_WEATHER_TOOL]}
+    )
+    tool_config = ToolsConfig.from_request(dial_request)
+
+    request = await adapter._prepare_claude_request(
+        ModelParameters(
+            configuration={"web_search": WEB_SEARCH_TOOL_REQUEST},
+            tool_config=tool_config,
+        ),
+        [user("What is the weather in NYC?")],
+    )
+
+    tools = request.params["tools"]
+    assert not isinstance(tools, Omit)
+    assert len(tools) == 2
+    assert tools[0]["name"] == "get_temperature"
+    assert tools[-1] == WEB_SEARCH_TOOL_REQUEST
+
+
+async def test_no_web_search_keeps_tools_omitted(adapter: Adapter):
+    request = await adapter._prepare_claude_request(
+        ModelParameters(),
+        [user("hello")],
+    )
+
+    assert isinstance(request.params["tools"], Omit)
+
+
+@pytest.mark.parametrize(
+    "invalid_tool",
+    [
+        pytest.param({"name": "web_search"}, id="missing-type"),
+        pytest.param({"type": "web_search_20250305"}, id="missing-name"),
+    ],
+)
+async def test_web_search_invalid_definition_rejected(
+    adapter: Adapter, invalid_tool: dict
+):
+    request = adapter._prepare_claude_request(
+        ModelParameters(configuration={"web_search": invalid_tool}),
+        [user("hello")],
+    )
+
+    with pytest.raises(RequestValidationError):
+        await request

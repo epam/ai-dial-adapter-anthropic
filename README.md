@@ -21,6 +21,7 @@
   - [Automatic caching](#automatic-caching)
   - [Explicit cache breakpoints](#explicit-cache-breakpoints)
   - [TTL support](#ttl-support)
+- [Web search](#web-search)
 - [Development Environment](#development-environment)
   - [Setup](#setup)
   - [Lint](#lint)
@@ -156,6 +157,67 @@ A cache breakpoint may include an optional `ttl` field. Supported values are `5m
   "custom_fields": {
     "cache_breakpoint": {
       "ttl": "1h"
+    }
+  }
+}
+```
+
+</details>
+
+---
+
+## Web search
+
+Web search gives Claude direct access to real-time web content, allowing it to answer questions with up-to-date information beyond its knowledge cutoff. It is an Anthropic server-side tool: the searches are executed on Anthropic's side, and the final response includes citations for the sources used. See [Web search tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool) in the Anthropic docs.
+
+To enable web search, set `custom_fields.configuration.web_search` to the Anthropic web search tool definition.
+
+<details><summary>Enable web search</summary>
+
+```json
+{
+  "model": "claude-opus-4-8",
+  "messages": [
+    {"role": "user", "content": "What is the weather in NYC?"}
+  ],
+  "custom_fields": {
+    "configuration": {
+      "web_search": {
+        "type": "web_search_20250305",
+        "name": "web_search"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+The tool definition supports optional fields such as `max_uses`, `allowed_domains`, `blocked_domains`, and `user_location`. See [Tool definition](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool#tool-definition) in the Anthropic docs.
+
+<details><summary>Web search with optional fields</summary>
+
+```json
+{
+  "model": "claude-opus-4-8",
+  "messages": [
+    {"role": "user", "content": "What is the weather in San Francisco?"}
+  ],
+  "custom_fields": {
+    "configuration": {
+      "web_search": {
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": 5,
+        "allowed_domains": ["example.com", "trusteddomain.org"],
+        "user_location": {
+          "type": "approximate",
+          "city": "San Francisco",
+          "region": "California",
+          "country": "US",
+          "timezone": "America/Los_Angeles"
+        }
+      }
     }
   }
 }

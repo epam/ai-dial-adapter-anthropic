@@ -74,6 +74,7 @@ from anthropic.types.beta import (
 )
 from anthropic.types.beta import BetaThinkingBlock as ThinkingBlock
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
+from anthropic.types.beta import BetaToolParam as ToolParam
 from anthropic.types.beta import (
     BetaToolSearchToolResultBlock as ToolSearchToolResultBlock,
 )
@@ -115,7 +116,10 @@ from aidial_adapter_anthropic.adapter._claude.converters import (
     to_dial_finish_reason,
     to_dial_usage,
 )
-from aidial_adapter_anthropic.adapter._claude.params import ClaudeParameters
+from aidial_adapter_anthropic.adapter._claude.params import (
+    ClaudeParameters,
+    WebSearchToolParam,
+)
 from aidial_adapter_anthropic.adapter._claude.state import MessageState
 from aidial_adapter_anthropic.adapter._claude.tokenizer import (
     AnthropicTokenizer,
@@ -269,6 +273,12 @@ class Adapter(ChatCompletionAdapter):
 
         tools_config = to_claude_tool_config(params.tool_config)
 
+        tools: list[ToolParam | WebSearchToolParam] = list(
+            tools_config.tools if tools_config else []
+        )
+        if (web_search := configuration.web_search) is not None:
+            tools.append(web_search)
+
         parsed_messages = [
             function_to_tool_messages(parse_dial_message(m)) for m in messages
         ]
@@ -321,7 +331,7 @@ class Adapter(ChatCompletionAdapter):
             system=system_prompt or omit,
             temperature=temperature,
             top_p=top_p or omit,
-            tools=(tools_config and tools_config.tools) or omit,
+            tools=tools or omit,
             tool_choice=(tools_config and tools_config.tool_choice) or omit,
             thinking=thinking,
             betas=configuration.betas or omit,
