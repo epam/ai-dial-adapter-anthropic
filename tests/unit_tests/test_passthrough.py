@@ -16,9 +16,9 @@ from httpx import ASGITransport
 
 from aidial_adapter_anthropic.passthrough import create_anthropic_api_app
 from tests.unit_tests.anthropic_mocks import (
-    MOCKER_TYPES,
     AnthropicAPIMock,
     AnthropicMocker,
+    get_mocker_types,
     read_fixture,
 )
 
@@ -31,7 +31,10 @@ _BASE_MESSAGES_REQUEST = {
 _MESSAGES_REQUEST = {**_BASE_MESSAGES_REQUEST, "max_tokens": 1024}
 
 
-@pytest.fixture(params=MOCKER_TYPES, ids=[cls.id for cls in MOCKER_TYPES])
+@pytest.fixture(
+    params=get_mocker_types(),
+    ids=[cls.id for cls in get_mocker_types()],
+)
 def mocker(request):
     ret = request.param.create()
     with ret.router:
@@ -199,7 +202,7 @@ class TestCountTokens:
                 "type": "error",
                 "error": {
                     "type": "not_found_error",
-                    "message": mocker.count_tokens_error,
+                    "message": "Endpoint not supported",
                 },
             }
 
@@ -256,7 +259,7 @@ class TestMessageBatches:
                 "type": "error",
                 "error": {
                     "type": "not_found_error",
-                    "message": mocker.batches_error,
+                    "message": "Endpoint not supported",
                 },
             }
 
@@ -434,7 +437,7 @@ class TestUnexpectedError:
             "type": "error",
             "error": {
                 "type": "api_error",
-                "message": "Connection error.",
+                "message": "Internal server error",
             },
         }
 

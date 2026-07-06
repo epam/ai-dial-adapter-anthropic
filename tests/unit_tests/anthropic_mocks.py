@@ -355,10 +355,11 @@ class AnthropicVertexMocker(AnthropicMocker):
             )
 
 
-MOCKER_TYPES: list[type[AnthropicMocker]] = [
-    AnthropicPlatformMocker,
-    AnthropicFoundryMocker,
-    AnthropicMantleMocker,
-    AnthropicBedrockLegacyMocker,
-    AnthropicVertexMocker,
-]
+def get_mocker_types() -> list[type[AnthropicMocker]]:
+    return [
+        AnthropicPlatformMocker,
+        AnthropicFoundryMocker,
+        AnthropicMantleMocker,
+        AnthropicBedrockLegacyMocker,
+        AnthropicVertexMocker,
+    ]

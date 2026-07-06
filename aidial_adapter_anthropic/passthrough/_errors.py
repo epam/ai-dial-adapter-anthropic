@@ -76,18 +76,16 @@ def _classify_exception(e: Exception) -> tuple[int, str]:
     if isinstance(e, DialException):
         return e.status_code, e.message
 
-    if isinstance(e, anthropic.AnthropicError):
-        if (
-            not isinstance(e, anthropic.APIError)
-            and "not supported" in str(e).lower()
-        ):
-            # Bedrock lacks some endpoints (count_tokens, batches); the SDK
-            # signals this with a "not supported" AnthropicError — a 404.
-            return 404, str(e)
-        # Other Anthropic SDK errors carry a curated, safe-to-relay message.
-        return 500, str(e)
+    if isinstance(e, anthropic.AnthropicError) and (
+        not isinstance(e, anthropic.APIError)
+        and "not supported" in str(e).lower()
+    ):
+        # Bedrock lacks some endpoints (count_tokens, batches); the SDK
+        # signals this with a "not supported" AnthropicError — a 404.
+        return 404, "Endpoint not supported"
 
-    # A non-Anthropic exception may leak internal details; relay a generic
+    # A all other internal Anthropic exception and non-Anthropic exceptions
+    # may leak internal details; relay a generic
     # message (the full trace is logged by the caller).
     return 500, "Internal server error"
 
