@@ -1,7 +1,7 @@
 """Transparent passthrough for the Anthropic Messages API.
 
-Exposes a subset of the Anthropic API (messages, batches, token counting and
-model listing) as a mountable sub-application that forwards requests to an
+Exposes a subset of the Anthropic API (messages, batches, and token counting)
+as a mountable sub-application that forwards requests to an
 upstream Anthropic client chosen per request.
 
 Typical usage::
