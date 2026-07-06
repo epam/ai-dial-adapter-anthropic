@@ -99,13 +99,16 @@ class AnthropicMocker(ABC):
 
     @classmethod
     @abstractmethod
-    def create(cls) -> Self: ...
+    def create(cls) -> Self:
+        raise NotImplementedError
 
     @abstractmethod
-    def make_client(self) -> AnthropicClient: ...
+    def make_client(self) -> AnthropicClient:
+        raise NotImplementedError
 
     @abstractmethod
-    def mock(self, base: AnthropicAPIMock) -> None: ...
+    def mock(self, base: AnthropicAPIMock) -> None:
+        raise NotImplementedError
 
 
 def _responder(

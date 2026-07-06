@@ -6,7 +6,6 @@ filtering, SSE (re)formatting, response-body decoding and the Bedrock event
 stream conversion.
 """
 
-import contextlib
 import json
 from collections.abc import AsyncIterator, Callable
 
@@ -48,9 +47,10 @@ async def bedrock_stream_to_sse(
         for event in event_stream_buffer:
             message = decoder._parse_message_from_event(event)
             if message:
-                event_type = "completion"
-                with contextlib.suppress(Exception):
-                    event_type = json.loads(message).get("type")
+                try:
+                    event_type = json.loads(message).get("type") or "completion"
+                except Exception:
+                    event_type = "completion"
                 yield ServerSentEvent(data=message, event=event_type)
 
 

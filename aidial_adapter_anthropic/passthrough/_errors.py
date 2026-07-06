@@ -76,20 +76,20 @@ def _classify_exception(e: Exception) -> tuple[int, str]:
     if isinstance(e, DialException):
         return e.status_code, e.message
 
-    if (
-        isinstance(e, anthropic.AnthropicError)
-        and not isinstance(e, anthropic.APIError)
-        and "not supported" in str(e).lower()
-    ):
-        # The SDK raises a bare AnthropicError (never an APIError, which covers
-        # every HTTP and connection failure) with a "not supported" message when
-        # the selected backend has no such endpoint — e.g. Bedrock has no
-        # token-counting or batches route. That is a missing resource (404), not
-        # a server fault. Any other bare AnthropicError (missing credentials,
-        # misconfiguration, ...) stays a 500.
-        return 404, str(e)
+    if isinstance(e, anthropic.AnthropicError):
+        if (
+            not isinstance(e, anthropic.APIError)
+            and "not supported" in str(e).lower()
+        ):
+            # Bedrock lacks some endpoints (count_tokens, batches); the SDK
+            # signals this with a "not supported" AnthropicError — a 404.
+            return 404, str(e)
+        # Other Anthropic SDK errors carry a curated, safe-to-relay message.
+        return 500, str(e)
 
-    return 500, str(e)
+    # A non-Anthropic exception may leak internal details; relay a generic
+    # message (the full trace is logged by the caller).
+    return 500, "Internal server error"
 
 
 def anthropic_response_decorator(func: _Handler) -> _Handler:
