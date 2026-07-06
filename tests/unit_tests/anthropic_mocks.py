@@ -75,11 +75,9 @@ class AnthropicMocker(ABC):
     id: ClassVar[str]
     # Not every backend exposes token counting and batching (the legacy Bedrock
     # runtime exposes neither, Vertex has no batches endpoint). When it doesn't,
-    # the SDK raises before making any HTTP call and the proxy maps that to a
-    # 404; these hold the exact message the client receives (None ⇔ supported)
-    # so tests can assert the whole error body.
-    count_tokens_error: ClassVar[str | None] = None
-    batches_error: ClassVar[str | None] = None
+    # the SDK raises before making any HTTP call and the proxy maps that to a 404.
+    supports_count_tokens: ClassVar[bool] = True
+    supports_batches: ClassVar[bool] = True
     # The legacy Bedrock runtime streams the AWS event stream format, which the
     # proxy decodes and re-encodes as SSE; every other backend relays SSE bytes
     # verbatim.
@@ -88,14 +86,6 @@ class AnthropicMocker(ABC):
     # don't support; every other backend forwards the header untouched.
     is_bedrock: ClassVar[bool] = False
     router: respx.MockRouter
-
-    @property
-    def supports_count_tokens(self) -> bool:
-        return self.count_tokens_error is None
-
-    @property
-    def supports_batches(self) -> bool:
-        return self.batches_error is None
 
     @classmethod
     @abstractmethod
@@ -277,8 +267,8 @@ class AnthropicMantleMocker(AnthropicMocker):
 
 class AnthropicBedrockLegacyMocker(AnthropicMocker):
     id = "bedrock-legacy"
-    count_tokens_error = "Token counting is not supported in Bedrock yet"
-    batches_error = "The Batch API is not supported in Bedrock yet"
+    supports_count_tokens = False
+    supports_batches = False
     reencodes_stream = True
     is_bedrock = True
 
@@ -318,7 +308,7 @@ class AnthropicBedrockLegacyMocker(AnthropicMocker):
 
 class AnthropicVertexMocker(AnthropicMocker):
     id = "vertex"
-    batches_error = "The Batch API is not supported in the Vertex client yet"
+    supports_batches = False
 
     @classmethod
     def create(cls) -> Self:
