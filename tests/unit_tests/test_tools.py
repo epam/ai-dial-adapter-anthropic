@@ -57,28 +57,34 @@ def test_tools_schemas_without_references():
 
 
 @pytest.mark.parametrize(
-    "tool_type",
-    ["web_search_20250305", "web_search_20260209"],
+    ("tool", "expected"),
+    [
+        pytest.param(
+            {"type": "web_search_20250305", "name": "web_search"},
+            [{"type": "web_search_20250305", "name": "web_search"}],
+            id="minimal-20250305",
+        ),
+        pytest.param(
+            {"type": "web_search_20260209", "name": "web_search"},
+            [{"type": "web_search_20260209", "name": "web_search"}],
+            id="minimal-20260209",
+        ),
+        pytest.param(
+            WEB_SEARCH_TOOL_REQUEST,
+            [WEB_SEARCH_TOOL_REQUEST],
+            id="optional-fields-preserved",
+        ),
+    ],
 )
-async def test_web_search_minimal_passthrough(adapter: Adapter, tool_type: str):
-    tool = {"type": tool_type, "name": "web_search"}
+async def test_web_search_passthrough_payload(
+    adapter: Adapter, tool: dict, expected: list[dict]
+):
     request = await adapter._prepare_claude_request(
         ModelParameters(configuration={"web_search": tool}),
         [user("What is the weather in NYC?")],
     )
 
-    assert request.params["tools"] == [tool]
-
-
-async def test_web_search_all_optional_fields_preserved(adapter: Adapter):
-    request = await adapter._prepare_claude_request(
-        ModelParameters(configuration={"web_search": WEB_SEARCH_TOOL_REQUEST}),
-        [user("What is the weather in NYC?")],
-    )
-
-    tools = request.params["tools"]
-    assert not isinstance(tools, Omit)
-    assert tools == [WEB_SEARCH_TOOL_REQUEST]
+    assert request.params["tools"] == expected
 
 
 async def test_web_search_tool_choice_left_default(adapter: Adapter):
@@ -110,6 +116,32 @@ async def test_web_search_appended_after_function_tools(adapter: Adapter):
     assert len(tools) == 2
     assert tools[0]["name"] == "get_temperature"
     assert tools[-1] == WEB_SEARCH_TOOL_REQUEST
+
+
+async def test_web_search_preserves_existing_function_tool_choice(
+    adapter: Adapter,
+):
+    dial_request = AzureChatCompletionRequest.model_validate(
+        {
+            "messages": [],
+            "tools": [GET_WEATHER_TOOL],
+            "tool_choice": "required",
+        }
+    )
+    tool_config = ToolsConfig.from_request(dial_request)
+    assert tool_config is not None
+
+    request = await adapter._prepare_claude_request(
+        ModelParameters(
+            configuration={"web_search": WEB_SEARCH_TOOL_REQUEST},
+            tool_config=tool_config,
+        ),
+        [user("What is the weather in NYC?")],
+    )
+
+    expected_config = to_claude_tool_config(tool_config)
+    assert expected_config is not None
+    assert request.params["tool_choice"] == expected_config.tool_choice
 
 
 async def test_no_web_search_keeps_tools_omitted(adapter: Adapter):

@@ -91,6 +91,11 @@ _TOOL_CONFIG = ToolsConfig(
     tools_mode=ToolsMode.TOOLS,
 )
 
+_WEB_SEARCH_TOOL = {
+    "type": "web_search_20250305",
+    "name": "web_search",
+}
+
 _PER_MESSAGE_TOKENS = 5
 
 _PNG_IMAGE_50_50 = "iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAIAAACRXR/mAAAAS0lEQVR4nO3OsQEAEADAMPz/Mw9YMjE0F2Tu8aP1OnBXS9QStUQtUUvUErVELVFL1BK1RC1RS9QStUQtUUvUErVELVFL1BK1RC1xAEGqAWOFuDKrAAAAAElFTkSuQmCC"
@@ -169,6 +174,28 @@ async def test_one_turn_with_tools(model):
         discarded_messages
         == f"The requested maximum prompt tokens is {expected_tokens - 1}. However, the system messages and the last user message resulted in {expected_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
     )
+
+
+async def test_one_turn_with_tools_and_web_search(model):
+    messages = [
+        sys("11"),
+        user("22"),
+        ai("33"),
+    ]
+    base = await model.count_prompt_tokens(
+        ModelParameters(tool_config=_TOOL_CONFIG),
+        messages,
+    )
+    with_web_search = await model.count_prompt_tokens(
+        ModelParameters(
+            tool_config=_TOOL_CONFIG,
+            configuration={"web_search": _WEB_SEARCH_TOOL},
+        ),
+        messages,
+    )
+
+    # _MockTokenizer tokenizes each tool definition string as 1 token.
+    assert with_web_search == base + 1
 
 
 async def test_one_turn_overflow(model):
