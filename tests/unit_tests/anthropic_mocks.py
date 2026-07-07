@@ -82,9 +82,6 @@ class AnthropicMocker(ABC):
     # proxy decodes and re-encodes as SSE; every other backend relays SSE bytes
     # verbatim.
     reencodes_stream: ClassVar[bool] = False
-    # Bedrock backends (legacy and Mantle) drop the anthropic-beta flags they
-    # don't support; every other backend forwards the header untouched.
-    is_bedrock: ClassVar[bool] = False
     router: respx.MockRouter
 
     @classmethod
@@ -229,7 +226,6 @@ class AnthropicFoundryMocker(AnthropicMocker):
 
 class AnthropicMantleMocker(AnthropicMocker):
     id = "bedrock-mantle"
-    is_bedrock = True
 
     @classmethod
     def create(cls) -> Self:
@@ -270,7 +266,6 @@ class AnthropicBedrockLegacyMocker(AnthropicMocker):
     supports_count_tokens = False
     supports_batches = False
     reencodes_stream = True
-    is_bedrock = True
 
     @classmethod
     def create(cls) -> Self:

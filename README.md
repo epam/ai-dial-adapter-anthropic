@@ -92,7 +92,7 @@ The Bedrock backends require `botocore`, which is an optional dependency:
 pip install aidial-adapter-anthropic[bedrock]
 ```
 
-For Bedrock, `anthropic-beta` flags that Bedrock does not support are stripped automatically so the upstream does not reject the request. Endpoints a backend does not implement (e.g. Bedrock has no token-counting or batches route) surface as a `404` error.
+Endpoints a backend does not implement (e.g. Bedrock has no token-counting or batches route) surface as a `404` error.
 
 ---
 

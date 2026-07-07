@@ -87,61 +87,22 @@ def strip_content_headers(response_headers: httpx.Headers) -> None:
     response_headers.pop("Content-Length", None)
 
 
-# Bedrock does not support these Anthropic beta flags; passing them through
-# would make the upstream reject the request, so they are stripped.
-_UNSUPPORTED_BEDROCK_ANTHROPIC_BETA_FLAGS = {
-    "oauth-2025-04-20",
-    "redact-thinking-2026-02-12",
-    "thinking-token-count-2026-05-13",
-    "prompt-caching-scope-2026-01-05",
-    "claude-code-20250219",
-    "advisor-tool-2026-03-01",
-}
-
-
-def _adapt_anthropic_beta_for_bedrock(value: str | None) -> str | None:
-    if value is None:
-        return None
-    features = [
-        feature
-        for feature in value.split(",")
-        if feature not in _UNSUPPORTED_BEDROCK_ANTHROPIC_BETA_FLAGS
-    ]
-    return ",".join(features) or None
-
-
-def _on_dict_value(
-    dct: dict[str, str],
-    key: str,
-    func: Callable[[str | None], str | None],
-) -> dict[str, str]:
-    value = func(dct.get(key))
-    if value is None:
-        dct.pop(key, None)
-    else:
-        dct[key] = value
-    return dct
-
-
-def build_request_headers(
-    headers: StarletteHeaders, *, is_bedrock: bool
-) -> dict[str, str]:
-    """Select the request headers that must reach the upstream.
-
-    Only Anthropic-specific headers and the encoding-control header are
-    forwarded; everything else (host, auth added by the client, etc.) is
-    dropped. Bedrock-unsupported beta flags are additionally stripped.
-    """
-
+def build_request_headers(headers: StarletteHeaders) -> dict[str, str]:
     def _keep_header(header: str) -> bool:
         header = header.lower()
         return header.startswith("anthropic-") or header == "accept-encoding"
 
-    result = {k.lower(): v for (k, v) in headers.items() if _keep_header(k)}
+    return {k.lower(): v for (k, v) in headers.items() if _keep_header(k)}
 
-    if is_bedrock:
-        result = _on_dict_value(
-            result, "anthropic-beta", _adapt_anthropic_beta_for_bedrock
-        )
 
-    return result
+def apply_anthropic_beta_features(
+    headers: dict[str, str],
+    transform: Callable[[list[str]], list[str]],
+) -> None:
+    raw = headers.get("anthropic-beta")
+    features = [f for f in raw.split(",") if f] if raw else []
+    features = transform(features)
+    if features:
+        headers["anthropic-beta"] = ",".join(features)
+    else:
+        headers.pop("anthropic-beta", None)

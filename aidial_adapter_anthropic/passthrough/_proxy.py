@@ -15,6 +15,7 @@ import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
+from functools import partial
 
 import httpx
 from anthropic import (
@@ -32,6 +33,7 @@ from aidial_adapter_anthropic.passthrough._errors import (
     anthropic_response_decorator,
 )
 from aidial_adapter_anthropic.passthrough._helpers import (
+    apply_anthropic_beta_features,
     bedrock_stream_to_sse,
     build_request_headers,
     is_streaming_request,
@@ -54,11 +56,16 @@ ClientFactory = (
     Callable[[Request], Awaitable[AnthropicClient]] | AnthropicClient
 )
 
+OnAnthropicBetaHeader = Callable[[AnthropicClient, list[str]], list[str]]
+
 
 @anthropic_response_decorator
 @logging_decorator
 async def _proxy(
-    request: Request, path: str, client: AnthropicClient
+    request: Request,
+    path: str,
+    client: AnthropicClient,
+    on_anthropic_beta_header: OnAnthropicBetaHeader | None,
 ) -> Response:
     json_body = None
     if content := await request.body():
@@ -67,10 +74,13 @@ async def _proxy(
 
     is_streaming = is_streaming_request(json_body, path)
 
-    is_bedrock = isinstance(
-        client, (AsyncAnthropicBedrock | AsyncAnthropicBedrockMantle)
-    )
-    headers = build_request_headers(request.headers, is_bedrock=is_bedrock)
+    headers = build_request_headers(request.headers)
+
+    if on_anthropic_beta_header is not None:
+        apply_anthropic_beta_features(
+            headers, partial(on_anthropic_beta_header, client)
+        )
+
     if _log.isEnabledFor(logging.DEBUG):
         # Ask the upstream not to compress the response so its body (and
         # streamed chunks) can be logged as-is. Forgoing compression on the
@@ -125,7 +135,9 @@ async def _proxy(
 
 
 def _create_proxy_handler(
-    path: str, get_client: ClientFactory
+    path: str,
+    get_client: ClientFactory,
+    on_anthropic_beta_header: OnAnthropicBetaHeader | None,
 ) -> Callable[[Request], Awaitable[Response]]:
     async def handler(request: Request) -> Response:
         client = (
@@ -133,7 +145,7 @@ def _create_proxy_handler(
             if isinstance(get_client, AnthropicClient)
             else await get_client(request)
         )
-        return await _proxy(request, path, client)
+        return await _proxy(request, path, client, on_anthropic_beta_header)
 
     return handler
 
@@ -145,12 +157,18 @@ _PROXIED_ENDPOINTS = [
 ]
 
 
-def create_anthropic_api_app(get_client: ClientFactory) -> FastAPI:
+def create_anthropic_api_app(
+    get_client: ClientFactory,
+    *,
+    on_anthropic_beta_header: OnAnthropicBetaHeader | None = None,
+) -> FastAPI:
     app = FastAPI()
     for method, path in _PROXIED_ENDPOINTS:
         app.router.add_api_route(
             path=path,
             methods=[method],
-            endpoint=_create_proxy_handler(path, get_client),
+            endpoint=_create_proxy_handler(
+                path, get_client, on_anthropic_beta_header
+            ),
         )
     return app
