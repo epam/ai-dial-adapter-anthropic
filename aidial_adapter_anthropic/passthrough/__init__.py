@@ -22,6 +22,7 @@ from starlette.applications import Starlette
 from aidial_adapter_anthropic.passthrough._proxy import (
     AnthropicClient,
     ClientFactory,
+    ClientT,
     OnAnthropicBetaHeader,
     create_anthropic_api_app,
 )
@@ -37,11 +38,11 @@ __all__ = [
 
 def mount_anthropic_api(
     app: Starlette,
-    get_client: ClientFactory,
+    get_client: ClientFactory[ClientT],
     *,
     path: str = "/anthropic",
     name: str = "Claude API passthrough",
-    on_anthropic_beta_header: OnAnthropicBetaHeader | None = None,
+    on_anthropic_beta_header: OnAnthropicBetaHeader[ClientT] | None = None,
 ) -> None:
     passthrough_app = create_anthropic_api_app(
         get_client, on_anthropic_beta_header=on_anthropic_beta_header

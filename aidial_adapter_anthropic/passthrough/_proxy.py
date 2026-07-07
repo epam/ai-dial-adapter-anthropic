@@ -16,6 +16,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from functools import partial
+from typing import TypeVar
 
 import httpx
 from anthropic import (
@@ -52,11 +53,9 @@ AnthropicClient = (
     | AsyncAnthropicFoundry
 )
 
-ClientFactory = (
-    Callable[[Request], Awaitable[AnthropicClient]] | AnthropicClient
-)
-
-OnAnthropicBetaHeader = Callable[[AnthropicClient, list[str]], list[str]]
+ClientT = TypeVar("ClientT", bound=AnthropicClient)
+ClientFactory = Callable[[Request], Awaitable[ClientT]] | ClientT
+OnAnthropicBetaHeader = Callable[[ClientT, list[str]], list[str]]
 
 
 @anthropic_response_decorator
@@ -65,7 +64,7 @@ async def _proxy(
     request: Request,
     path: str,
     client: AnthropicClient,
-    on_anthropic_beta_header: OnAnthropicBetaHeader | None,
+    on_anthropic_beta_header: OnAnthropicBetaHeader[AnthropicClient] | None,
 ) -> Response:
     json_body = None
     if content := await request.body():
@@ -136,8 +135,8 @@ async def _proxy(
 
 def _create_proxy_handler(
     path: str,
-    get_client: ClientFactory,
-    on_anthropic_beta_header: OnAnthropicBetaHeader | None,
+    get_client: ClientFactory[ClientT],
+    on_anthropic_beta_header: OnAnthropicBetaHeader[ClientT] | None,
 ) -> Callable[[Request], Awaitable[Response]]:
     async def handler(request: Request) -> Response:
         client = (
@@ -158,9 +157,9 @@ _PROXIED_ENDPOINTS = [
 
 
 def create_anthropic_api_app(
-    get_client: ClientFactory,
+    get_client: ClientFactory[ClientT],
     *,
-    on_anthropic_beta_header: OnAnthropicBetaHeader | None = None,
+    on_anthropic_beta_header: OnAnthropicBetaHeader[ClientT] | None = None,
 ) -> FastAPI:
     app = FastAPI()
     for method, path in _PROXIED_ENDPOINTS:
