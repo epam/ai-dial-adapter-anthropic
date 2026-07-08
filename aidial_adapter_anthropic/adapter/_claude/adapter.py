@@ -493,12 +493,12 @@ class Adapter(ChatCompletionAdapter):
                                 # Thinking is processed in ThinkingEvent
                                 pass
                             case ServerToolUseBlock(
-                                input=ws_input, name=ws_name
+                                input=stu_input, name=stu_name
                             ):
                                 server_tool_used = True
-                                match ws_name:
+                                match stu_name:
                                     case "web_search":
-                                        query = ws_input.get("query")
+                                        query = stu_input.get("query")
                                         web_search_stage.append_content(
                                             str(query) if query else ""
                                         )
@@ -513,7 +513,7 @@ class Adapter(ChatCompletionAdapter):
                                     ):
                                         pass
                                     case _:
-                                        assert_never(ws_name)
+                                        assert_never(stu_name)
                             case WebSearchToolResultBlock(content=ws_content):
                                 match ws_content:
                                     case WebSearchToolResultError(
@@ -618,12 +618,12 @@ class Adapter(ChatCompletionAdapter):
                         stage.append_content(thinking)
                 case RedactedThinkingBlock():
                     pass
-                case ServerToolUseBlock(input=ws_input, name=ws_name):
+                case ServerToolUseBlock(input=stu_input, name=stu_name):
                     server_tool_used = True
-                    match ws_name:
+                    match stu_name:
                         case "web_search":
                             with consumer.create_stage("Web Search") as stage:
-                                query = ws_input.get("query")
+                                query = stu_input.get("query")
                                 stage.append_content(
                                     str(query) if query else ""
                                 )
@@ -638,7 +638,7 @@ class Adapter(ChatCompletionAdapter):
                         ):
                             pass
                         case _:
-                            assert_never(ws_name)
+                            assert_never(stu_name)
                 case WebSearchToolResultBlock(content=ws_content):
                     match ws_content:
                         case WebSearchToolResultError(error_code=error_code):
