@@ -309,8 +309,7 @@ class TestRequestHeaderPassthrough:
 
         assert response.status_code == 200
         upstream_headers = mocker.router.calls.last.request.headers
-        # Anthropic-specific headers must reach the upstream (this flag survives
-        # Bedrock adaptation too).
+        # Anthropic-specific headers must reach the upstream.
         assert (
             upstream_headers["anthropic-beta"]
             == "token-efficient-tools-2025-02-19"
@@ -335,21 +334,16 @@ class TestAnthropicBetaAdaptation:
 
         mocker.mock(_Mock())
 
-    async def test_http_client(
+    async def test_default_forwards_header_untouched(
         self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
     ):
+        # Without a custom on_anthropic_beta_header the package performs no
+        # feature adaptation: the header reaches every backend verbatim.
         beta_header = (
             "oauth-2025-04-20,"
             "token-efficient-tools-2025-02-19,"
             "thinking-token-count-2026-05-13"
         )
-        # Bedrock strips the flags it doesn't support (only the unknown flag
-        # survives); every other backend forwards the header untouched.
-        expected_beta_header = (
-            "token-efficient-tools-2025-02-19"
-            if mocker.is_bedrock
-            else beta_header
-        )
 
         response = await http_client.post(
             "/v1/messages",
@@ -359,28 +353,54 @@ class TestAnthropicBetaAdaptation:
 
         assert response.status_code == 200
         upstream_headers = mocker.router.calls.last.request.headers
-        assert upstream_headers["anthropic-beta"] == expected_beta_header
+        assert upstream_headers["anthropic-beta"] == beta_header
 
-    async def test_http_client_drops_all_unsupported_header(
-        self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
+    async def test_custom_handler_rewrites_features(
+        self, mocker: AnthropicMocker
     ):
-        # When every flag is Bedrock-unsupported, Bedrock drops the header
-        # entirely rather than forwarding it empty; other backends forward it
-        # untouched.
-        beta_header = "oauth-2025-04-20,thinking-token-count-2026-05-13"
+        # The handler receives the upstream client and the parsed feature list,
+        # and the list it returns is forwarded (here: one flag dropped).
+        seen: dict[str, object] = {}
 
-        response = await http_client.post(
-            "/v1/messages",
-            json=_MESSAGES_REQUEST,
-            headers={"anthropic-beta": beta_header},
+        def on_beta(client, features: list[str]) -> list[str]:
+            seen["client"] = client
+            seen["features"] = list(features)
+            return [f for f in features if f != "drop-me"]
+
+        client = mocker.make_client()
+        app = create_anthropic_api_app(client, on_anthropic_beta_header=on_beta)
+        async with _asgi_client(app) as http_client:
+            response = await http_client.post(
+                "/v1/messages",
+                json=_MESSAGES_REQUEST,
+                headers={"anthropic-beta": "keep-me,drop-me"},
+            )
+
+        assert response.status_code == 200
+        assert seen["client"] is client
+        assert seen["features"] == ["keep-me", "drop-me"]
+        upstream_headers = mocker.router.calls.last.request.headers
+        assert upstream_headers["anthropic-beta"] == "keep-me"
+
+    async def test_custom_handler_dropping_all_removes_header(
+        self, mocker: AnthropicMocker
+    ):
+        # An empty result drops the header entirely rather than forwarding an
+        # empty anthropic-beta (which the upstream would reject).
+        app = create_anthropic_api_app(
+            mocker.make_client(),
+            on_anthropic_beta_header=lambda client, features: [],
         )
+        async with _asgi_client(app) as http_client:
+            response = await http_client.post(
+                "/v1/messages",
+                json=_MESSAGES_REQUEST,
+                headers={"anthropic-beta": "oauth-2025-04-20"},
+            )
 
         assert response.status_code == 200
         upstream_headers = mocker.router.calls.last.request.headers
-        if mocker.is_bedrock:
-            assert "anthropic-beta" not in upstream_headers
-        else:
-            assert upstream_headers["anthropic-beta"] == beta_header
+        assert "anthropic-beta" not in upstream_headers
 
 
 class TestErrorPassthrough:
