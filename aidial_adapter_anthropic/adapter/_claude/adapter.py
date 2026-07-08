@@ -441,6 +441,7 @@ class Adapter(ChatCompletionAdapter):
         ):
             stop_reason = None
             tool: ToolUseMessage | None = None
+            server_tool_used: bool = False
 
             async for event in stream:
                 if _log.isEnabledFor(DEBUG):
@@ -494,6 +495,7 @@ class Adapter(ChatCompletionAdapter):
                             case ServerToolUseBlock(
                                 input=ws_input, name=ws_name
                             ):
+                                server_tool_used = True
                                 match ws_name:
                                     case "web_search":
                                         query = ws_input.get("query")
@@ -530,12 +532,6 @@ class Adapter(ChatCompletionAdapter):
                                             )
                                     case _:
                                         assert_never(ws_content)
-
-                                consumer.choice.set_state(
-                                    {
-                                        "web_search_content": content_block.model_dump()
-                                    }
-                                )
                             case (
                                 CodeExecutionToolResultBlock()
                                 | MCPToolUseBlock()
@@ -558,7 +554,7 @@ class Adapter(ChatCompletionAdapter):
                     case ParsedMessageStopEvent(message=message):
                         await consumer.add_usage(to_dial_usage(message.usage))
                         stop_reason = message.stop_reason
-                        if self.supports_thinking:
+                        if self.supports_thinking or server_tool_used:
                             consumer.choice.set_state(
                                 MessageState(
                                     claude_message_content=message.content
@@ -604,7 +600,7 @@ class Adapter(ChatCompletionAdapter):
         if _log.isEnabledFor(DEBUG):
             _log.debug(f"response: {json_dumps_short(message)}")
 
-        web_search_used = False
+        server_tool_used = False
         for content in message.content:
             match content:
                 case TextBlock(text=text, citations=citations):
@@ -623,7 +619,7 @@ class Adapter(ChatCompletionAdapter):
                 case RedactedThinkingBlock():
                     pass
                 case ServerToolUseBlock(input=ws_input, name=ws_name):
-                    web_search_used = True
+                    server_tool_used = True
                     match ws_name:
                         case "web_search":
                             with consumer.create_stage("Web Search") as stage:
@@ -676,7 +672,7 @@ class Adapter(ChatCompletionAdapter):
                 case _:
                     assert_never(content)
 
-        if self.supports_thinking or web_search_used:
+        if self.supports_thinking or server_tool_used:
             consumer.choice.set_state(
                 MessageState(claude_message_content=message.content).to_dict()
             )
