@@ -17,6 +17,10 @@
 </h4>
 
 - [Overview](#overview)
+- [Anthropic API passthrough](#anthropic-api-passthrough)
+  - [Usage](#usage)
+  - [Proxied endpoints](#proxied-endpoints)
+  - [Supported backends](#supported-backends)
 - [Prompt caching](#prompt-caching)
   - [Automatic caching](#automatic-caching)
   - [Explicit cache breakpoints](#explicit-cache-breakpoints)
@@ -36,6 +40,60 @@
 ## Overview
 
 The framework provides adapter from [AI DIAL Chat Completion API](https://dialx.ai/dial_api#operation/sendChatCompletionRequest) to [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages).
+
+---
+
+## Anthropic API passthrough
+
+In addition to the DIAL-to-Anthropic adapter, the library exposes a transparent **passthrough** for the native Anthropic Messages API.
+
+The exposed Anthropic Messages API is compatible with the vanilla Anthropic Client from Anthropic SDK:
+
+```py
+from anthropic import Anthropic, AsyncAnthropic
+client = Anthropic(api_key="...", base_url="${ADAPTER_ORIGIN}/anthropic")
+```
+
+The upstream errors are relayed to the caller in the native [Anthropic error schema](https://platform.claude.com/docs/en/api/errors).
+
+### Usage
+
+Mount the passthrough onto any Starlette/FastAPI host application (e.g. a `DIALApp`) with `mount_anthropic_api`. The upstream client is chosen per request by a factory you supply:
+
+```python
+from aidial_sdk import DIALApp
+from anthropic import AsyncAnthropic
+from aidial_adapter_anthropic.passthrough import mount_anthropic_api
+
+app = DIALApp(...)
+
+async def get_client(request):
+    return AsyncAnthropic(api_key=...)
+
+mount_anthropic_api(app, get_client)
+```
+
+The passthrough is mounted at `/anthropic` by default; pass `path=...` to change it. The `get_client` argument may also be a plain client instance instead of a factory.
+
+### Proxied endpoints
+
+The following Anthropic endpoints are forwarded (relative to the mount path):
+
+- `POST /v1/messages` — create a message (streaming and non-streaming)
+- `POST /v1/messages/batches` — create a message batch
+- `POST /v1/messages/count_tokens` — count tokens
+
+### Supported backends
+
+The client factory may return any of the Anthropic SDK's async clients: `AsyncAnthropic`, `AsyncAnthropicBedrock`, `AsyncAnthropicBedrockMantle`, `AsyncAnthropicVertex`, and `AsyncAnthropicFoundry`.
+
+The Bedrock backends require `botocore`, which is an optional dependency:
+
+```sh
+pip install aidial-adapter-anthropic[bedrock]
+```
+
+For Bedrock, `anthropic-beta` flags that Bedrock does not support are stripped automatically so the upstream does not reject the request. Endpoints a backend does not implement (e.g. Bedrock has no token-counting or batches route) surface as a `404` error.
 
 ---
 
