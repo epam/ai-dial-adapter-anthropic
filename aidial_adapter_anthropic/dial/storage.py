@@ -4,31 +4,16 @@ import io
 import logging
 import mimetypes
 from collections.abc import Mapping
-from urllib.parse import unquote, urljoin, urlsplit
+from urllib.parse import unquote, urljoin
 
 import aiohttp
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from aidial_adapter_anthropic._utils.ssrf import download_public_file
+from aidial_adapter_anthropic._utils.url import has_same_origin
 
 _log = logging.getLogger(__name__)
-
-_DEFAULT_PORTS = {"http": 80, "https": 443}
-
-
-def _origin(url: str) -> tuple[str, str, int | None]:
-    parsed = urlsplit(url)
-    scheme = parsed.scheme.lower()
-    return (
-        scheme,
-        (parsed.hostname or "").lower(),
-        (parsed.port or _DEFAULT_PORTS.get(scheme)),
-    )
-
-
-def _same_origin(a: str, b: str) -> bool:
-    return _origin(a) == _origin(b)
 
 
 class FileMetadata(TypedDict):
@@ -130,7 +115,7 @@ class FileStorage(BaseModel):
         # string prefix, otherwise a URL like
         # ``http://<dial_url>@169.254.169.254`` would be treated as trusted
         # and leak the api-key to an attacker-controlled host.
-        if _same_origin(url, self.dial_url):
+        if has_same_origin(url, self.dial_url):
             return await download_file(url, self.auth_headers)
         # Any other URL must be validated against SSRF and never receives credentials.
         return await download_public_file(url)
