@@ -6,8 +6,8 @@ from aidial_sdk.chat_completion import Attachment
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from aidial_adapter_anthropic._utils.resource import Resource
-from aidial_adapter_anthropic._utils.ssrf import download_public_file
 from aidial_adapter_anthropic._utils.text import truncate_string
+from aidial_adapter_anthropic._utils.url import download_public_file
 from aidial_adapter_anthropic.dial.storage import FileStorage
 
 

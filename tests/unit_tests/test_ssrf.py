@@ -1,6 +1,6 @@
 import pytest
 
-from aidial_adapter_anthropic._utils.ssrf import validate_public_url
+from aidial_adapter_anthropic._utils.url import validate_public_url
 from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.dial.storage import FileStorage
 

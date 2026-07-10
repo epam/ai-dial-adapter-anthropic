@@ -10,8 +10,10 @@ import aiohttp
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
-from aidial_adapter_anthropic._utils.ssrf import download_public_file
-from aidial_adapter_anthropic._utils.url import has_same_origin
+from aidial_adapter_anthropic._utils.url import (
+    download_public_file,
+    has_same_origin,
+)
 
 _log = logging.getLogger(__name__)
 
