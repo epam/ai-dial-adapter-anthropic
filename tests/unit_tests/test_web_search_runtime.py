@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 from typing import Any, cast
 
-import pytest
 from aidial_sdk.chat_completion import (
     Attachment,
     Choice,
@@ -20,7 +19,6 @@ from anthropic.types.beta import (
     BetaWebSearchToolResultError as WebSearchToolResultError,
 )
 
-from aidial_adapter_anthropic.adapter import ValidationError
 from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.dial._lazy_stage import LazyStage
 from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
@@ -49,7 +47,7 @@ class _StageSpy:
     def __exit__(self, exc_type, exc_value, traceback):
         return None
 
-    def __aenter__(self):
+    async def __aenter__(self):
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
@@ -203,25 +201,26 @@ async def test_web_search_result_creates_attachments(adapter: Adapter):
     ]
 
 
-async def test_web_search_result_error_raises_validation_error(
+async def test_web_search_result_error_reported_in_stage(
     adapter: Adapter,
 ):
-    with pytest.raises(
-        ValidationError, match="Web search failed: max_uses_exceeded"
-    ):
-        await _invoke_non_streaming(
-            adapter,
-            [
-                WebSearchToolResultBlock(
-                    type="web_search_tool_result",
-                    tool_use_id="srv_1",
-                    content=WebSearchToolResultError(
-                        type="web_search_tool_result_error",
-                        error_code="max_uses_exceeded",
-                    ),
-                )
-            ],
-        )
+    consumer = await _invoke_non_streaming(
+        adapter,
+        [
+            WebSearchToolResultBlock(
+                type="web_search_tool_result",
+                tool_use_id="srv_1",
+                content=WebSearchToolResultError(
+                    type="web_search_tool_result_error",
+                    error_code="max_uses_exceeded",
+                ),
+            )
+        ],
+    )
+
+    assert consumer.stages["Web Search"] == [
+        "Web search failed: max_uses_exceeded"
+    ]
 
 
 async def test_server_tool_use_persists_state_without_thinking(

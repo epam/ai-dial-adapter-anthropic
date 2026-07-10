@@ -154,6 +154,7 @@ from aidial_adapter_anthropic.dial._attachments import (
     AttachmentProcessors,
     WithResources,
 )
+from aidial_adapter_anthropic.dial._lazy_stage import LazyStage
 from aidial_adapter_anthropic.dial._message import parse_dial_message
 from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
 from aidial_adapter_anthropic.dial.request import (
@@ -164,6 +165,42 @@ from aidial_adapter_anthropic.dial.storage import FileStorage
 from aidial_adapter_anthropic.dial.tools import ToolsMode
 
 _log = logging.getLogger(__name__)
+
+
+async def _handle_web_search_response(
+    consumer: Consumer,
+    content: ServerToolUseBlock | WebSearchToolResultBlock,
+    stage: LazyStage,
+) -> None:
+    match content:
+        case ServerToolUseBlock(input=stu_input, name=stu_name):
+            match stu_name:
+                case "web_search":
+                    query = stu_input.get("query")
+                    stage.append_content(str(query) if query else "")
+                case (
+                    "advisor"
+                    | "web_fetch"
+                    | "code_execution"
+                    | "bash_code_execution"
+                    | "text_editor_code_execution"
+                    | "tool_search_tool_regex"
+                    | "tool_search_tool_bm25"
+                ):
+                    pass
+                case _:
+                    assert_never(stu_name)
+        case WebSearchToolResultBlock(content=ws_content):
+            match ws_content:
+                case WebSearchToolResultError(error_code=error_code):
+                    stage.append_content(f"Web search failed: {error_code}")
+                case list():
+                    for block in ws_content:
+                        await consumer.add_attachment(
+                            DialAttachment(title=block.title, url=block.url)
+                        )
+                case _:
+                    assert_never(ws_content)
 
 
 # Beta AsyncMessages doesn't provide the 'stream' method,
@@ -492,46 +529,14 @@ class Adapter(ChatCompletionAdapter):
                             case ThinkingBlock() | RedactedThinkingBlock():
                                 # Thinking is processed in ThinkingEvent
                                 pass
-                            case ServerToolUseBlock(
-                                input=stu_input, name=stu_name
+                            case (
+                                ServerToolUseBlock()
+                                | WebSearchToolResultBlock()
                             ):
                                 server_tool_used = True
-                                match stu_name:
-                                    case "web_search":
-                                        query = stu_input.get("query")
-                                        web_search_stage.append_content(
-                                            str(query) if query else ""
-                                        )
-                                    case (
-                                        "advisor"
-                                        | "web_fetch"
-                                        | "code_execution"
-                                        | "bash_code_execution"
-                                        | "text_editor_code_execution"
-                                        | "tool_search_tool_regex"
-                                        | "tool_search_tool_bm25"
-                                    ):
-                                        pass
-                                    case _:
-                                        assert_never(stu_name)
-                            case WebSearchToolResultBlock(content=ws_content):
-                                match ws_content:
-                                    case WebSearchToolResultError(
-                                        error_code=error_code
-                                    ):
-                                        raise ValidationError(
-                                            f"Web search failed: {error_code}"
-                                        )
-                                    case list():
-                                        for block in ws_content:
-                                            await consumer.add_attachment(
-                                                DialAttachment(
-                                                    title=block.title,
-                                                    url=block.url,
-                                                )
-                                            )
-                                    case _:
-                                        assert_never(ws_content)
+                                await _handle_web_search_response(
+                                    consumer, content_block, web_search_stage
+                                )
                             case (
                                 CodeExecutionToolResultBlock()
                                 | MCPToolUseBlock()
@@ -601,76 +606,48 @@ class Adapter(ChatCompletionAdapter):
             _log.debug(f"response: {json_dumps_short(message)}")
 
         server_tool_used = False
-        for content in message.content:
-            match content:
-                case TextBlock(text=text, citations=citations):
-                    await consumer.append_content(text)
-                    for citation in citations or []:
-                        await create_citations(
-                            consumer, request.get_resource, citation
-                        )
-                case ToolUseBlock():
-                    await process_tools_block(
-                        consumer, content, tools_mode, streaming=False
-                    )
-                case ThinkingBlock(thinking=thinking):
-                    with consumer.create_stage("Thinking") as stage:
-                        stage.append_content(thinking)
-                case RedactedThinkingBlock():
-                    pass
-                case ServerToolUseBlock(input=stu_input, name=stu_name):
-                    server_tool_used = True
-                    match stu_name:
-                        case "web_search":
-                            with consumer.create_stage("Web Search") as stage:
-                                query = stu_input.get("query")
-                                stage.append_content(
-                                    str(query) if query else ""
-                                )
-                        case (
-                            "advisor"
-                            | "web_fetch"
-                            | "code_execution"
-                            | "bash_code_execution"
-                            | "text_editor_code_execution"
-                            | "tool_search_tool_regex"
-                            | "tool_search_tool_bm25"
-                        ):
-                            pass
-                        case _:
-                            assert_never(stu_name)
-                case WebSearchToolResultBlock(content=ws_content):
-                    match ws_content:
-                        case WebSearchToolResultError(error_code=error_code):
-                            raise ValidationError(
-                                f"Web search failed: {error_code}"
+        async with (
+            consumer.create_stage("Thinking") as thinking_stage,
+            consumer.create_stage("Web Search") as web_search_stage,
+        ):
+            for content in message.content:
+                match content:
+                    case TextBlock(text=text, citations=citations):
+                        await consumer.append_content(text)
+                        for citation in citations or []:
+                            await create_citations(
+                                consumer, request.get_resource, citation
                             )
-                        case list():
-                            for block in ws_content:
-                                await consumer.add_attachment(
-                                    DialAttachment(
-                                        title=block.title, url=block.url
-                                    )
-                                )
-                        case _:
-                            assert_never(ws_content)
-                case (
-                    CodeExecutionToolResultBlock()
-                    | MCPToolUseBlock()
-                    | MCPToolResultBlock()
-                    | ContainerUploadBlock()
-                    | BashCodeExecutionToolResultBlock()
-                    | TextEditorCodeExecutionToolResultBlock()
-                    | WebFetchToolResultBlock()
-                    | ToolSearchToolResultBlock()
-                    | CompactionBlock()
-                    | AdvisorToolResultBlock()
-                ):
-                    _log.error(
-                        f"Content block of type {content.type} isn't supported"
-                    )
-                case _:
-                    assert_never(content)
+                    case ToolUseBlock():
+                        await process_tools_block(
+                            consumer, content, tools_mode, streaming=False
+                        )
+                    case ThinkingBlock(thinking=thinking):
+                        thinking_stage.append_content(thinking)
+                    case RedactedThinkingBlock():
+                        pass
+                    case ServerToolUseBlock() | WebSearchToolResultBlock():
+                        server_tool_used = True
+                        await _handle_web_search_response(
+                            consumer, content, web_search_stage
+                        )
+                    case (
+                        CodeExecutionToolResultBlock()
+                        | MCPToolUseBlock()
+                        | MCPToolResultBlock()
+                        | ContainerUploadBlock()
+                        | BashCodeExecutionToolResultBlock()
+                        | TextEditorCodeExecutionToolResultBlock()
+                        | WebFetchToolResultBlock()
+                        | ToolSearchToolResultBlock()
+                        | CompactionBlock()
+                        | AdvisorToolResultBlock()
+                    ):
+                        _log.error(
+                            f"Content block of type {content.type} isn't supported"
+                        )
+                    case _:
+                        assert_never(content)
 
         if self.supports_thinking or server_tool_used:
             consumer.choice.set_state(
