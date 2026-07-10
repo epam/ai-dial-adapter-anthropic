@@ -10,6 +10,11 @@ import aiohttp
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
+from aidial_adapter_anthropic._utils.url import (
+    download_public_file,
+    has_same_origin,
+)
+
 _log = logging.getLogger(__name__)
 
 
@@ -106,10 +111,16 @@ class FileStorage(BaseModel):
 
     async def download_file(self, link: str) -> bytes:
         url = self.attachment_link_to_url(link)
-        headers: Mapping[str, str] = {}
-        if url.lower().startswith(self.dial_url.lower()):
-            headers = self.auth_headers
-        return await download_file(url, headers)
+        # DIAL Core is trusted infrastructure: if the URL resolves to its
+        # origin, fetch it directly with the api-key (SSRF protection isn't
+        # needed there). The origin is compared by scheme/host/port, never by
+        # string prefix, otherwise a URL like
+        # ``http://<dial_url>@169.254.169.254`` would be treated as trusted
+        # and leak the api-key to an attacker-controlled host.
+        if has_same_origin(url, self.dial_url):
+            return await download_file(url, self.auth_headers)
+        # Any other URL must be validated against SSRF and never receives credentials.
+        return await download_public_file(url)
 
     async def get_human_readable_name(self, link: str) -> str:
         url = self.attachment_link_to_url(link)

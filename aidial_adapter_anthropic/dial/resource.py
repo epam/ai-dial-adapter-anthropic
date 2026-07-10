@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic._utils.text import truncate_string
-from aidial_adapter_anthropic.dial.storage import FileStorage, download_file
+from aidial_adapter_anthropic._utils.url import download_public_file
+from aidial_adapter_anthropic.dial.storage import FileStorage
 
 
 class ValidationError(Exception):
@@ -185,4 +186,4 @@ async def _download_url(file_storage: FileStorage | None, url: str) -> bytes:
 
     if file_storage:
         return await file_storage.download_file(url)
-    return await download_file(url)
+    return await download_public_file(url)
