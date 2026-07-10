@@ -10,15 +10,10 @@ import aiohttp
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
-from aidial_adapter_anthropic.adapter._errors import ValidationError
-from aidial_adapter_anthropic.dial._ssrf import validate_public_url
+from aidial_adapter_anthropic._utils.ssrf import download_public_file
 
 _log = logging.getLogger(__name__)
 
-# Redirects have to be followed manually so that every hop can be validated
-# against SSRF, otherwise a public URL could redirect to an internal address.
-_MAX_REDIRECTS = 5
-_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
@@ -129,14 +124,16 @@ class FileStorage(BaseModel):
 
     async def download_file(self, link: str) -> bytes:
         url = self.attachment_link_to_url(link)
-        # ``trusted_origin`` marks DIAL Core as the only host that may be
-        # reached without SSRF validation and that may receive the api-key.
-        # It is compared by origin (scheme/host/port), never by string
-        # prefix, otherwise URLs like ``http://<dial_url>@169.254.169.254``
-        # would bypass the check and leak the api-key.
-        return await download_file(
-            url, self.auth_headers, trusted_origin=self.dial_url
-        )
+        # DIAL Core is trusted infrastructure: if the URL resolves to its
+        # origin, fetch it directly with the api-key (SSRF protection isn't
+        # needed there). The origin is compared by scheme/host/port, never by
+        # string prefix, otherwise a URL like
+        # ``http://<dial_url>@169.254.169.254`` would be treated as trusted
+        # and leak the api-key to an attacker-controlled host.
+        if _same_origin(url, self.dial_url):
+            return await download_file(url, self.auth_headers)
+        # Any other URL must be validated against SSRF and never receives credentials.
+        return await download_public_file(url)
 
     async def get_human_readable_name(self, link: str) -> str:
         url = self.attachment_link_to_url(link)
@@ -155,40 +152,13 @@ class FileStorage(BaseModel):
         return link if link == decoded_link else repr(decoded_link)
 
 
-async def download_file(
-    url: str,
-    headers: Mapping[str, str] = {},
-    *,
-    trusted_origin: str | None = None,
-) -> bytes:
-    async with aiohttp.ClientSession() as session:
-        for _ in range(_MAX_REDIRECTS + 1):
-            # A hop is trusted only when it targets exactly the DIAL Core
-            # origin. Every other hop (including redirects that leave that
-            # origin) must be validated and must not receive the api-key.
-            trusted = trusted_origin is not None and _same_origin(
-                url, trusted_origin
-            )
-
-            if not trusted:
-                await validate_public_url(url)
-
-            async with session.get(
-                url,
-                headers=headers if trusted else {},
-                allow_redirects=False,
-            ) as response:
-                if response.status in _REDIRECT_STATUSES and (
-                    location := response.headers.get("Location")
-                ):
-                    # Re-validate the redirect target on the next iteration.
-                    url = urljoin(url, location)
-                    continue
-
-                response.raise_for_status()
-                return await response.read()
-
-    raise ValidationError("The file URL has too many redirects")
+async def download_file(url: str, headers: Mapping[str, str] = {}) -> bytes:
+    async with (
+        aiohttp.ClientSession() as session,
+        session.get(url, headers=headers) as response,
+    ):
+        response.raise_for_status()
+        return await response.read()
 
 
 def compute_hash_digest(file_content: str) -> str:

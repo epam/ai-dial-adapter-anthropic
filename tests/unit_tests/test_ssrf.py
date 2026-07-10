@@ -1,14 +1,14 @@
 import pytest
 
+from aidial_adapter_anthropic._utils.ssrf import validate_public_url
 from aidial_adapter_anthropic.adapter._errors import ValidationError
-from aidial_adapter_anthropic.dial._ssrf import validate_public_url
 from aidial_adapter_anthropic.dial.storage import FileStorage
 
 
 @pytest.mark.parametrize(
     "url",
     [
-        # Cloud metadata endpoint from the security report (link-local).
+        # Cloud metadata endpoint
         "http://169.254.169.254/metadata/v1/instanceinfo",
         "http://127.0.0.1/",
         "http://localhost/secret",

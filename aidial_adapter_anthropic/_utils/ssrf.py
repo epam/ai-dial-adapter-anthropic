@@ -1,7 +1,9 @@
 import asyncio
 import ipaddress
 import socket
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
+
+import aiohttp
 
 from aidial_adapter_anthropic.adapter._errors import ValidationError
 
@@ -9,6 +11,11 @@ from aidial_adapter_anthropic.adapter._errors import ValidationError
 # ``ftp``, ``gopher``) could be abused to reach local files or internal
 # services.
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
+
+# Redirects are followed manually so that every hop can be validated against
+# SSRF, otherwise a public URL could redirect to an internal address.
+_MAX_REDIRECTS = 5
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 
 
 def _is_public_ip(ip: str) -> bool:
@@ -62,3 +69,26 @@ async def validate_public_url(url: str) -> None:
                 "Downloading files from a non-public address "
                 f"({ip}) is not allowed"
             )
+
+
+async def download_public_file(url: str) -> bytes:
+    """Download a file from an untrusted URL with SSRF protection.
+
+    Redirects are followed manually so that the target of every hop is
+    validated to be a public address before it is requested.
+    """
+    async with aiohttp.ClientSession() as session:
+        for _ in range(_MAX_REDIRECTS + 1):
+            await validate_public_url(url)
+
+            async with session.get(url, allow_redirects=False) as response:
+                if response.status in _REDIRECT_STATUSES and (
+                    location := response.headers.get("Location")
+                ):
+                    url = urljoin(url, location)
+                    continue
+
+                response.raise_for_status()
+                return await response.read()
+
+    raise ValidationError("The file URL has too many redirects")
