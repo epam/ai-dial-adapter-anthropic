@@ -132,4 +132,10 @@ async def test_configuration_schema_top_level_properties(adapter: Adapter):
     conf_cls = await adapter.configuration()
     conf_schema = conf_cls.model_json_schema()
     props = set(conf_schema["properties"])
-    assert props == {"betas", "enable_citations", "thinking", "effort"}
+    assert props == {
+        "betas",
+        "enable_citations",
+        "web_search",
+        "thinking",
+        "effort",
+    }

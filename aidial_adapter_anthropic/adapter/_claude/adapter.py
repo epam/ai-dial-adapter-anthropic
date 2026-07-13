@@ -4,6 +4,7 @@ from functools import cached_property
 from logging import DEBUG
 from typing import assert_never
 
+from aidial_sdk.chat_completion import Attachment as DialAttachment
 from aidial_sdk.chat_completion import Message as DialMessage
 from anthropic import (
     AsyncAnthropic,
@@ -74,6 +75,7 @@ from anthropic.types.beta import (
 )
 from anthropic.types.beta import BetaThinkingBlock as ThinkingBlock
 from anthropic.types.beta import BetaThinkingConfigParam as ThinkingConfigParam
+from anthropic.types.beta import BetaToolParam as ToolParam
 from anthropic.types.beta import (
     BetaToolSearchToolResultBlock as ToolSearchToolResultBlock,
 )
@@ -83,6 +85,9 @@ from anthropic.types.beta import (
 )
 from anthropic.types.beta import (
     BetaWebSearchToolResultBlock as WebSearchToolResultBlock,
+)
+from anthropic.types.beta import (
+    BetaWebSearchToolResultError as WebSearchToolResultError,
 )
 from anthropic.types.beta.parsed_beta_message import (
     ParsedBetaTextBlock as ParsedTextBlock,
@@ -115,7 +120,10 @@ from aidial_adapter_anthropic.adapter._claude.converters import (
     to_dial_finish_reason,
     to_dial_usage,
 )
-from aidial_adapter_anthropic.adapter._claude.params import ClaudeParameters
+from aidial_adapter_anthropic.adapter._claude.params import (
+    ClaudeParameters,
+    WebSearchToolParam,
+)
 from aidial_adapter_anthropic.adapter._claude.state import MessageState
 from aidial_adapter_anthropic.adapter._claude.tokenizer import (
     AnthropicTokenizer,
@@ -146,6 +154,7 @@ from aidial_adapter_anthropic.dial._attachments import (
     AttachmentProcessors,
     WithResources,
 )
+from aidial_adapter_anthropic.dial._lazy_stage import LazyStage
 from aidial_adapter_anthropic.dial._message import parse_dial_message
 from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
 from aidial_adapter_anthropic.dial.request import (
@@ -156,6 +165,42 @@ from aidial_adapter_anthropic.dial.storage import FileStorage
 from aidial_adapter_anthropic.dial.tools import ToolsMode
 
 _log = logging.getLogger(__name__)
+
+
+async def _handle_web_search_response(
+    consumer: Consumer,
+    content: ServerToolUseBlock | WebSearchToolResultBlock,
+    stage: LazyStage,
+) -> None:
+    match content:
+        case ServerToolUseBlock(input=stu_input, name=stu_name):
+            match stu_name:
+                case "web_search":
+                    query = stu_input.get("query")
+                    stage.append_content(str(query) if query else "")
+                case (
+                    "advisor"
+                    | "web_fetch"
+                    | "code_execution"
+                    | "bash_code_execution"
+                    | "text_editor_code_execution"
+                    | "tool_search_tool_regex"
+                    | "tool_search_tool_bm25"
+                ):
+                    pass
+                case _:
+                    assert_never(stu_name)
+        case WebSearchToolResultBlock(content=ws_content):
+            match ws_content:
+                case WebSearchToolResultError(error_code=error_code):
+                    stage.append_content(f"Web search failed: {error_code}")
+                case list():
+                    for block in ws_content:
+                        await consumer.add_attachment(
+                            DialAttachment(title=block.title, url=block.url)
+                        )
+                case _:
+                    assert_never(ws_content)
 
 
 # Beta AsyncMessages doesn't provide the 'stream' method,
@@ -269,6 +314,12 @@ class Adapter(ChatCompletionAdapter):
 
         tools_config = to_claude_tool_config(params.tool_config)
 
+        tools: list[ToolParam | WebSearchToolParam] = list(
+            tools_config.tools if tools_config else []
+        )
+        if (web_search := configuration.web_search) is not None:
+            tools.append(web_search)
+
         parsed_messages = [
             function_to_tool_messages(parse_dial_message(m)) for m in messages
         ]
@@ -321,7 +372,7 @@ class Adapter(ChatCompletionAdapter):
             system=system_prompt or omit,
             temperature=temperature,
             top_p=top_p or omit,
-            tools=(tools_config and tools_config.tools) or omit,
+            tools=tools or omit,
             tool_choice=(tools_config and tools_config.tool_choice) or omit,
             thinking=thinking,
             betas=configuration.betas or omit,
@@ -423,9 +474,11 @@ class Adapter(ChatCompletionAdapter):
                 **request.params,
             ) as stream,
             consumer.create_stage("Thinking") as thinking_stage,
+            consumer.create_stage("Web Search") as web_search_stage,
         ):
             stop_reason = None
             tool: ToolUseMessage | None = None
+            server_tool_used: bool = False
 
             async for event in stream:
                 if _log.isEnabledFor(DEBUG):
@@ -479,7 +532,13 @@ class Adapter(ChatCompletionAdapter):
                             case (
                                 ServerToolUseBlock()
                                 | WebSearchToolResultBlock()
-                                | CodeExecutionToolResultBlock()
+                            ):
+                                server_tool_used = True
+                                await _handle_web_search_response(
+                                    consumer, content_block, web_search_stage
+                                )
+                            case (
+                                CodeExecutionToolResultBlock()
                                 | MCPToolUseBlock()
                                 | MCPToolResultBlock()
                                 | ContainerUploadBlock()
@@ -500,7 +559,7 @@ class Adapter(ChatCompletionAdapter):
                     case ParsedMessageStopEvent(message=message):
                         await consumer.add_usage(to_dial_usage(message.usage))
                         stop_reason = message.stop_reason
-                        if self.supports_thinking:
+                        if self.supports_thinking or server_tool_used:
                             consumer.choice.set_state(
                                 MessageState(
                                     claude_message_content=message.content
@@ -546,44 +605,51 @@ class Adapter(ChatCompletionAdapter):
         if _log.isEnabledFor(DEBUG):
             _log.debug(f"response: {json_dumps_short(message)}")
 
-        for content in message.content:
-            match content:
-                case TextBlock(text=text, citations=citations):
-                    await consumer.append_content(text)
-                    for citation in citations or []:
-                        await create_citations(
-                            consumer, request.get_resource, citation
+        server_tool_used = False
+        async with (
+            consumer.create_stage("Thinking") as thinking_stage,
+            consumer.create_stage("Web Search") as web_search_stage,
+        ):
+            for content in message.content:
+                match content:
+                    case TextBlock(text=text, citations=citations):
+                        await consumer.append_content(text)
+                        for citation in citations or []:
+                            await create_citations(
+                                consumer, request.get_resource, citation
+                            )
+                    case ToolUseBlock():
+                        await process_tools_block(
+                            consumer, content, tools_mode, streaming=False
                         )
-                case ToolUseBlock():
-                    await process_tools_block(
-                        consumer, content, tools_mode, streaming=False
-                    )
-                case ThinkingBlock(thinking=thinking):
-                    with consumer.create_stage("Thinking") as stage:
-                        stage.append_content(thinking)
-                case RedactedThinkingBlock():
-                    pass
-                case (
-                    ServerToolUseBlock()
-                    | WebSearchToolResultBlock()
-                    | CodeExecutionToolResultBlock()
-                    | MCPToolUseBlock()
-                    | MCPToolResultBlock()
-                    | ContainerUploadBlock()
-                    | BashCodeExecutionToolResultBlock()
-                    | TextEditorCodeExecutionToolResultBlock()
-                    | WebFetchToolResultBlock()
-                    | ToolSearchToolResultBlock()
-                    | CompactionBlock()
-                    | AdvisorToolResultBlock()
-                ):
-                    _log.error(
-                        f"Content block of type {content.type} isn't supported"
-                    )
-                case _:
-                    assert_never(content)
+                    case ThinkingBlock(thinking=thinking):
+                        thinking_stage.append_content(thinking)
+                    case RedactedThinkingBlock():
+                        pass
+                    case ServerToolUseBlock() | WebSearchToolResultBlock():
+                        server_tool_used = True
+                        await _handle_web_search_response(
+                            consumer, content, web_search_stage
+                        )
+                    case (
+                        CodeExecutionToolResultBlock()
+                        | MCPToolUseBlock()
+                        | MCPToolResultBlock()
+                        | ContainerUploadBlock()
+                        | BashCodeExecutionToolResultBlock()
+                        | TextEditorCodeExecutionToolResultBlock()
+                        | WebFetchToolResultBlock()
+                        | ToolSearchToolResultBlock()
+                        | CompactionBlock()
+                        | AdvisorToolResultBlock()
+                    ):
+                        _log.error(
+                            f"Content block of type {content.type} isn't supported"
+                        )
+                    case _:
+                        assert_never(content)
 
-        if self.supports_thinking:
+        if self.supports_thinking or server_tool_used:
             consumer.choice.set_state(
                 MessageState(claude_message_content=message.content).to_dict()
             )
