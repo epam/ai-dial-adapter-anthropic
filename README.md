@@ -228,7 +228,7 @@ A cache breakpoint may include an optional `ttl` field. Supported values are `5m
 
 Web search gives Claude direct access to real-time web content, allowing it to answer questions with up-to-date information beyond its knowledge cutoff. It is an Anthropic server-side tool: the searches are executed on Anthropic's side, and the final response includes citations for the sources used. See [Web search tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool) in the Anthropic docs.
 
-To enable web search, set `custom_fields.configuration.web_search` to the Anthropic web search tool definition.
+To enable web search, add a static tool named `web_search` to the request's `tools` list. The Anthropic web search tool definition goes into `static_function.configuration`; the `name` is defaulted from the static function, so you don't have to repeat it. Being a server-side tool, web search never forces a `tool_choice` and can be combined with ordinary function tools.
 
 <details><summary>Enable web search</summary>
 
@@ -238,14 +238,17 @@ To enable web search, set `custom_fields.configuration.web_search` to the Anthro
   "messages": [
     {"role": "user", "content": "What is the weather in NYC?"}
   ],
-  "custom_fields": {
-    "configuration": {
-      "web_search": {
-        "type": "web_search_20250305",
-        "name": "web_search"
+  "tools": [
+    {
+      "type": "static_function",
+      "static_function": {
+        "name": "web_search",
+        "configuration": {
+          "type": "web_search_20250305"
+        }
       }
     }
-  }
+  ]
 }
 ```
 
@@ -261,23 +264,26 @@ The tool definition supports optional fields such as `max_uses`, `allowed_domain
   "messages": [
     {"role": "user", "content": "What is the weather in San Francisco?"}
   ],
-  "custom_fields": {
-    "configuration": {
-      "web_search": {
-        "type": "web_search_20250305",
+  "tools": [
+    {
+      "type": "static_function",
+      "static_function": {
         "name": "web_search",
-        "max_uses": 5,
-        "allowed_domains": ["example.com", "trusteddomain.org"],
-        "user_location": {
-          "type": "approximate",
-          "city": "San Francisco",
-          "region": "California",
-          "country": "US",
-          "timezone": "America/Los_Angeles"
+        "configuration": {
+          "type": "web_search_20250305",
+          "max_uses": 5,
+          "allowed_domains": ["example.com", "trusteddomain.org"],
+          "user_location": {
+            "type": "approximate",
+            "city": "San Francisco",
+            "region": "California",
+            "country": "US",
+            "timezone": "America/Los_Angeles"
+          }
         }
       }
     }
-  }
+  ]
 }
 ```
 

@@ -1,9 +1,11 @@
+from typing import Any
+
 import pytest
 from aidial_sdk.chat_completion.request import AzureChatCompletionRequest
-from aidial_sdk.exceptions import RequestValidationError
 from anthropic import Omit
 from openai.types.chat import ChatCompletionToolParam
 
+from aidial_adapter_anthropic.adapter import ValidationError
 from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.adapter._claude.converters import (
     to_claude_tool_config,
@@ -16,9 +18,8 @@ from tests.utils.openai import (
     user,
 )
 
-WEB_SEARCH_TOOL_REQUEST = {
+WEB_SEARCH_CONFIGURATION = {
     "type": "web_search_20250305",
-    "name": "web_search",
     "max_uses": 5,
     "allowed_domains": ["example.com", "example.org"],
     "user_location": {
@@ -29,6 +30,23 @@ WEB_SEARCH_TOOL_REQUEST = {
         "timezone": "America/Los_Angeles",
     },
 }
+
+# The `name` is defaulted from the static function name.
+WEB_SEARCH_TOOL_REQUEST = {**WEB_SEARCH_CONFIGURATION, "name": "web_search"}
+
+
+def web_search_static_tool(configuration: dict | None = None) -> dict:
+    static_function: dict = {"name": "web_search"}
+    if configuration is not None:
+        static_function["configuration"] = configuration
+    return {"type": "static_function", "static_function": static_function}
+
+
+def _tool_config(tools: list[Any]) -> ToolsConfig | None:
+    request = AzureChatCompletionRequest.model_validate(
+        {"messages": [], "tools": tools}
+    )
+    return ToolsConfig.from_request(request)
 
 
 def _run_schema_references_check(tool: ChatCompletionToolParam, has_refs: bool):
@@ -45,7 +63,8 @@ def _run_schema_references_check(tool: ChatCompletionToolParam, has_refs: bool):
     claude_tools = to_claude_tool_config(dial_tools)
     assert claude_tools is not None
 
-    assert ("$defs" in claude_tools.tools[0]["input_schema"]) == has_refs
+    function_tool: Any = claude_tools.tools[0]
+    assert ("$defs" in function_tool["input_schema"]) == has_refs
 
 
 def test_tools_schemas_with_references():
@@ -61,18 +80,27 @@ def test_tools_schemas_without_references():
     ["web_search_20250305", "web_search_20260209"],
 )
 async def test_web_search_minimal_passthrough(adapter: Adapter, tool_type: str):
-    tool = {"type": tool_type, "name": "web_search"}
     request = await adapter._prepare_claude_request(
-        ModelParameters(configuration={"web_search": tool}),
+        ModelParameters(
+            tool_config=_tool_config(
+                [web_search_static_tool({"type": tool_type})]
+            )
+        ),
         [user("What is the weather in NYC?")],
     )
 
-    assert request.params["tools"] == [tool]
+    assert request.params["tools"] == [
+        {"type": tool_type, "name": "web_search"}
+    ]
 
 
 async def test_web_search_all_optional_fields_preserved(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        ModelParameters(configuration={"web_search": WEB_SEARCH_TOOL_REQUEST}),
+        ModelParameters(
+            tool_config=_tool_config(
+                [web_search_static_tool(WEB_SEARCH_CONFIGURATION)]
+            )
+        ),
         [user("What is the weather in NYC?")],
     )
 
@@ -84,7 +112,11 @@ async def test_web_search_all_optional_fields_preserved(adapter: Adapter):
 async def test_web_search_tool_choice_left_default(adapter: Adapter):
     # Web search is a server tool: enabling it must not force a tool_choice.
     request = await adapter._prepare_claude_request(
-        ModelParameters(configuration={"web_search": WEB_SEARCH_TOOL_REQUEST}),
+        ModelParameters(
+            tool_config=_tool_config(
+                [web_search_static_tool(WEB_SEARCH_CONFIGURATION)]
+            )
+        ),
         [user("hello")],
     )
 
@@ -92,15 +124,14 @@ async def test_web_search_tool_choice_left_default(adapter: Adapter):
 
 
 async def test_web_search_appended_after_function_tools(adapter: Adapter):
-    dial_request = AzureChatCompletionRequest.model_validate(
-        {"messages": [], "tools": [GET_WEATHER_TOOL]}
-    )
-    tool_config = ToolsConfig.from_request(dial_request)
-
     request = await adapter._prepare_claude_request(
         ModelParameters(
-            configuration={"web_search": WEB_SEARCH_TOOL_REQUEST},
-            tool_config=tool_config,
+            tool_config=_tool_config(
+                [
+                    GET_WEATHER_TOOL,
+                    web_search_static_tool(WEB_SEARCH_CONFIGURATION),
+                ]
+            ),
         ),
         [user("What is the weather in NYC?")],
     )
@@ -121,20 +152,38 @@ async def test_no_web_search_keeps_tools_omitted(adapter: Adapter):
     assert isinstance(request.params["tools"], Omit)
 
 
-@pytest.mark.parametrize(
-    "invalid_tool",
-    [
-        pytest.param({"name": "web_search"}, id="missing-type"),
-        pytest.param({"type": "web_search_20250305"}, id="missing-name"),
-    ],
-)
-async def test_web_search_invalid_definition_rejected(
-    adapter: Adapter, invalid_tool: dict
-):
+async def test_web_search_invalid_definition_rejected(adapter: Adapter):
+    # Missing the required `type` discriminator.
     request = adapter._prepare_claude_request(
-        ModelParameters(configuration={"web_search": invalid_tool}),
+        ModelParameters(
+            tool_config=_tool_config([web_search_static_tool({"max_uses": 5})])
+        ),
         [user("hello")],
     )
 
-    with pytest.raises(RequestValidationError):
+    with pytest.raises(ValidationError):
         await request
+
+
+def test_unsupported_static_tool_rejected():
+    with pytest.raises(ValidationError, match="Unsupported static tool"):
+        _tool_config(
+            [
+                {
+                    "type": "static_function",
+                    "static_function": {"name": "code_execution"},
+                }
+            ]
+        )
+
+
+def test_web_search_static_tool_kept_out_of_function_tools():
+    tool_config = _tool_config(
+        [web_search_static_tool({"type": "web_search_20250305"})]
+    )
+    assert tool_config is not None
+    assert tool_config.tools == []
+    assert len(tool_config.static_tools) == 1
+    assert tool_config.build_web_search_tools() == [
+        {"type": "web_search_20250305", "name": "web_search"}
+    ]

@@ -43,6 +43,7 @@ from aidial_adapter_anthropic.adapter._claude.config import (
     ClaudeEffort,
     Configuration,
 )
+from aidial_adapter_anthropic.adapter._claude.params import WebSearchToolParam
 from aidial_adapter_anthropic.adapter._claude.state import (
     get_message_content_from_state,
 )
@@ -319,18 +320,33 @@ def _to_claude_tool_choice(
 
 @dataclass
 class ClaudeToolsConfig:
-    tools: list[ToolParam]
-    tool_choice: ToolChoice
+    tools: list[ToolParam | WebSearchToolParam]
+    tool_choice: ToolChoice | None
 
 
 def to_claude_tool_config(
     tools_config: ToolsConfig | None,
 ) -> ClaudeToolsConfig | None:
-    if tools_config is None or not tools_config.tools:
+    if tools_config is None:
         return None
 
-    tools = [_to_claude_tool(tool) for tool in tools_config.tools]
-    tool_choice = _to_claude_tool_choice(tools_config.tool_choice)
+    function_tools = [_to_claude_tool(tool) for tool in tools_config.tools]
+    web_search_tools = tools_config.build_web_search_tools()
+
+    tools: list[ToolParam | WebSearchToolParam] = [
+        *function_tools,
+        *web_search_tools,
+    ]
+    if not tools:
+        return None
+
+    # Server tools (e.g. web search) must not force a tool_choice,
+    # so tool_choice is only derived from the function tools.
+    tool_choice = (
+        _to_claude_tool_choice(tools_config.tool_choice)
+        if function_tools
+        else None
+    )
     return ClaudeToolsConfig(tools=tools, tool_choice=tool_choice)
 
 
