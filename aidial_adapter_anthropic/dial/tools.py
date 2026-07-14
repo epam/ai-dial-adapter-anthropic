@@ -42,10 +42,6 @@ class ToolsMode(Enum):
 class StaticToolName(str, Enum):
     """
     Names of the server-side (static) tools supported by the adapter.
-
-    Static tools are activated via the OpenAI-protocol static function
-    signature (``type: "static_function"``) instead of ordinary function
-    tools, and are executed on Anthropic's side.
     """
 
     WEB_SEARCH = "web_search"
