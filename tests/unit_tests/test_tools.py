@@ -153,7 +153,6 @@ async def test_no_web_search_keeps_tools_omitted(adapter: Adapter):
 
 
 async def test_web_search_invalid_definition_rejected(adapter: Adapter):
-    # Missing the required `type` discriminator.
     request = adapter._prepare_claude_request(
         ModelParameters(
             tool_config=_tool_config([web_search_static_tool({"max_uses": 5})])
