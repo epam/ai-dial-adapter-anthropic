@@ -35,7 +35,7 @@ class ToolsConfig(BaseModel):
     List of functions/tools.
     """
 
-    static_tools: list[StaticTool] = []
+    static_tools: list[StaticTool]
     """
     List of server-side (static) tools, e.g. web search.
     Executed on the provider's side rather than round-tripped to the client.
