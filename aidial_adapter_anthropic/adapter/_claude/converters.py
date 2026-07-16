@@ -61,6 +61,7 @@ from aidial_adapter_anthropic.dial._message import (
     SystemMessage,
 )
 from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.static_tools import parse_static_function
 from aidial_adapter_anthropic.dial.token_usage import TokenUsage
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 
@@ -331,9 +332,11 @@ def to_claude_tool_config(
         return None
 
     function_tools = [_to_claude_tool(tool) for tool in tools_config.tools]
-    tools: list[ToolParam | WebSearchToolParam] = (
-        function_tools + tools_config.static_tools
-    )
+    static_tools = [
+        parse_static_function(str(idx), tool.static_function)
+        for idx, tool in enumerate(tools_config.static_tools)
+    ]
+    tools: list[ToolParam | WebSearchToolParam] = function_tools + static_tools
     if not tools:
         return None
 

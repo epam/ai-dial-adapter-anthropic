@@ -153,12 +153,15 @@ async def test_no_web_search_keeps_tools_omitted(adapter: Adapter):
 
 
 def test_web_search_invalid_definition_rejected():
+    # A web search definition missing the required `type` discriminator.
     match = (
         r"Invalid static tool definition at "
         r"'tools\[0\]\.static_function\.configuration.*': Field required"
     )
     with pytest.raises(ValidationError, match=match):
-        _tool_config([web_search_static_tool({"max_uses": 5})])
+        to_claude_tool_config(
+            _tool_config([web_search_static_tool({"max_uses": 5})])
+        )
 
 
 def test_unsupported_static_tool_rejected():
@@ -167,13 +170,15 @@ def test_unsupported_static_tool_rejected():
         r"'tools\[0\]\.static_function\.name': Input should be 'web_search'"
     )
     with pytest.raises(ValidationError, match=match):
-        _tool_config(
-            [
-                {
-                    "type": "static_function",
-                    "static_function": {"name": "code_execution"},
-                }
-            ]
+        to_claude_tool_config(
+            _tool_config(
+                [
+                    {
+                        "type": "static_function",
+                        "static_function": {"name": "code_execution"},
+                    }
+                ]
+            )
         )
 
 
@@ -183,6 +188,10 @@ def test_web_search_static_tool_kept_out_of_function_tools():
     )
     assert tool_config is not None
     assert tool_config.tools == []
-    assert tool_config.static_tools == [
+    assert len(tool_config.static_tools) == 1
+
+    claude_tools = to_claude_tool_config(tool_config)
+    assert claude_tools is not None
+    assert claude_tools.tools == [
         {"type": "web_search_20250305", "name": "web_search"}
     ]
