@@ -331,17 +331,14 @@ def to_claude_tool_config(
         return None
 
     function_tools = [_to_claude_tool(tool) for tool in tools_config.tools]
-    web_search_tools = tools_config.build_web_search_tools()
+    web_search_tools = tools_config.web_search_tools
 
-    tools: list[ToolParam | WebSearchToolParam] = [
-        *function_tools,
-        *web_search_tools,
-    ]
+    tools: list[ToolParam | WebSearchToolParam] = (
+        function_tools + web_search_tools
+    )
     if not tools:
         return None
 
-    # Server tools (e.g. web search) must not force a tool_choice,
-    # so tool_choice is only derived from the function tools.
     tool_choice = (
         _to_claude_tool_choice(tools_config.tool_choice)
         if function_tools

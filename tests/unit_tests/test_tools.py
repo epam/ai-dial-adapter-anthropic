@@ -152,20 +152,22 @@ async def test_no_web_search_keeps_tools_omitted(adapter: Adapter):
     assert isinstance(request.params["tools"], Omit)
 
 
-async def test_web_search_invalid_definition_rejected(adapter: Adapter):
-    request = adapter._prepare_claude_request(
-        ModelParameters(
-            tool_config=_tool_config([web_search_static_tool({"max_uses": 5})])
-        ),
-        [user("hello")],
+def test_web_search_invalid_definition_rejected():
+    # A web search definition missing the required `type` discriminator.
+    match = (
+        r"Invalid static tool definition at "
+        r"'tools\[0\]\.static_function\.configuration.*': Field required"
     )
-
-    with pytest.raises(ValidationError):
-        await request
+    with pytest.raises(ValidationError, match=match):
+        _tool_config([web_search_static_tool({"max_uses": 5})])
 
 
 def test_unsupported_static_tool_rejected():
-    with pytest.raises(ValidationError, match="Unsupported static tool"):
+    match = (
+        r"Invalid static tool definition at "
+        r"'tools\[0\]\.static_function\.name': Input should be 'web_search'"
+    )
+    with pytest.raises(ValidationError, match=match):
         _tool_config(
             [
                 {
@@ -182,7 +184,6 @@ def test_web_search_static_tool_kept_out_of_function_tools():
     )
     assert tool_config is not None
     assert tool_config.tools == []
-    assert len(tool_config.static_tools) == 1
-    assert tool_config.build_web_search_tools() == [
+    assert tool_config.web_search_tools == [
         {"type": "web_search_20250305", "name": "web_search"}
     ]
