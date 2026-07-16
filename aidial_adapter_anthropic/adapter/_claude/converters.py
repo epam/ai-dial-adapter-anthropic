@@ -331,10 +331,8 @@ def to_claude_tool_config(
         return None
 
     function_tools = [_to_claude_tool(tool) for tool in tools_config.tools]
-    web_search_tools = tools_config.web_search_tools
-
     tools: list[ToolParam | WebSearchToolParam] = (
-        function_tools + web_search_tools
+        function_tools + tools_config.static_tools
     )
     if not tools:
         return None

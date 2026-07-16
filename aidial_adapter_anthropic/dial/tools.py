@@ -39,7 +39,7 @@ class ToolsConfig(BaseModel):
     List of functions/tools.
     """
 
-    web_search_tools: list[WebSearchToolParam] = []
+    static_tools: list[WebSearchToolParam] = []
     """
     List of server-side (static) tools, e.g. web search.
     Executed on the provider's side rather than round-tripped to the client.
@@ -56,7 +56,7 @@ class ToolsConfig(BaseModel):
     """
 
     def not_supported(self) -> None:
-        if not self.tools and not self.web_search_tools:
+        if not self.tools and not self.static_tools:
             return
         if self.tools_mode == ToolsMode.TOOLS:
             raise ValidationError("The tools aren't supported")
@@ -92,17 +92,17 @@ class ToolsConfig(BaseModel):
         tools: list[Function] | list[Tool | StaticTool],
     ) -> tuple[list[Tool], list[WebSearchToolParam]]:
         function_tools: list[Tool] = []
-        web_search_tools: list[WebSearchToolParam] = []
+        static_tools: list[WebSearchToolParam] = []
         for idx, tool in enumerate(tools):
             if isinstance(tool, StaticTool):
-                web_search_tools.append(
+                static_tools.append(
                     parse_static_function(str(idx), tool.static_function)
                 )
             elif isinstance(tool, Function):
                 function_tools.append(Tool(type="function", function=tool))
             else:
                 function_tools.append(tool)
-        return function_tools, web_search_tools
+        return function_tools, static_tools
 
     @classmethod
     def from_request(cls, request: AzureChatCompletionRequest) -> Self | None:
@@ -110,17 +110,17 @@ class ToolsConfig(BaseModel):
 
         tool_ids = _collect_tool_ids(request.messages)
 
-        web_search_tools: list[WebSearchToolParam] = []
+        static_tools: list[WebSearchToolParam] = []
 
         if request.functions is not None:
             tools_mode = ToolsMode.FUNCTIONS
-            tools, web_search_tools = cls._split_tools(request.functions)
+            tools, static_tools = cls._split_tools(request.functions)
             tool_choice = cls._function_call_to_tool_choice(
                 request.function_call
             )
         elif request.tools is not None:
             tools_mode = ToolsMode.TOOLS
-            tools, web_search_tools = cls._split_tools(request.tools)
+            tools, static_tools = cls._split_tools(request.tools)
             tool_choice = request.tool_choice
         elif tool_ids:
             tools_mode = ToolsMode.TOOLS
@@ -131,7 +131,7 @@ class ToolsConfig(BaseModel):
 
         return cls(
             tools=tools,
-            web_search_tools=web_search_tools,
+            static_tools=static_tools,
             tools_mode=tools_mode,
             tool_choice=tool_choice or "auto",
             tool_ids=tool_ids,

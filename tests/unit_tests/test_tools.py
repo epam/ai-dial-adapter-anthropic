@@ -153,7 +153,6 @@ async def test_no_web_search_keeps_tools_omitted(adapter: Adapter):
 
 
 def test_web_search_invalid_definition_rejected():
-    # A web search definition missing the required `type` discriminator.
     match = (
         r"Invalid static tool definition at "
         r"'tools\[0\]\.static_function\.configuration.*': Field required"
@@ -184,6 +183,6 @@ def test_web_search_static_tool_kept_out_of_function_tools():
     )
     assert tool_config is not None
     assert tool_config.tools == []
-    assert tool_config.web_search_tools == [
+    assert tool_config.static_tools == [
         {"type": "web_search_20250305", "name": "web_search"}
     ]
