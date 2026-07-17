@@ -43,6 +43,7 @@ from aidial_adapter_anthropic.adapter._claude.config import (
     ClaudeEffort,
     Configuration,
 )
+from aidial_adapter_anthropic.adapter._claude.params import WebSearchToolParam
 from aidial_adapter_anthropic.adapter._claude.state import (
     get_message_content_from_state,
 )
@@ -60,6 +61,7 @@ from aidial_adapter_anthropic.dial._message import (
     SystemMessage,
 )
 from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.static_tools import parse_static_function
 from aidial_adapter_anthropic.dial.token_usage import TokenUsage
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 
@@ -319,18 +321,30 @@ def _to_claude_tool_choice(
 
 @dataclass
 class ClaudeToolsConfig:
-    tools: list[ToolParam]
-    tool_choice: ToolChoice
+    tools: list[ToolParam | WebSearchToolParam]
+    tool_choice: ToolChoice | None
 
 
 def to_claude_tool_config(
     tools_config: ToolsConfig | None,
 ) -> ClaudeToolsConfig | None:
-    if tools_config is None or not tools_config.tools:
+    if tools_config is None:
         return None
 
-    tools = [_to_claude_tool(tool) for tool in tools_config.tools]
-    tool_choice = _to_claude_tool_choice(tools_config.tool_choice)
+    function_tools = [_to_claude_tool(tool) for tool in tools_config.tools]
+    static_tools = [
+        parse_static_function(str(idx), tool.static_function)
+        for idx, tool in enumerate(tools_config.static_tools)
+    ]
+    tools: list[ToolParam | WebSearchToolParam] = function_tools + static_tools
+    if not tools:
+        return None
+
+    tool_choice = (
+        _to_claude_tool_choice(tools_config.tool_choice)
+        if function_tools
+        else None
+    )
     return ClaudeToolsConfig(tools=tools, tool_choice=tool_choice)
 
 

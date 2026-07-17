@@ -1,6 +1,6 @@
 import logging
 from enum import Enum
-from typing import Literal, Self
+from typing import Literal, Self, assert_never
 
 from aidial_sdk.chat_completion import (
     Function,
@@ -35,6 +35,12 @@ class ToolsConfig(BaseModel):
     List of functions/tools.
     """
 
+    static_tools: list[StaticTool]
+    """
+    List of server-side (static) tools, e.g. web search.
+    Executed on the provider's side rather than round-tripped to the client.
+    """
+
     tools_mode: ToolsMode
 
     tool_choice: Literal["auto", "none", "required"] | ToolChoice
@@ -46,7 +52,7 @@ class ToolsConfig(BaseModel):
     """
 
     def not_supported(self) -> None:
-        if not self.tools:
+        if not self.tools and not self.static_tools:
             return
         if self.tools_mode == ToolsMode.TOOLS:
             raise ValidationError("The tools aren't supported")
@@ -78,19 +84,22 @@ class ToolsConfig(BaseModel):
                 return function_call
 
     @staticmethod
-    def _get_tool_from_function(tool: Function | Tool | StaticTool) -> Tool:
-        if isinstance(tool, StaticTool):
-            raise ValidationError("Static tools aren't supported")
-        if isinstance(tool, Function):
-            return Tool(type="function", function=tool)
-        else:
-            return tool
-
-    @staticmethod
-    def _get_tools_from_functions(
+    def _split_tools(
         tools: list[Function] | list[Tool | StaticTool],
-    ) -> list[Tool]:
-        return [ToolsConfig._get_tool_from_function(tool) for tool in tools]
+    ) -> tuple[list[Tool], list[StaticTool]]:
+        function_tools: list[Tool] = []
+        static_tools: list[StaticTool] = []
+        for tool in tools:
+            match tool:
+                case StaticTool():
+                    static_tools.append(tool)
+                case Function():
+                    function_tools.append(Tool(type="function", function=tool))
+                case Tool():
+                    function_tools.append(tool)
+                case _:
+                    assert_never(tool)
+        return function_tools, static_tools
 
     @classmethod
     def from_request(cls, request: AzureChatCompletionRequest) -> Self | None:
@@ -98,15 +107,17 @@ class ToolsConfig(BaseModel):
 
         tool_ids = _collect_tool_ids(request.messages)
 
+        static_tools: list[StaticTool] = []
+
         if request.functions is not None:
             tools_mode = ToolsMode.FUNCTIONS
-            tools = cls._get_tools_from_functions(request.functions)
+            tools, static_tools = cls._split_tools(request.functions)
             tool_choice = cls._function_call_to_tool_choice(
                 request.function_call
             )
         elif request.tools is not None:
             tools_mode = ToolsMode.TOOLS
-            tools = cls._get_tools_from_functions(request.tools)
+            tools, static_tools = cls._split_tools(request.tools)
             tool_choice = request.tool_choice
         elif tool_ids:
             tools_mode = ToolsMode.TOOLS
@@ -117,6 +128,7 @@ class ToolsConfig(BaseModel):
 
         return cls(
             tools=tools,
+            static_tools=static_tools,
             tools_mode=tools_mode,
             tool_choice=tool_choice or "auto",
             tool_ids=tool_ids,
