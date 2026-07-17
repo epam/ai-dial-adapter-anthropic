@@ -1,6 +1,6 @@
 [project]
 name = "aidial-adapter-anthropic"
-version = "0.15.0"
+version = "0.15.1"
 description = "Package implementing adapter from DIAL Chat Completions API to Anthropic API"
 authors = [{ name = "EPAM RAIL", email = "SpecialEPM-DIALDevTeam@epam.com" }]
 license = "Apache-2.0"
