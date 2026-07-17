@@ -135,7 +135,6 @@ async def test_configuration_schema_top_level_properties(adapter: Adapter):
     assert props == {
         "betas",
         "enable_citations",
-        "web_search",
         "thinking",
         "effort",
     }

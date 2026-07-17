@@ -86,6 +86,7 @@ def _index_range(start: int, end: int) -> list[int]:
 
 _TOOL_CONFIG = ToolsConfig(
     tools=[Tool(type="function", function=Function(name="function"))],
+    static_tools=[],
     tool_choice="auto",
     tool_ids={},
     tools_mode=ToolsMode.TOOLS,
