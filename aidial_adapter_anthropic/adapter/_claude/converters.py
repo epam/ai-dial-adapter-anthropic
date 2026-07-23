@@ -222,18 +222,24 @@ async def to_claude_messages(
 
     for idx, message in enumerate(messages[idx_offset:], start=idx_offset):
         if isinstance(message, SystemMessage):
-            raise ValidationError(
-                "System and developer messages are only allowed in the beginning of the conversation."
+            # A system message past the leading run becomes a
+            # mid-conversation system message; the API enforces its
+            # placement constraints.
+            content = await handlers.process_system_message(message)
+            _add_cache_control(message, content)
+            claude_message = WithResources(
+                payload=MessageParam(role="system", content=content)
             )
-
-        blocks = await _get_claude_blocks(handlers, message, idx)
-        _add_cache_control(message, blocks.payload)
-
-        role = _get_claude_message_role(message)
-        claude_message = WithResources(
-            payload=MessageParam(role=role, content=blocks.payload),
-            resources=blocks.resources,
-        )
+        else:
+            blocks = await _get_claude_blocks(handlers, message, idx)
+            _add_cache_control(message, blocks.payload)
+            claude_message = WithResources(
+                payload=MessageParam(
+                    role=_get_claude_message_role(message),
+                    content=blocks.payload,
+                ),
+                resources=blocks.resources,
+            )
 
         claude_messages.append(claude_message, idx)
 

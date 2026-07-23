@@ -308,6 +308,88 @@ async def test_truncate_first_turn_with_system_3(model):
     )
 
 
+async def test_mid_system_message_and_its_turn_are_kept(model):
+    messages = [
+        sys("1"),  # 0: top-level system prompt
+        user("10"),  # 1: turn 1 - discarded
+        ai("10"),  # 2: turn 1 - discarded
+        user("10"),  # 3: turn with mid-conversation system message - kept
+        sys("7"),  # 4
+        ai("10"),  # 5
+        user("40"),  # 6
+    ]
+
+    max_prompt_tokens = (
+        1
+        + (_PER_MESSAGE_TOKENS + 10)
+        + (_PER_MESSAGE_TOKENS + 7)
+        + (_PER_MESSAGE_TOKENS + 10)
+        + (_PER_MESSAGE_TOKENS + 40)
+    )
+
+    discarded_messages = await compute_discarded_messages(
+        model, messages, max_prompt_tokens
+    )
+
+    assert discarded_messages == [1, 2]
+
+
+async def test_mid_system_message_forces_old_turn_to_be_kept(model):
+    messages = [
+        sys("1"),  # 0: keep, top-level system prompt
+        user("10"),  # 1: keep, since it contains the system message
+        sys("7"),  # 2
+        ai("10"),  # 3
+        user("10"),  # 4: discarded
+        ai("10"),  # 5: discarded
+        user("10"),  # 6: discarded
+        ai("10"),  # 7: discarded
+        user("40"),  # 8: last
+    ]
+
+    max_prompt_tokens = (
+        1
+        + (_PER_MESSAGE_TOKENS + 10)
+        + (_PER_MESSAGE_TOKENS + 7)
+        + (_PER_MESSAGE_TOKENS + 10)
+        + (_PER_MESSAGE_TOKENS + 40)
+    )
+
+    discarded_messages = await compute_discarded_messages(
+        model, messages, max_prompt_tokens
+    )
+
+    assert discarded_messages == [4, 5, 6, 7]
+
+
+async def test_mid_system_message_overflow(model):
+    messages = [
+        sys("1"),  # 0
+        user("10"),  # 1
+        sys("50"),  # 2
+        ai("10"),  # 3
+        user("20"),  # 4
+    ]
+
+    # No message can be removed
+    min_possible_tokens = (
+        1
+        + (_PER_MESSAGE_TOKENS + 10)
+        + (_PER_MESSAGE_TOKENS + 50)
+        + (_PER_MESSAGE_TOKENS + 10)
+        + (_PER_MESSAGE_TOKENS + 20)
+    )
+
+    truncation_error = await compute_discarded_messages(
+        model, messages, min_possible_tokens - 1
+    )
+
+    assert (
+        truncation_error
+        == f"The requested maximum prompt tokens is {min_possible_tokens - 1}. However, the system messages and the last user message resulted in {min_possible_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
+    )
+
+
 async def test_zero_turn_overflow(model):
     messages = [
         sys("11"),

@@ -97,7 +97,6 @@ from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter._base import (
     ChatCompletionAdapter,
     default_preprocess_messages,
-    keep_last,
 )
 from aidial_adapter_anthropic.adapter._claude.blocks import (
     IMAGE_ATTACHMENT_PROCESSOR,
@@ -141,7 +140,10 @@ from aidial_adapter_anthropic.adapter._decorator.replicator import (
     replicator_decorator,
 )
 from aidial_adapter_anthropic.adapter._errors import ValidationError
-from aidial_adapter_anthropic.adapter._partitioner import claude_partitioner
+from aidial_adapter_anthropic.adapter._partitioner import (
+    claude_partitioner,
+    keep_last_or_system,
+)
 from aidial_adapter_anthropic.adapter._truncate_prompt import (
     DiscardedMessages,
     truncate_prompt,
@@ -384,7 +386,7 @@ class Adapter(ChatCompletionAdapter):
         discarded_messages, messages = await truncate_prompt(
             messages=request.messages.lst,
             tokenizer=create_tokenizer(self.tokenizer, request.params),
-            keep_message=keep_last,
+            keep_message=keep_last_or_system,
             partitioner=claude_partitioner,
             model_limit=None,
             user_limit=max_prompt_tokens,

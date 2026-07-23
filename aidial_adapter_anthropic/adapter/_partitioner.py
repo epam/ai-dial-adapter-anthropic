@@ -2,7 +2,10 @@ from typing import Any, Literal
 
 from anthropic.types.beta import BetaMessageParam
 
+from aidial_adapter_anthropic.adapter._base import keep_last
 from aidial_adapter_anthropic.dial._attachments import WithResources
+
+ClaudeMessages = list[tuple[WithResources[BetaMessageParam], set[int]]]
 
 
 def _has_content_block(message: BetaMessageParam, block_type: str) -> bool:
@@ -32,9 +35,7 @@ def _role(message: BetaMessageParam) -> Literal["user", "assistant", "system"]:
     return message["role"]
 
 
-def claude_partitioner(
-    messages: list[tuple[WithResources[BetaMessageParam], set[int]]],
-) -> list[int]:
+def claude_partitioner(messages: ClaudeMessages) -> list[int]:
     """
     Build truncation partitions for Claude history.
 
@@ -46,6 +47,9 @@ def claude_partitioner(
     - Tool-call flows are grouped as transactions:
       `user* -> (assistant(tool_call) | tool_result)* -> assistant*`.
       This prevents orphan tool-result blocks when earlier history is dropped.
+    - A mid-conversation system message sits between the tool/user part and
+      the assistant reply, so it is absorbed into its turn and kept or dropped
+      atomically with it. This keeps system placement valid after truncation.
     """
     n = len(messages)
     unwrapped = [m[0].payload for m in messages]
@@ -61,6 +65,8 @@ def claude_partitioner(
             or _is_tool_result(unwrapped[end])
         ):
             end += 1
+        while end < n and _role(unwrapped[end]) == "system":
+            end += 1
         while end < n and _role(unwrapped[end]) == "assistant":
             end += 1
 
@@ -68,6 +74,18 @@ def claude_partitioner(
         idx = end
 
     return ret
+
+
+def keep_last_or_system(messages: ClaudeMessages, idx: int) -> bool:
+    """
+    Keep the last message and every mid-conversation system message.
+
+    System messages carry operator-level instructions that must survive
+    truncation; their turn is kept atomically (see `claude_partitioner`).
+    """
+    return _role(messages[idx][0].payload) == "system" or keep_last(
+        messages, idx
+    )
 
 
 def trivial_partitioner(messages: list[Any]) -> list[int]:
