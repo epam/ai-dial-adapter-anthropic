@@ -9,8 +9,8 @@ keywords = ["ai"]
 classifiers = ["Topic :: Software Development :: Libraries :: Python Modules"]
 requires-python = ">=3.11,<4.0"
 dependencies = [
-  "aidial-sdk (>=0.37.0,<1)",
-  "anthropic (>=0.95.0,<1)",
+  "aidial-sdk",
+  "anthropic (>=0.105.0,<1)",
   "pydantic (>=2.8.2,<3)",
   "pillow (>=12.3.0,<13)",
   "aiohttp (>=3.14.1,<4)",
@@ -24,6 +24,11 @@ bedrock = ["botocore >= 1.10.0"]
 Homepage = "https://epam-rail.com"
 Documentation = "https://epam-rail.com/dial_api"
 Repository = "https://github.com/epam/ai-dial-adapter-anthropic/"
+
+# ponytail: temporary git pin until ai-dial-sdk PR #422 (completion_tokens_details
+# + cache_write_tokens) is released; revert to a versioned constraint after release.
+[tool.poetry.dependencies]
+aidial-sdk = { git = "https://github.com/epam/ai-dial-sdk.git", branch = "fix/completion-tokens-details" }
 
 [tool.poetry.group.test.dependencies]
 pytest = "9.0.3"
