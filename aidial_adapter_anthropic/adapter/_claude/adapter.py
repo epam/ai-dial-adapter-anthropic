@@ -70,6 +70,7 @@ from anthropic.types.beta import (
 )
 from anthropic.types.beta import BetaServerToolUseBlock as ServerToolUseBlock
 from anthropic.types.beta import BetaTextBlock as TextBlock
+from anthropic.types.beta import BetaTextBlockParam as TextBlockParam
 from anthropic.types.beta import (
     BetaTextEditorCodeExecutionToolResultBlock as TextEditorCodeExecutionToolResultBlock,
 )
@@ -110,6 +111,7 @@ from aidial_adapter_anthropic.adapter._claude.config import (
     ClaudeConfigurationWithThinking,
 )
 from aidial_adapter_anthropic.adapter._claude.converters import (
+    split_leading_system_messages,
     to_claude_cache_control,
     to_claude_effort,
     to_claude_messages,
@@ -233,6 +235,23 @@ class ClaudeRequest:
         if 0 <= index < len(self.resources):
             return self.resources[index]
         return None
+
+    def absorb_leading_system_messages(self) -> None:
+        new_system, new_messages = split_leading_system_messages(self.messages)
+        if not new_system:
+            return
+
+        system = self.params["system"]
+        match system:
+            case str():
+                base_system = [TextBlockParam(type="text", text=system)]
+            case list():
+                base_system = system
+            case _:
+                base_system = []
+
+        self.params["system"] = base_system + new_system
+        self.messages = new_messages
 
 
 AnthropicClient = (
@@ -392,16 +411,16 @@ class Adapter(ChatCompletionAdapter):
             user_limit=max_prompt_tokens,
         )
 
-        claude_messages = ListProjection(messages)
-
         discarded_messages = list(
             request.messages.to_original_indices(discarded_messages)
         )
 
-        return discarded_messages, ClaudeRequest(
-            params=request.params,
-            messages=claude_messages,
+        truncated = ClaudeRequest(
+            params=request.params, messages=ListProjection(messages)
         )
+        truncated.absorb_leading_system_messages()
+
+        return discarded_messages, truncated
 
     async def chat(
         self,

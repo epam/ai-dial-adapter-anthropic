@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, assert_never
 
@@ -244,6 +244,40 @@ async def to_claude_messages(
         claude_messages.append(claude_message, idx)
 
     return system_messages, _merge_messages_with_same_role(claude_messages)
+
+
+def _message_to_text_blocks(payload: MessageParam) -> Iterator[TextBlockParam]:
+    content = payload["content"]
+    match content:
+        case str():
+            yield TextBlockParam(type="text", text=content)
+        case Iterable():
+            for elem in content:
+                if isinstance(elem, dict) and elem["type"] == "text":
+                    yield elem
+                else:
+                    _log.warning(
+                        f"Unexpected non-textual message content part: {elem}"
+                    )
+        case _:
+            assert_never(content)
+
+
+def split_leading_system_messages(
+    messages: ListProjection[WithResources[MessageParam]],
+) -> tuple[list[TextBlockParam], ListProjection[WithResources[MessageParam]]]:
+    raw = messages.raw_list
+
+    idx = 0
+    while idx < len(raw) and raw[idx].payload["role"] == "system":
+        idx += 1
+
+    sys_messages = [
+        block
+        for message in raw[:idx]
+        for block in _message_to_text_blocks(message.payload)
+    ]
+    return sys_messages, messages.drop(idx)
 
 
 def to_dial_finish_reason(

@@ -47,9 +47,11 @@ def claude_partitioner(messages: ClaudeMessages) -> list[int]:
     - Tool-call flows are grouped as transactions:
       `user* -> (assistant(tool_call) | tool_result)* -> assistant*`.
       This prevents orphan tool-result blocks when earlier history is dropped.
-    - A mid-conversation system message sits between the tool/user part and
-      the assistant reply, so it is absorbed into its turn and kept or dropped
-      atomically with it. This keeps system placement valid after truncation.
+    - A mid-conversation system message forms its own partition, splitting the
+      turn around it. This keeps it force-kept (see `keep_last_or_system`)
+      while its surrounding user/assistant messages stay independently
+      discardable; a system message orphaned by truncation is later hoisted
+      into the top-level system prompt.
     """
     n = len(messages)
     unwrapped = [m[0].payload for m in messages]
@@ -58,17 +60,19 @@ def claude_partitioner(messages: ClaudeMessages) -> list[int]:
 
     while idx < n:
         end = idx
-        while end < n and _role(unwrapped[end]) == "user":
-            end += 1
-        while end < n and (
-            _is_assistant_tool_call(unwrapped[end])
-            or _is_tool_result(unwrapped[end])
-        ):
-            end += 1
-        while end < n and _role(unwrapped[end]) == "system":
-            end += 1
-        while end < n and _role(unwrapped[end]) == "assistant":
-            end += 1
+        if _role(unwrapped[idx]) == "system":
+            while end < n and _role(unwrapped[end]) == "system":
+                end += 1
+        else:
+            while end < n and _role(unwrapped[end]) == "user":
+                end += 1
+            while end < n and (
+                _is_assistant_tool_call(unwrapped[end])
+                or _is_tool_result(unwrapped[end])
+            ):
+                end += 1
+            while end < n and _role(unwrapped[end]) == "assistant":
+                end += 1
 
         ret.append(end - idx)
         idx = end
@@ -81,7 +85,9 @@ def keep_last_or_system(messages: ClaudeMessages, idx: int) -> bool:
     Keep the last message and every mid-conversation system message.
 
     System messages carry operator-level instructions that must survive
-    truncation; their turn is kept atomically (see `claude_partitioner`).
+    truncation. Each is its own partition (see `claude_partitioner`), so
+    force-keeping it does not drag its surrounding turn along; if truncation
+    leaves it orphaned it is hoisted into the top-level system prompt.
     """
     return _role(messages[idx][0].payload) == "system" or keep_last(
         messages, idx
