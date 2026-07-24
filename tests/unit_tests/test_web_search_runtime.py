@@ -131,6 +131,7 @@ def _mock_non_streaming_create(
             output_tokens=2,
             cache_creation_input_tokens=0,
             cache_read_input_tokens=0,
+            output_tokens_details=None,
         ),
     )
 

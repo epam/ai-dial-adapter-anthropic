@@ -142,6 +142,9 @@ class ApproximateTokenizer:
             match message["type"]:
                 case "text":
                     return self.tokenize_text(message["text"])
+                case "mid_conv_system":
+                    texts = [param["text"] for param in message["content"]]
+                    return self.tokenize_text(json.dumps(texts))
                 case "image":
                     return self._tokenize_image(message["source"])
                 case "tool_use":
