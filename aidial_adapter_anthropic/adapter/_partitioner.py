@@ -28,7 +28,7 @@ def _is_tool_result(message: BetaMessageParam) -> bool:
     )
 
 
-def _role(message: BetaMessageParam) -> Literal["user", "assistant"]:
+def _role(message: BetaMessageParam) -> Literal["user", "assistant", "system"]:
     return message["role"]
 
 
