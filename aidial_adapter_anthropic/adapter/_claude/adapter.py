@@ -56,7 +56,7 @@ from anthropic.types.beta import (
 from anthropic.types.beta import BetaMCPToolResultBlock as MCPToolResultBlock
 from anthropic.types.beta import BetaMCPToolUseBlock as MCPToolUseBlock
 from anthropic.types.beta import BetaMessage as ClaudeResponseMessage
-from anthropic.types.beta import BetaMessageParam as ClaudeMessageParam
+from anthropic.types.beta import BetaMessageParam as MessageParam
 from anthropic.types.beta import (
     BetaRawContentBlockDeltaEvent as ContentBlockDeltaEvent,
 )
@@ -111,6 +111,7 @@ from aidial_adapter_anthropic.adapter._claude.config import (
     ClaudeConfigurationWithThinking,
 )
 from aidial_adapter_anthropic.adapter._claude.converters import (
+    ClaudeMessages,
     split_leading_system_messages,
     to_claude_cache_control,
     to_claude_effort,
@@ -152,7 +153,6 @@ from aidial_adapter_anthropic.adapter._truncate_prompt import (
 )
 from aidial_adapter_anthropic.dial._attachments import (
     AttachmentProcessors,
-    WithResources,
 )
 from aidial_adapter_anthropic.dial._lazy_stage import LazyStage
 from aidial_adapter_anthropic.dial._message import parse_dial_message
@@ -221,10 +221,10 @@ class _AsyncMessagesAdapter(AsyncAPIResource):
 @dataclass
 class ClaudeRequest:
     params: ClaudeParameters
-    messages: ListProjection[WithResources[ClaudeMessageParam]]
+    messages: ClaudeMessages
 
     @property
-    def claude_messages(self) -> list[ClaudeMessageParam]:
+    def claude_messages(self) -> list[MessageParam]:
         return [res.payload for res in self.messages.raw_list]
 
     @cached_property

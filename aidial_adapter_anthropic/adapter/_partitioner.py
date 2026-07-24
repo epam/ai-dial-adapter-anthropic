@@ -1,14 +1,14 @@
 from typing import Any, Literal
 
-from anthropic.types.beta import BetaMessageParam
+from anthropic.types.beta import BetaMessageParam as MessageParam
 
 from aidial_adapter_anthropic.adapter._base import keep_last
-from aidial_adapter_anthropic.dial._attachments import WithResources
+from aidial_adapter_anthropic.adapter._claude.converters import (
+    ClaudeMessagesList,
+)
 
-ClaudeMessages = list[tuple[WithResources[BetaMessageParam], set[int]]]
 
-
-def _has_content_block(message: BetaMessageParam, block_type: str) -> bool:
+def _has_content_block(message: MessageParam, block_type: str) -> bool:
     content = message["content"]
     if isinstance(content, str):
         return False
@@ -19,23 +19,23 @@ def _has_content_block(message: BetaMessageParam, block_type: str) -> bool:
     )
 
 
-def _is_assistant_tool_call(message: BetaMessageParam) -> bool:
+def _is_assistant_tool_call(message: MessageParam) -> bool:
     return _role(message) == "assistant" and _has_content_block(
         message, "tool_use"
     )
 
 
-def _is_tool_result(message: BetaMessageParam) -> bool:
+def _is_tool_result(message: MessageParam) -> bool:
     return _role(message) == "user" and _has_content_block(
         message, "tool_result"
     )
 
 
-def _role(message: BetaMessageParam) -> Literal["user", "assistant", "system"]:
+def _role(message: MessageParam) -> Literal["user", "assistant", "system"]:
     return message["role"]
 
 
-def claude_partitioner(messages: ClaudeMessages) -> list[int]:
+def claude_partitioner(messages: ClaudeMessagesList) -> list[int]:
     """
     Build truncation partitions for Claude history.
 
@@ -77,7 +77,7 @@ def claude_partitioner(messages: ClaudeMessages) -> list[int]:
     return ret
 
 
-def keep_last_or_system(messages: ClaudeMessages, idx: int) -> bool:
+def keep_last_or_system(messages: ClaudeMessagesList, idx: int) -> bool:
     return _role(messages[idx][0].payload) == "system" or keep_last(
         messages, idx
     )

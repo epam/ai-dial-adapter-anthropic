@@ -67,9 +67,10 @@ from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 
 _log = logging.getLogger(__name__)
 
-DialMessage = BaseMessage | HumanToolResultMessage | AIToolCallMessage
-
-ClaudeMessage = WithResources[ContentBlockParam]
+_DialMessage = BaseMessage | HumanToolResultMessage | AIToolCallMessage
+_ClaudeMessagesElem = tuple[WithResources[MessageParam], set[int]]
+ClaudeMessagesList = list[_ClaudeMessagesElem]
+ClaudeMessages = ListProjection[WithResources[MessageParam]]
 
 
 def to_claude_cache_control(
@@ -80,7 +81,7 @@ def to_claude_cache_control(
 
 
 def _add_cache_control(
-    message: DialMessage, claude_messages: Sequence[ContentBlockParam]
+    message: _DialMessage, claude_messages: Sequence[ContentBlockParam]
 ) -> None:
     if (breakpoint := message.cache_breakpoint) is None:
         return
@@ -112,13 +113,8 @@ def _get_claude_message_role(
             assert_never(dial_message)
 
 
-_Elem = tuple[WithResources[MessageParam], set[int]]
-
-
-def _merge_messages_with_same_role(
-    messages: ListProjection[WithResources[MessageParam]],
-) -> ListProjection[WithResources[MessageParam]]:
-    def _key(message: _Elem) -> str:
+def _merge_messages_with_same_role(messages: ClaudeMessages) -> ClaudeMessages:
+    def _key(message: _ClaudeMessagesElem) -> str:
         return message[0].payload["role"]
 
     def _merge_message_param(
@@ -138,7 +134,9 @@ def _merge_messages_with_same_role(
             content=list(content1) + list(content2),
         )
 
-    def _merge(a: _Elem, b: _Elem) -> _Elem:
+    def _merge(
+        a: _ClaudeMessagesElem, b: _ClaudeMessagesElem
+    ) -> _ClaudeMessagesElem:
         (msg1, set1), (msg2, set2) = a, b
         payload = _merge_message_param(msg1.payload, msg2.payload)
         resources = msg1.resources + msg2.resources
@@ -201,8 +199,8 @@ async def to_claude_messages(
     handlers: AttachmentProcessors[
         TextBlockParam, ContentBlockParam, Configuration
     ],
-    messages: list[DialMessage],
-) -> tuple[list[TextBlockParam], ListProjection[WithResources[MessageParam]]]:
+    messages: list[_DialMessage],
+) -> tuple[list[TextBlockParam], ClaudeMessages]:
     idx_offset: int = 0
     system_messages: list[TextBlockParam] = []
 
@@ -216,15 +214,10 @@ async def to_claude_messages(
 
         system_messages.extend(sys_content)
 
-    claude_messages: ListProjection[WithResources[MessageParam]] = (
-        ListProjection()
-    )
+    claude_messages: ClaudeMessages = ListProjection()
 
     for idx, message in enumerate(messages[idx_offset:], start=idx_offset):
         if isinstance(message, SystemMessage):
-            # A system message past the leading run becomes a
-            # mid-conversation system message; the API enforces its
-            # placement constraints.
             content = await handlers.process_system_message(message)
             _add_cache_control(message, content)
             claude_message = WithResources(
@@ -264,8 +257,8 @@ def _message_to_text_blocks(payload: MessageParam) -> Iterator[TextBlockParam]:
 
 
 def split_leading_system_messages(
-    messages: ListProjection[WithResources[MessageParam]],
-) -> tuple[list[TextBlockParam], ListProjection[WithResources[MessageParam]]]:
+    messages: ClaudeMessages,
+) -> tuple[list[TextBlockParam], ClaudeMessages]:
     lst = messages.lst
 
     idx = 0

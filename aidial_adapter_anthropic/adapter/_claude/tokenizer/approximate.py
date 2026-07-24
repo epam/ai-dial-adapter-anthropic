@@ -176,7 +176,6 @@ class ApproximateTokenizer:
                     | "tool_reference"
                     | "compaction"
                     | "advisor_tool_result"
-                    | "mid_conv_system"
                 ):
                     return 0
                 case _:
