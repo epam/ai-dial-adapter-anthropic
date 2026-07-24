@@ -2,13 +2,15 @@
 
 [[package]]
 name = "aidial-sdk"
-version = "0.37.0"
+version = "0.39.0"
 description = "Framework to create applications and model adapters for AI DIAL"
 optional = false
-python-versions = ">=3.10,<4.0"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
-files = []
-develop = false
+files = [
+    {file = "aidial_sdk-0.39.0-py3-none-any.whl", hash = "sha256:f16d4899e4e474162b8c9ac4ec880f9ab981e80a5e6404f584918e5f337ec2d3"},
+    {file = "aidial_sdk-0.39.0.tar.gz", hash = "sha256:3577f5c15ddb2f8c8037219e797af17d406234596f67b02a5985245f7516c601"},
+]
 
 [package.dependencies]
 fastapi = ">=0.51,<1.0"
@@ -19,12 +21,6 @@ wrapt = ">=1.10,<2"
 [package.extras]
 httpx = ["httpx (>=0.25.0,<1.0)"]
 telemetry = ["opentelemetry-api (>=1.22.0,<2.0)", "opentelemetry-exporter-otlp-proto-grpc (>=1.22.0,<2.0)", "opentelemetry-exporter-prometheus (>=0.43b0)", "opentelemetry-instrumentation-aiohttp-client (>=0.43b0)", "opentelemetry-instrumentation-fastapi (>=0.43b0)", "opentelemetry-instrumentation-httpx (>=0.43b0)", "opentelemetry-instrumentation-logging (>=0.43b0)", "opentelemetry-instrumentation-requests (>=0.43b0)", "opentelemetry-instrumentation-system-metrics (>=0.43b0)", "opentelemetry-instrumentation-urllib (>=0.43b0)", "opentelemetry-sdk (>=1.22.0,<2.0)", "prometheus-client (>=0.17.1,<1.0)"]
-
-[package.source]
-type = "git"
-url = "https://github.com/epam/ai-dial-sdk.git"
-reference = "fix/completion-tokens-details"
-resolved_reference = "d12a51122c5c0836dbe61f2169a5449017a9428e"
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -222,14 +218,14 @@ files = [
 
 [[package]]
 name = "anthropic"
-version = "0.118.0"
+version = "0.105.0"
 description = "The official Python library for the anthropic API"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "anthropic-0.118.0-py3-none-any.whl", hash = "sha256:524d835869b8e374510b3bcc552e28dbdafc035a61d63fc0088c4035286ef8fe"},
-    {file = "anthropic-0.118.0.tar.gz", hash = "sha256:acb3c43b7e7592cf635fa21930e67a99d32641d68ccd53f625b52f71d7870d55"},
+    {file = "anthropic-0.105.0-py3-none-any.whl", hash = "sha256:0565975f37a8ac7bdcf97c2002aa5b133376c157d9265997721c7f131e69724d"},
+    {file = "anthropic-0.105.0.tar.gz", hash = "sha256:2cc60ee165948f2c45fd417d2e408dbd787349b17b2ab5520a487683b59aef5d"},
 ]
 
 [package.dependencies]
@@ -243,10 +239,9 @@ sniffio = "*"
 typing-extensions = ">=4.14,<5"
 
 [package.extras]
-aiohttp = ["aiohttp", "httpx-aiohttp (>=0.1.9,<1)"]
+aiohttp = ["aiohttp", "httpx-aiohttp (>=0.1.9)"]
 aws = ["boto3 (>=1.28.57)", "botocore (>=1.31.57)"]
 bedrock = ["boto3 (>=1.28.57)", "botocore (>=1.31.57)"]
-google-cloud = ["google-auth[requests] (>=2,<3)"]
 mcp = ["mcp (>=1.0) ; python_version >= \"3.10\""]
 vertex = ["google-auth[requests] (>=2,<3)"]
 webhooks = ["standardwebhooks (>=1.0.1,<2)"]
@@ -2234,4 +2229,4 @@ bedrock = ["botocore"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "53b6316da3488bcbc3b436d06571d85fadf9b43ced05a4a8304c9975cdae5405"
+content-hash = "54dcfc86dbd21ff88c8773dcb09c66794d72a52fd68a5f1851c70f09249b7149"
