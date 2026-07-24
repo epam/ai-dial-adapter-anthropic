@@ -312,13 +312,17 @@ def to_dial_finish_reason(
 
 
 def to_dial_usage(usage: Usage) -> TokenUsage:
-    read = usage.cache_creation_input_tokens or 0
-    write = usage.cache_read_input_tokens or 0
+    cache_write = usage.cache_creation_input_tokens or 0
+    cache_read = usage.cache_read_input_tokens or 0
+    details = usage.output_tokens_details
     return TokenUsage(
         completion_tokens=usage.output_tokens,
-        prompt_tokens=usage.input_tokens + read + write,
-        cache_write_input_tokens=read,
-        cache_read_input_tokens=write,
+        # Anthropic's input_tokens excludes cache tokens; OpenAI's prompt_tokens
+        # is inclusive, so add them back to keep cached/write tokens a subset.
+        prompt_tokens=usage.input_tokens + cache_write + cache_read,
+        cache_write_input_tokens=cache_write,
+        cache_read_input_tokens=cache_read,
+        reasoning_tokens=details.thinking_tokens if details else 0,
     )
 
 

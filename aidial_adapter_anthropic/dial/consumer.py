@@ -115,7 +115,11 @@ class _ResponseState:
                 prompt_tokens=self.usage.prompt_tokens,
                 completion_tokens=self.usage.completion_tokens,
                 prompt_tokens_details={
-                    "cached_tokens": self.usage.cache_read_input_tokens
+                    "cached_tokens": self.usage.cache_read_input_tokens,
+                    "cache_write_tokens": self.usage.cache_write_input_tokens,
+                },
+                completion_tokens_details={
+                    "reasoning_tokens": self.usage.reasoning_tokens
                 },
             )
 
