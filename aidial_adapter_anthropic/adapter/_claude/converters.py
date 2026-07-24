@@ -266,16 +266,16 @@ def _message_to_text_blocks(payload: MessageParam) -> Iterator[TextBlockParam]:
 def split_leading_system_messages(
     messages: ListProjection[WithResources[MessageParam]],
 ) -> tuple[list[TextBlockParam], ListProjection[WithResources[MessageParam]]]:
-    raw = messages.raw_list
+    lst = messages.lst
 
     idx = 0
-    while idx < len(raw) and raw[idx].payload["role"] == "system":
+    while idx < len(lst) and lst[idx][0].payload["role"] == "system":
         idx += 1
 
     sys_messages = [
         block
-        for message in raw[:idx]
-        for block in _message_to_text_blocks(message.payload)
+        for message in lst[:idx]
+        for block in _message_to_text_blocks(message[0].payload)
     ]
     return sys_messages, messages.drop(idx)
 
