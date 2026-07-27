@@ -76,6 +76,9 @@ class ListProjection(Generic[_T]):
     def drop(self, idx: int) -> ListProjection:
         return ListProjection(self.lst[idx:])
 
+    def __len__(self) -> int:
+        return len(self.lst)
+
 
 async def aiter_to_list(iterator: AsyncIterator[_T]) -> list[_T]:
     return [item async for item in iterator]

@@ -97,18 +97,15 @@ def _add_cache_control(
 
 
 def _get_claude_message_role(
-    dial_message: (
-        AIRegularMessage
-        | AIToolCallMessage
-        | HumanRegularMessage
-        | HumanToolResultMessage
-    ),
-) -> Literal["assistant", "user"]:
+    dial_message: _DialMessage,
+) -> Literal["assistant", "user", "system"]:
     match dial_message:
         case AIRegularMessage() | AIToolCallMessage():
             return "assistant"
         case HumanRegularMessage() | HumanToolResultMessage():
             return "user"
+        case SystemMessage():
+            return "system"
         case _:
             assert_never(dial_message)
 
@@ -201,42 +198,33 @@ async def to_claude_messages(
     ],
     messages: list[_DialMessage],
 ) -> tuple[list[TextBlockParam], ClaudeMessages]:
-    idx_offset: int = 0
-    system_messages: list[TextBlockParam] = []
-
-    for message in messages:
-        if not isinstance(message, SystemMessage):
-            break
-
-        idx_offset += 1
-        sys_content = await handlers.process_system_message(message)
-        _add_cache_control(message, sys_content)
-
-        system_messages.extend(sys_content)
-
+    leading_sys_messages: list[TextBlockParam] = []
     claude_messages: ClaudeMessages = ListProjection()
 
-    for idx, message in enumerate(messages[idx_offset:], start=idx_offset):
+    for idx, message in enumerate(messages):
+        role = _get_claude_message_role(message)
+
         if isinstance(message, SystemMessage):
             content = await handlers.process_system_message(message)
             _add_cache_control(message, content)
+            if not claude_messages:
+                leading_sys_messages.extend(content)
+                continue
+
             claude_message = WithResources(
-                payload=MessageParam(role="system", content=content)
+                payload=MessageParam(role=role, content=content)
             )
         else:
             blocks = await _get_claude_blocks(handlers, message, idx)
             _add_cache_control(message, blocks.payload)
             claude_message = WithResources(
-                payload=MessageParam(
-                    role=_get_claude_message_role(message),
-                    content=blocks.payload,
-                ),
+                payload=MessageParam(role=role, content=blocks.payload),
                 resources=blocks.resources,
             )
 
         claude_messages.append(claude_message, idx)
 
-    return system_messages, _merge_messages_with_same_role(claude_messages)
+    return leading_sys_messages, _merge_messages_with_same_role(claude_messages)
 
 
 def _message_to_text_blocks(payload: MessageParam) -> Iterator[TextBlockParam]:
