@@ -56,7 +56,7 @@ from anthropic.types.beta import (
 from anthropic.types.beta import BetaMCPToolResultBlock as MCPToolResultBlock
 from anthropic.types.beta import BetaMCPToolUseBlock as MCPToolUseBlock
 from anthropic.types.beta import BetaMessage as ClaudeResponseMessage
-from anthropic.types.beta import BetaMessageParam as ClaudeMessageParam
+from anthropic.types.beta import BetaMessageParam as MessageParam
 from anthropic.types.beta import (
     BetaRawContentBlockDeltaEvent as ContentBlockDeltaEvent,
 )
@@ -70,6 +70,7 @@ from anthropic.types.beta import (
 )
 from anthropic.types.beta import BetaServerToolUseBlock as ServerToolUseBlock
 from anthropic.types.beta import BetaTextBlock as TextBlock
+from anthropic.types.beta import BetaTextBlockParam as TextBlockParam
 from anthropic.types.beta import (
     BetaTextEditorCodeExecutionToolResultBlock as TextEditorCodeExecutionToolResultBlock,
 )
@@ -97,7 +98,6 @@ from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter._base import (
     ChatCompletionAdapter,
     default_preprocess_messages,
-    keep_last,
 )
 from aidial_adapter_anthropic.adapter._claude.blocks import (
     IMAGE_ATTACHMENT_PROCESSOR,
@@ -111,6 +111,8 @@ from aidial_adapter_anthropic.adapter._claude.config import (
     ClaudeConfigurationWithThinking,
 )
 from aidial_adapter_anthropic.adapter._claude.converters import (
+    ClaudeMessages,
+    split_leading_system_messages,
     to_claude_cache_control,
     to_claude_effort,
     to_claude_messages,
@@ -141,14 +143,16 @@ from aidial_adapter_anthropic.adapter._decorator.replicator import (
     replicator_decorator,
 )
 from aidial_adapter_anthropic.adapter._errors import ValidationError
-from aidial_adapter_anthropic.adapter._partitioner import claude_partitioner
+from aidial_adapter_anthropic.adapter._partitioner import (
+    claude_partitioner,
+    keep_last_or_system,
+)
 from aidial_adapter_anthropic.adapter._truncate_prompt import (
     DiscardedMessages,
     truncate_prompt,
 )
 from aidial_adapter_anthropic.dial._attachments import (
     AttachmentProcessors,
-    WithResources,
 )
 from aidial_adapter_anthropic.dial._lazy_stage import LazyStage
 from aidial_adapter_anthropic.dial._message import parse_dial_message
@@ -217,10 +221,10 @@ class _AsyncMessagesAdapter(AsyncAPIResource):
 @dataclass
 class ClaudeRequest:
     params: ClaudeParameters
-    messages: ListProjection[WithResources[ClaudeMessageParam]]
+    messages: ClaudeMessages
 
     @property
-    def claude_messages(self) -> list[ClaudeMessageParam]:
+    def claude_messages(self) -> list[MessageParam]:
         return [res.payload for res in self.messages.raw_list]
 
     @cached_property
@@ -231,6 +235,23 @@ class ClaudeRequest:
         if 0 <= index < len(self.resources):
             return self.resources[index]
         return None
+
+    def absorb_leading_system_messages(self) -> None:
+        new_system, new_messages = split_leading_system_messages(self.messages)
+        if not new_system:
+            return
+
+        system = self.params["system"]
+        match system:
+            case str():
+                base_system = [TextBlockParam(type="text", text=system)]
+            case list():
+                base_system = system
+            case _:
+                base_system = []
+
+        self.params["system"] = base_system + new_system
+        self.messages = new_messages
 
 
 AnthropicClient = (
@@ -384,22 +405,22 @@ class Adapter(ChatCompletionAdapter):
         discarded_messages, messages = await truncate_prompt(
             messages=request.messages.lst,
             tokenizer=create_tokenizer(self.tokenizer, request.params),
-            keep_message=keep_last,
+            keep_message=keep_last_or_system,
             partitioner=claude_partitioner,
             model_limit=None,
             user_limit=max_prompt_tokens,
         )
 
-        claude_messages = ListProjection(messages)
-
         discarded_messages = list(
             request.messages.to_original_indices(discarded_messages)
         )
 
-        return discarded_messages, ClaudeRequest(
-            params=request.params,
-            messages=claude_messages,
+        truncated = ClaudeRequest(
+            params=request.params, messages=ListProjection(messages)
         )
+        truncated.absorb_leading_system_messages()
+
+        return discarded_messages, truncated
 
     async def chat(
         self,

@@ -1,11 +1,14 @@
 from typing import Any, Literal
 
-from anthropic.types.beta import BetaMessageParam
+from anthropic.types.beta import BetaMessageParam as MessageParam
 
-from aidial_adapter_anthropic.dial._attachments import WithResources
+from aidial_adapter_anthropic.adapter._base import keep_last
+from aidial_adapter_anthropic.adapter._claude.converters import (
+    ClaudeMessagesList,
+)
 
 
-def _has_content_block(message: BetaMessageParam, block_type: str) -> bool:
+def _has_content_block(message: MessageParam, block_type: str) -> bool:
     content = message["content"]
     if isinstance(content, str):
         return False
@@ -16,25 +19,23 @@ def _has_content_block(message: BetaMessageParam, block_type: str) -> bool:
     )
 
 
-def _is_assistant_tool_call(message: BetaMessageParam) -> bool:
+def _is_assistant_tool_call(message: MessageParam) -> bool:
     return _role(message) == "assistant" and _has_content_block(
         message, "tool_use"
     )
 
 
-def _is_tool_result(message: BetaMessageParam) -> bool:
+def _is_tool_result(message: MessageParam) -> bool:
     return _role(message) == "user" and _has_content_block(
         message, "tool_result"
     )
 
 
-def _role(message: BetaMessageParam) -> Literal["user", "assistant", "system"]:
+def _role(message: MessageParam) -> Literal["user", "assistant", "system"]:
     return message["role"]
 
 
-def claude_partitioner(
-    messages: list[tuple[WithResources[BetaMessageParam], set[int]]],
-) -> list[int]:
+def claude_partitioner(messages: ClaudeMessagesList) -> list[int]:
     """
     Build truncation partitions for Claude history.
 
@@ -46,6 +47,8 @@ def claude_partitioner(
     - Tool-call flows are grouped as transactions:
       `user* -> (assistant(tool_call) | tool_result)* -> assistant*`.
       This prevents orphan tool-result blocks when earlier history is dropped.
+    - A mid-conversation system message forms its own partition, splitting the
+      turn around it.
     """
     n = len(messages)
     unwrapped = [m[0].payload for m in messages]
@@ -54,20 +57,30 @@ def claude_partitioner(
 
     while idx < n:
         end = idx
-        while end < n and _role(unwrapped[end]) == "user":
-            end += 1
-        while end < n and (
-            _is_assistant_tool_call(unwrapped[end])
-            or _is_tool_result(unwrapped[end])
-        ):
-            end += 1
-        while end < n and _role(unwrapped[end]) == "assistant":
-            end += 1
+        if _role(unwrapped[idx]) == "system":
+            while end < n and _role(unwrapped[end]) == "system":
+                end += 1
+        else:
+            while end < n and _role(unwrapped[end]) == "user":
+                end += 1
+            while end < n and (
+                _is_assistant_tool_call(unwrapped[end])
+                or _is_tool_result(unwrapped[end])
+            ):
+                end += 1
+            while end < n and _role(unwrapped[end]) == "assistant":
+                end += 1
 
         ret.append(end - idx)
         idx = end
 
     return ret
+
+
+def keep_last_or_system(messages: ClaudeMessagesList, idx: int) -> bool:
+    return _role(messages[idx][0].payload) == "system" or keep_last(
+        messages, idx
+    )
 
 
 def trivial_partitioner(messages: list[Any]) -> list[int]:

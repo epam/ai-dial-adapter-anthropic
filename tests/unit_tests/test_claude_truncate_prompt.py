@@ -8,6 +8,10 @@ from aidial_sdk.exceptions import HTTPException as DialException
 from typing_extensions import override
 
 from aidial_adapter_anthropic.adapter import ChatCompletionAdapter
+from aidial_adapter_anthropic.adapter._claude.adapter import (
+    Adapter,
+    ClaudeRequest,
+)
 from aidial_adapter_anthropic.adapter._claude.tokenizer.approximate import (
     ApproximateTokenizer,
 )
@@ -52,6 +56,32 @@ async def model():
         default_max_tokens=1024,
         supports_thinking=True,
         supports_documents=True,
+    )
+
+
+@pytest.fixture
+def raw_model() -> Adapter:
+    return Adapter(
+        deployment="test-anthropic-deployment",
+        storage=None,
+        client=anthropic.AsyncAnthropic(),
+        tokenizer=_MockTokenizer(),
+        default_max_tokens=1024,
+        supports_thinking=True,
+        supports_documents=True,
+    )
+
+
+async def truncate(
+    raw_model: Adapter,
+    messages: list[Message],
+    max_prompt_tokens: int,
+) -> tuple[DiscardedMessages | None, ClaudeRequest]:
+    request = await raw_model._prepare_claude_request(
+        ModelParameters(max_prompt_tokens=max_prompt_tokens), messages
+    )
+    return await raw_model._compute_discarded_messages(
+        request, max_prompt_tokens
     )
 
 
@@ -300,6 +330,105 @@ async def test_truncate_first_turn_with_system_3(model):
         model,
         messages,
         min_possible_tokens - 1,
+    )
+
+    assert (
+        truncation_error
+        == f"The requested maximum prompt tokens is {min_possible_tokens - 1}. However, the system messages and the last user message resulted in {min_possible_tokens} tokens. Please reduce the length of the messages or increase the maximum prompt tokens."
+    )
+
+
+def _text(content: str) -> dict:
+    return {"text": content, "type": "text"}
+
+
+def _msg(role: str, content: str) -> dict:
+    return {"role": role, "content": [_text(content)]}
+
+
+async def test_mid_system_message_in_dropped_turn_is_hoisted(raw_model):
+    # The system message's own turn (user 10 / ai 10) is truncated away, so
+    # the surviving system message is hoisted into the top-level system prompt
+    # instead of being kept in an invalid position or discarded.
+    messages = [
+        sys("1"),  # 0: leading -> top-level system prompt
+        user("10"),  # 1: turn A user (dropped)
+        sys("7"),  # 2: turn A system (hoisted)
+        ai("10"),  # 3: turn A assistant (dropped)
+        user("10"),  # 4: turn B user (kept)
+        ai("10"),  # 5: turn B assistant (kept)
+        user("40"),  # 6: last
+    ]
+
+    max_prompt_tokens = (
+        1  # leading system prompt
+        + (_PER_MESSAGE_TOKENS + 7)  # force-kept system message
+        + (_PER_MESSAGE_TOKENS + 10)  # turn B user
+        + (_PER_MESSAGE_TOKENS + 10)  # turn B assistant
+        + (_PER_MESSAGE_TOKENS + 40)  # last
+    )
+
+    discarded, request = await truncate(raw_model, messages, max_prompt_tokens)
+
+    assert discarded == [1, 3]
+    assert request.params["system"] == [_text("1"), _text("7")]
+    assert request.claude_messages == [
+        _msg("user", "10"),
+        _msg("assistant", "10"),
+        _msg("user", "40"),
+    ]
+
+
+async def test_mid_system_message_in_kept_turn_stays_in_place(raw_model):
+    # The system message's turn survives intact, so it remains a
+    # mid-conversation system message rather than being hoisted.
+    messages = [
+        sys("1"),  # 0: leading -> top-level system prompt
+        user("10"),  # 1: turn A user (dropped)
+        ai("10"),  # 2: turn A assistant (dropped)
+        user("10"),  # 3: turn B user (kept)
+        sys("7"),  # 4: turn B system (kept in place)
+        ai("10"),  # 5: turn B assistant (kept)
+        user("40"),  # 6: last
+    ]
+
+    max_prompt_tokens = (
+        1
+        + (_PER_MESSAGE_TOKENS + 10)
+        + (_PER_MESSAGE_TOKENS + 7)
+        + (_PER_MESSAGE_TOKENS + 10)
+        + (_PER_MESSAGE_TOKENS + 40)
+    )
+
+    discarded, request = await truncate(raw_model, messages, max_prompt_tokens)
+
+    assert discarded == [1, 2]
+    assert request.params["system"] == [_text("1")]
+    assert request.claude_messages == [
+        _msg("user", "10"),
+        _msg("system", "7"),
+        _msg("assistant", "10"),
+        _msg("user", "40"),
+    ]
+
+
+async def test_mid_system_message_overflow(model):
+    messages = [
+        sys("1"),  # 0
+        user("10"),  # 1: droppable
+        sys("50"),  # 2
+        ai("10"),  # 3: droppable
+        user("20"),  # 4: last
+    ]
+
+    # The system messages and the last user message alone already overflow;
+    # the droppable user(10)/ai(10) do not count towards the minimum.
+    min_possible_tokens = (
+        1 + (_PER_MESSAGE_TOKENS + 50) + (_PER_MESSAGE_TOKENS + 20)
+    )
+
+    truncation_error = await compute_discarded_messages(
+        model, messages, min_possible_tokens - 1
     )
 
     assert (

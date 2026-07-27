@@ -77,7 +77,3 @@ def default_preprocess_messages(
 
 def keep_last(messages: list[Any], idx: int) -> bool:
     return idx == len(messages) - 1
-
-
-def keep_last_and_system_messages(messages: list[Message], idx: int) -> bool:
-    return is_system_role(messages[idx].role) or keep_last(messages, idx)

@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, assert_never
 
@@ -67,9 +67,10 @@ from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
 
 _log = logging.getLogger(__name__)
 
-DialMessage = BaseMessage | HumanToolResultMessage | AIToolCallMessage
-
-ClaudeMessage = WithResources[ContentBlockParam]
+_DialMessage = BaseMessage | HumanToolResultMessage | AIToolCallMessage
+_ClaudeMessagesElem = tuple[WithResources[MessageParam], set[int]]
+ClaudeMessagesList = list[_ClaudeMessagesElem]
+ClaudeMessages = ListProjection[WithResources[MessageParam]]
 
 
 def to_claude_cache_control(
@@ -80,7 +81,7 @@ def to_claude_cache_control(
 
 
 def _add_cache_control(
-    message: DialMessage, claude_messages: Sequence[ContentBlockParam]
+    message: _DialMessage, claude_messages: Sequence[ContentBlockParam]
 ) -> None:
     if (breakpoint := message.cache_breakpoint) is None:
         return
@@ -96,29 +97,21 @@ def _add_cache_control(
 
 
 def _get_claude_message_role(
-    dial_message: (
-        AIRegularMessage
-        | AIToolCallMessage
-        | HumanRegularMessage
-        | HumanToolResultMessage
-    ),
-) -> Literal["assistant", "user"]:
+    dial_message: _DialMessage,
+) -> Literal["assistant", "user", "system"]:
     match dial_message:
         case AIRegularMessage() | AIToolCallMessage():
             return "assistant"
         case HumanRegularMessage() | HumanToolResultMessage():
             return "user"
+        case SystemMessage():
+            return "system"
         case _:
             assert_never(dial_message)
 
 
-_Elem = tuple[WithResources[MessageParam], set[int]]
-
-
-def _merge_messages_with_same_role(
-    messages: ListProjection[WithResources[MessageParam]],
-) -> ListProjection[WithResources[MessageParam]]:
-    def _key(message: _Elem) -> str:
+def _merge_messages_with_same_role(messages: ClaudeMessages) -> ClaudeMessages:
+    def _key(message: _ClaudeMessagesElem) -> str:
         return message[0].payload["role"]
 
     def _merge_message_param(
@@ -138,7 +131,9 @@ def _merge_messages_with_same_role(
             content=list(content1) + list(content2),
         )
 
-    def _merge(a: _Elem, b: _Elem) -> _Elem:
+    def _merge(
+        a: _ClaudeMessagesElem, b: _ClaudeMessagesElem
+    ) -> _ClaudeMessagesElem:
         (msg1, set1), (msg2, set2) = a, b
         payload = _merge_message_param(msg1.payload, msg2.payload)
         resources = msg1.resources + msg2.resources
@@ -201,43 +196,69 @@ async def to_claude_messages(
     handlers: AttachmentProcessors[
         TextBlockParam, ContentBlockParam, Configuration
     ],
-    messages: list[DialMessage],
-) -> tuple[list[TextBlockParam], ListProjection[WithResources[MessageParam]]]:
-    idx_offset: int = 0
-    system_messages: list[TextBlockParam] = []
+    messages: list[_DialMessage],
+) -> tuple[list[TextBlockParam], ClaudeMessages]:
+    leading_sys_messages: list[TextBlockParam] = []
+    claude_messages: ClaudeMessages = ListProjection()
 
-    for message in messages:
-        if not isinstance(message, SystemMessage):
-            break
-
-        idx_offset += 1
-        sys_content = await handlers.process_system_message(message)
-        _add_cache_control(message, sys_content)
-
-        system_messages.extend(sys_content)
-
-    claude_messages: ListProjection[WithResources[MessageParam]] = (
-        ListProjection()
-    )
-
-    for idx, message in enumerate(messages[idx_offset:], start=idx_offset):
-        if isinstance(message, SystemMessage):
-            raise ValidationError(
-                "System and developer messages are only allowed in the beginning of the conversation."
-            )
-
-        blocks = await _get_claude_blocks(handlers, message, idx)
-        _add_cache_control(message, blocks.payload)
-
+    for idx, message in enumerate(messages):
         role = _get_claude_message_role(message)
-        claude_message = WithResources(
-            payload=MessageParam(role=role, content=blocks.payload),
-            resources=blocks.resources,
-        )
+
+        if isinstance(message, SystemMessage):
+            content = await handlers.process_system_message(message)
+            _add_cache_control(message, content)
+            if not claude_messages:
+                leading_sys_messages.extend(content)
+                continue
+
+            claude_message = WithResources(
+                payload=MessageParam(role=role, content=content)
+            )
+        else:
+            blocks = await _get_claude_blocks(handlers, message, idx)
+            _add_cache_control(message, blocks.payload)
+            claude_message = WithResources(
+                payload=MessageParam(role=role, content=blocks.payload),
+                resources=blocks.resources,
+            )
 
         claude_messages.append(claude_message, idx)
 
-    return system_messages, _merge_messages_with_same_role(claude_messages)
+    return leading_sys_messages, _merge_messages_with_same_role(claude_messages)
+
+
+def _message_to_text_blocks(payload: MessageParam) -> Iterator[TextBlockParam]:
+    content = payload["content"]
+    match content:
+        case str():
+            yield TextBlockParam(type="text", text=content)
+        case Iterable():
+            for elem in content:
+                if isinstance(elem, dict) and elem["type"] == "text":
+                    yield elem
+                else:
+                    _log.warning(
+                        f"Unexpected non-textual message content part: {elem}"
+                    )
+        case _:
+            assert_never(content)
+
+
+def split_leading_system_messages(
+    messages: ClaudeMessages,
+) -> tuple[list[TextBlockParam], ClaudeMessages]:
+    lst = messages.lst
+
+    idx = 0
+    while idx < len(lst) and lst[idx][0].payload["role"] == "system":
+        idx += 1
+
+    sys_messages = [
+        block
+        for message in lst[:idx]
+        for block in _message_to_text_blocks(message[0].payload)
+    ]
+    return sys_messages, messages.drop(idx)
 
 
 def to_dial_finish_reason(

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import builtins
 from collections.abc import AsyncIterator, Callable, Container, Iterable
 from dataclasses import dataclass, field
@@ -70,6 +72,12 @@ class ListProjection(Generic[_T]):
     def append(self, elem: _T, idx: int) -> Self:
         self.lst.append((elem, {idx}))
         return self
+
+    def drop(self, idx: int) -> ListProjection:
+        return ListProjection(self.lst[idx:])
+
+    def __len__(self) -> int:
+        return len(self.lst)
 
 
 async def aiter_to_list(iterator: AsyncIterator[_T]) -> list[_T]:
