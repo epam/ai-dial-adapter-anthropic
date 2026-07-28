@@ -96,6 +96,8 @@ Unlike OpenAI models, Claude models require the `max_tokens` parameter. When the
 
 We recommend configuring the default on a per-model basis in the DIAL Core config instead, since all the token-related information *(like pricing and token limits)* is then kept in the same place. The DIAL Core default takes precedence over the adapter one.
 
+<details><summary>DIAL Core configuration</summary>
+
 ```json
 {
   "models": {
@@ -109,6 +111,8 @@ We recommend configuring the default on a per-model basis in the DIAL Core confi
   }
 }
 ```
+
+</details>
 
 Make sure the default doesn't exceed the [max output tokens](https://platform.claude.com/docs/en/about-claude/models/overview) of the model, otherwise the request fails with an error like `max_tokens: 10000 > 8192, which is the maximum allowed number of output tokens for claude-...`.
 
@@ -210,7 +214,7 @@ Web search gives Claude direct access to real-time web content, allowing it to a
 
 To enable web search, add a static tool named `web_search` to the request's `tools` list. The Anthropic web search tool definition goes into `static_function.configuration`; the `name` is defaulted from the static function, so you don't have to repeat it. Being a server-side tool, web search never forces a `tool_choice` and can be combined with ordinary function tools.
 
-<details><summary>Enable web search</summary>
+<details><summary>Request with Web search</summary>
 
 ```json
 {
@@ -236,7 +240,7 @@ To enable web search, add a static tool named `web_search` to the request's `too
 
 The tool definition supports optional fields such as `max_uses`, `allowed_domains`, `blocked_domains`, and `user_location`. See [Tool definition](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool#tool-definition) in the Anthropic docs.
 
-<details><summary>Request with Web search tool</summary>
+<details><summary>Request with configured Web search</summary>
 
 ```json
 {
@@ -406,6 +410,8 @@ When a DIAL deployment has multiple upstreams, caching only pays off if the requ
 
 A top-level cache breakpoint may also be preset for all the requests to the deployment via `defaults`:
 
+<details><summary>DIAL Core configuration</summary>
+
 ```json
 {
   "models": {
@@ -425,6 +431,8 @@ A top-level cache breakpoint may also be preset for all the requests to the depl
   }
 }
 ```
+
+</details>
 
 The cache usage is reported in the `usage.prompt_tokens_details` object: `cached_tokens` for the cache hits and `cache_write_tokens` for the tokens written to the cache.
 
