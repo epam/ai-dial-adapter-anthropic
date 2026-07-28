@@ -120,18 +120,18 @@ The legacy Functions API *(`functions` and `function_call`)* is supported as wel
 
 #### Multi-modal inputs
 
-|Content part|Support|
+|Content part type|Support|
 |---|---|
 |`text`|Supported|
 |`image_url`|The URL is either a data URL, a public URL or a DIAL file URL|
 |`file`|The `file.file_data` field is either a data URL or a base64-encoded PDF. The `file_id` field is unsupported|
 |`input_audio`, `refusal`|Unsupported|
 
-Files of any supported type may also be passed as [DIAL attachments](#attachments), which is the only way to reference a file by URL.
+Files of any supported type may also be passed as [DIAL attachments](#attachments).
 
 #### Reasoning effort
 
-The `reasoning_effort` field sets the [effort level](https://platform.claude.com/docs/en/build-with-claude/effort) of the response. It only accepts the OpenAI values, so the `xhigh` and `max` levels are reachable via the [configuration](#reasoning-level) alone.
+The `reasoning_effort` field sets the [effort level](https://platform.claude.com/docs/en/build-with-claude/effort) of the response. It only accepts the OpenAI values, so the Claude-specific `xhigh` and `max` levels are reachable via the [configuration](#reasoning-level) alone.
 
 ### DIAL extensions
 
@@ -147,7 +147,7 @@ The attachments are passed in the `custom_content.attachments` field of a messag
 |PDF documents|`application/pdf`|
 |Text documents|`text/plain`, `text/html`, `text/css`, `text/javascript`, `text/x-typescript`, `text/csv`, `text/markdown`, `text/x-python`, `text/xml`, `text/rtf`, `application/json`|
 
-The documents are supported only by the models with [PDF support](https://platform.claude.com/docs/en/build-with-claude/pdf-support); the host application declares whether the model at hand is one of them.
+The documents are supported only by the models with [PDF support](https://platform.claude.com/docs/en/build-with-claude/pdf-support).
 
 Setting `enable_citations` in the [configuration](#configuration) makes Claude cite the documents it used; the citations are returned as numbered DIAL attachments.
 
@@ -164,7 +164,7 @@ The adapter accepts a per-request configuration object in the `custom_fields.con
 
 Not every Claude deployment supports every field or beta flag; consult the official documentation before use.
 
-<details><summary>Configuration example</summary>
+<details><summary>Request with an example configuration</summary>
 
 ```json
 {
@@ -236,7 +236,7 @@ To enable web search, add a static tool named `web_search` to the request's `too
 
 The tool definition supports optional fields such as `max_uses`, `allowed_domains`, `blocked_domains`, and `user_location`. See [Tool definition](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool#tool-definition) in the Anthropic docs.
 
-<details><summary>Web search with optional fields</summary>
+<details><summary>Request with Web search tool</summary>
 
 ```json
 {
@@ -273,7 +273,7 @@ The tool definition supports optional fields such as `max_uses`, `allowed_domain
 
 When `max_prompt_tokens` is set, the adapter discards the oldest messages until the prompt fits the limit, keeping the system prompt and the last message. The indices of the discarded messages are reported in the `discarded_messages` field of the response.
 
-The token counting is delegated to the Anthropic [count tokens](https://platform.claude.com/docs/en/api/messages-count-tokens) endpoint. For the backends that don't implement it (e.g. Bedrock), the host application may supply the bundled approximate tokenizer instead, which deliberately **overestimates** the token count, so that the truncated prompt never overflows the limit.
+The token counting is delegated to the Anthropic [count tokens](https://platform.claude.com/docs/en/api/messages-count-tokens) endpoint. For the backends that don't implement it, the host application may supply the bundled approximate tokenizer instead, which deliberately **overestimates** the token count, so that the truncated prompt never overflows the limit.
 
 #### Prompt caching
 
