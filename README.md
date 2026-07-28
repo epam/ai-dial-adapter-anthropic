@@ -17,15 +17,30 @@
 </h4>
 
 - [Overview](#overview)
-- [Anthropic API passthrough](#anthropic-api-passthrough)
+- [Chat Completions API](#chat-completions-api)
+  - [Basic request](#basic-request)
+    - [Structured outputs](#structured-outputs)
+    - [Maximum completion tokens](#maximum-completion-tokens)
+    - [Function calling](#function-calling)
+    - [Multi-modal inputs](#multi-modal-inputs)
+      - [File URL](#file-url)
+    - [Reasoning effort](#reasoning-effort)
+  - [DIAL extensions](#dial-extensions)
+    - [Attachments](#attachments)
+    - [Configuration](#configuration)
+      - [Extended thinking](#extended-thinking)
+      - [Reasoning level](#reasoning-level)
+    - [Web search](#web-search)
+    - [Prompt truncation](#prompt-truncation)
+    - [Prompt caching](#prompt-caching)
+      - [Automatic caching](#automatic-caching)
+      - [Explicit cache breakpoints](#explicit-cache-breakpoints)
+      - [TTL support](#ttl-support)
+      - [DIAL Core configuration](#dial-core-configuration)
+- [Anthropic API](#anthropic-api)
   - [Usage](#usage)
   - [Proxied endpoints](#proxied-endpoints)
   - [Supported backends](#supported-backends)
-- [Prompt caching](#prompt-caching)
-  - [Automatic caching](#automatic-caching)
-  - [Explicit cache breakpoints](#explicit-cache-breakpoints)
-  - [TTL support](#ttl-support)
-- [Web search](#web-search)
 - [Development Environment](#development-environment)
   - [Setup](#setup)
   - [Lint](#lint)
@@ -39,67 +54,394 @@
 
 ## Overview
 
-The framework provides adapter from [AI DIAL Chat Completion API](https://dialx.ai/dial_api#operation/sendChatCompletionRequest) to [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages).
+The package exposes Claude models via two APIs:
+
+|API|Description|
+|---|---|
+|[Chat Completions API](#chat-completions-api)|The [AI DIAL Chat Completion API](https://dialx.ai/dial_api#operation/sendChatCompletionRequest) adapted to the Anthropic Messages API|
+|[Anthropic API](#anthropic-api)|The native [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages) served in the passthrough mode|
 
 ---
 
-## Anthropic API passthrough
+## Chat Completions API
 
-In addition to the DIAL-to-Anthropic adapter, the library exposes a transparent **passthrough** for the native Anthropic Messages API.
+The package provides an adapter from the Chat Completions API *(ingress)* to the [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages) *(upstream)*.
 
-The exposed Anthropic Messages API is compatible with the vanilla Anthropic Client from Anthropic SDK:
+### Basic request
 
-```py
-from anthropic import Anthropic, AsyncAnthropic
-client = Anthropic(api_key="...", base_url="${ADAPTER_ORIGIN}/anthropic")
+The standard Chat Completions request fields are supported as follows:
+
+|Field|Support|
+|---|---|
+|`messages`|Supported, including the system, developer, tool and function messages. See [Multi-modal inputs](#multi-modal-inputs) for the non-text content|
+|`stream`, `stop`, `top_p`|Relayed to the Anthropic API as-is|
+|`temperature`|Mapped from the OpenAI `[0, 2]` range to the Anthropic `[0, 1]` range|
+|`n`|Supported via parallel requests to the upstream|
+|`max_tokens`|See [Maximum completion tokens](#maximum-completion-tokens)|
+|`response_format`|See [Structured outputs](#structured-outputs)|
+|`tools`, `tool_choice`|See [Function calling](#function-calling)|
+|`reasoning_effort`|See [Reasoning effort](#reasoning-effort)|
+|`seed`|Unsupported by Claude, ignored|
+
+The token usage is reported in the `usage` object, including `completion_tokens_details.reasoning_tokens` and the cache counters *(see [Prompt caching](#prompt-caching))*.
+
+#### Structured outputs
+
+`response_format` of type `json_schema` is supported via the Anthropic [structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs). Claude accepts no other value of `additionalProperties` but `false`, so the adapter sets it throughout the schema.
+
+The `json_object` type is unsupported and ignored.
+
+#### Maximum completion tokens
+
+Unlike OpenAI models, Claude models require the `max_tokens` parameter. When the request omits it, the adapter falls back to the default configured by the host application.
+
+We recommend configuring the default on a per-model basis in the DIAL Core config instead, since all the token-related information *(like pricing and token limits)* is then kept in the same place. The DIAL Core default takes precedence over the adapter one.
+
+<details><summary>DIAL Core configuration</summary>
+
+```json
+{
+  "models": {
+    "${DIAL_DEPLOYMENT_ID}": {
+      "type": "chat",
+      "endpoint": "...",
+      "defaults": {
+        "max_tokens": 2048
+      }
+    }
+  }
+}
 ```
 
-The upstream errors are relayed to the caller in the native [Anthropic error schema](https://platform.claude.com/docs/en/api/errors).
+</details>
 
-### Usage
+Make sure the default doesn't exceed the [max output tokens](https://platform.claude.com/docs/en/about-claude/models/overview) of the model, otherwise the request fails with an error like `max_tokens: 10000 > 8192, which is the maximum allowed number of output tokens for claude-...`.
 
-Mount the passthrough onto any Starlette/FastAPI host application (e.g. a `DIALApp`) with `mount_anthropic_api`. The upstream client is chosen per request by a factory you supply:
+#### Function calling
 
-```python
-from aidial_sdk import DIALApp
-from anthropic import AsyncAnthropic
-from aidial_adapter_anthropic.passthrough import mount_anthropic_api
+The `tools` and `tool_choice` fields are supported, `tool_choice` including the `auto`, `none`, `required` and named-function modes.
 
-app = DIALApp(...)
+The legacy Functions API *(`functions` and `function_call`)* is supported as well and converted to tools transparently. Claude may generate more than one call per response, while the Functions API allows a single one; the extra calls are discarded in this mode.
 
-async def get_client(request):
-    return AsyncAnthropic(api_key=...)
+#### Multi-modal inputs
 
-mount_anthropic_api(app, get_client)
+|Content part type|Support|
+|---|---|
+|`text`|Supported|
+|`image_url`|The `image_url.url` field is a [file URL](#file-url)|
+|`file`|The `file.file_data` field is either a data URL or a base64-encoded PDF. The `file_id` field is unsupported|
+|`input_audio`, `refusal`|Unsupported|
+
+<details><summary>Request with an image content part</summary>
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Describe the image"},
+        {
+          "type": "image_url",
+          "image_url": {"url": "$file_url"}
+        }
+      ]
+    }
+  ]
+}
 ```
 
-The passthrough is mounted at `/anthropic` by default; pass `path=...` to change it. The `get_client` argument may also be a plain client instance instead of a factory.
+</details>
 
-### Proxied endpoints
+<details><summary>Request with a document content part</summary>
 
-The following Anthropic endpoints are forwarded (relative to the mount path):
-
-- `POST /v1/messages` — create a message (streaming and non-streaming)
-- `POST /v1/messages/batches` — create a message batch
-- `POST /v1/messages/count_tokens` — count tokens
-
-### Supported backends
-
-The client factory may return any of the Anthropic SDK's async clients: `AsyncAnthropic`, `AsyncAnthropicBedrock`, `AsyncAnthropicBedrockMantle`, `AsyncAnthropicVertex`, and `AsyncAnthropicFoundry`.
-
-The Bedrock backends require `botocore`, which is an optional dependency:
-
-```sh
-pip install aidial-adapter-anthropic[bedrock]
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Summarize the document"},
+        {
+          "type": "file",
+          "file": {
+            "filename": "report.pdf",
+            "file_data": "data:application/pdf;base64,JVBERi0xLjQK..."
+          }
+        }
+      ]
+    }
+  ]
+}
 ```
 
-Endpoints a backend does not implement (e.g. Bedrock has no token-counting or batches route) surface as a `404` error.
+</details>
 
----
+Files of any supported type may also be passed as [DIAL attachments](#attachments).
 
-## Prompt caching
+##### File URL
 
-### Automatic caching
+The `$file_url` referenced in the examples is one of the three:
+
+|Mode|Example|
+|---|---|
+|Relative DIAL URL|`files/${DIAL_BUCKET}/images/cat.png`|
+|Public URL|`https://example.com/images/cat.png`|
+|Data URL|`data:image/png;base64,iVBORw0KGgo...`|
+
+The relative URLs are resolved against the DIAL file storage and downloaded with the caller's API key, which requires the host application to be configured with the storage. Any other URL is downloaded as-is, without the credentials.
+
+#### Reasoning effort
+
+The `reasoning_effort` field sets the [effort level](https://platform.claude.com/docs/en/build-with-claude/effort) of the response. It only accepts the OpenAI values, so the Claude-specific `xhigh` and `max` levels are reachable via the [configuration](#reasoning-level) alone.
+
+### DIAL extensions
+
+The features below are the DIAL extensions of the Chat Completions API.
+
+#### Attachments
+
+The attachments are passed in the `custom_content.attachments` field of a message. An attachment either points to the file via `url` — a [file URL](#file-url) — or carries it inline in the base64-encoded `data` field. The `type` field may be omitted as long as the MIME type is derivable from the URL. The supported types are:
+
+|Type|MIME types|
+|---|---|
+|Images|`image/png`, `image/jpeg`, `image/gif`, `image/webp`|
+|PDF documents|`application/pdf`|
+|Text documents|`text/plain`, `text/html`, `text/css`, `text/javascript`, `text/x-typescript`, `text/csv`, `text/markdown`, `text/x-python`, `text/xml`, `text/rtf`, `application/json`|
+
+The documents are supported only by the models with [PDF support](https://platform.claude.com/docs/en/build-with-claude/pdf-support).
+
+<details><summary>Request with image attachments</summary>
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Is there any difference between these images?",
+      "custom_content": {
+        "attachments": [
+          {
+            "type": "image/png",
+            "url": "$file_url"
+          },
+          {
+            "type": "image/png",
+            "data": "iVBORw0KGgo..."
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+</details>
+
+<details><summary>Request with document attachments</summary>
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Summarize the documents",
+      "custom_content": {
+        "attachments": [
+          {
+            "type": "application/pdf",
+            "url": "$file_url"
+          },
+          {
+            "type": "application/pdf",
+            "data": "JVBERi0xLjQK..."
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+</details>
+
+Setting `enable_citations` in the [configuration](#configuration) makes Claude cite the documents it used; the citations are returned as numbered DIAL attachments.
+
+#### Configuration
+
+The adapter accepts a per-request configuration object in the `custom_fields.configuration` field. All its fields are optional; the host application serves its JSON Schema via the DIAL `/configuration` endpoint.
+
+|Field|Description|
+|---|---|
+|`thinking`|[Extended thinking](#extended-thinking) configuration|
+|`effort`|[Reasoning level](#reasoning-level) of the response|
+|`betas`|List of [beta feature flags](https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/types/anthropic_beta_param.py) to enable, e.g. `["token-efficient-tools-2025-02-19"]`|
+|`enable_citations`|Enables [citations](https://platform.claude.com/docs/en/build-with-claude/citations) for the document [attachments](#attachments). Defaults to `false`|
+
+Not every Claude deployment supports every field or beta flag; consult the official documentation before use.
+
+<details><summary>Request with an example configuration</summary>
+
+```json
+{
+  "messages": [
+    {"role": "user", "content": "Hello!"}
+  ],
+  "custom_fields": {
+    "configuration": {
+      "thinking": {"type": "adaptive"},
+      "effort": "high",
+      "betas": ["token-efficient-tools-2025-02-19"],
+      "enable_citations": true
+    }
+  }
+}
+```
+
+</details>
+
+##### Extended thinking
+
+The `thinking` object is relayed to the Anthropic API as-is, so any [thinking configuration](https://platform.claude.com/docs/en/build-with-claude/extended-thinking) is supported:
+
+|Configuration|Comment|
+|---|---|
+|`{"type": "adaptive"}`|The model decides when to think|
+|`{"type": "enabled", "budget_tokens": 1024}`|Thinking with the given limit on reasoning tokens|
+|`{"type": "disabled"}`|Thinking disabled|
+
+The thinking blocks are reported in a dedicated `Thinking` stage and preserved across conversation turns, so multi-turn tool use works with thinking enabled.
+
+`temperature` is ignored when thinking is enabled; `top_p` is ignored as well when thinking is adaptive, since Claude rejects both parameters in these modes.
+
+##### Reasoning level
+
+The `effort` field extends the [reasoning effort](#reasoning-effort) with the Claude-specific levels: `low`, `medium`, `high`, `xhigh` and `max`. The value is relayed to the Anthropic API as-is, so the levels added later work without an adapter update.
+
+Setting both `effort` and `reasoning_effort` to different values is a validation error.
+
+#### Web search
+
+Web search gives Claude direct access to real-time web content, allowing it to answer questions with up-to-date information beyond its knowledge cutoff. It is an Anthropic server-side tool: the searches are executed on Anthropic's side, and the final response includes citations for the sources used. See [Web search tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool) in the Anthropic docs.
+
+To enable web search, add a static tool named `web_search` to the request's `tools` list. The Anthropic web search tool definition goes into `static_function.configuration`; the `name` is defaulted from the static function, so you don't have to repeat it. Being a server-side tool, web search never forces a `tool_choice` and can be combined with ordinary function tools.
+
+<details><summary>Request with Web search</summary>
+
+```json
+{
+  "model": "claude-opus-4-8",
+  "messages": [
+    {"role": "user", "content": "What is the weather in NYC?"}
+  ],
+  "tools": [
+    {
+      "type": "static_function",
+      "static_function": {
+        "name": "web_search",
+        "configuration": {
+          "type": "web_search_20250305"
+        }
+      }
+    }
+  ]
+}
+```
+
+</details>
+
+The tool definition supports optional fields such as `max_uses`, `allowed_domains`, `blocked_domains`, and `user_location`. See [Tool definition](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool#tool-definition) in the Anthropic docs.
+
+<details><summary>Request with configured Web search</summary>
+
+```json
+{
+  "model": "claude-opus-4-8",
+  "messages": [
+    {"role": "user", "content": "What is the weather in San Francisco?"}
+  ],
+  "tools": [
+    {
+      "type": "static_function",
+      "static_function": {
+        "name": "web_search",
+        "configuration": {
+          "type": "web_search_20250305",
+          "max_uses": 5,
+          "allowed_domains": ["example.com", "trusteddomain.org"],
+          "user_location": {
+            "type": "approximate",
+            "city": "San Francisco",
+            "region": "California",
+            "country": "US",
+            "timezone": "America/Los_Angeles"
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+</details>
+
+#### Prompt truncation
+
+When `max_prompt_tokens` is set, the adapter discards the oldest messages until the prompt fits the limit, keeping the system prompt and the last message. The indices of the discarded messages are reported in the `statistics.discarded_messages` field of the response.
+
+<details><summary>Request with a prompt token limit</summary>
+
+```json
+{
+  "max_prompt_tokens": 1024,
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {
+      "role": "user",
+      "content": "Summarize the transcript: ${A_TRANSCRIPT_OVER_1024_TOKENS}"
+    },
+    {
+      "role": "assistant",
+      "content": "The speakers agree to revisit the Q3 plan in October, ..."
+    },
+    {"role": "user", "content": "What is the capital of France?"}
+  ]
+}
+```
+
+</details>
+
+<details><summary>Response with the discarded messages</summary>
+
+```json
+{
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {"role": "assistant", "content": "Paris."}
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 23,
+    "completion_tokens": 3,
+    "total_tokens": 26
+  },
+  "statistics": {
+    "discarded_messages": [1, 2]
+  }
+}
+```
+
+</details>
+
+The summarization turn alone busts the limit, so both of its messages are discarded and only the system prompt and the last question reach the model.
+
+The token counting is delegated to the Anthropic [count tokens](https://platform.claude.com/docs/en/api/messages-count-tokens) endpoint. For the backends that don't implement it, the host application may supply the bundled approximate tokenizer instead, which deliberately **overestimates** the token count, so that the truncated prompt never overflows the limit.
+
+#### Prompt caching
+
+##### Automatic caching
 
 Automatic caching is the simplest way to use prompt caching. A single top-level cache breakpoint instructs Anthropic to automatically apply a cache point to the last cacheable block of the request. This is ideal for multi-turn conversations where the growing message history should be cached automatically. See [Automatic caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#automatic-caching) in the Anthropic docs.
 
@@ -121,7 +463,7 @@ To enable automatic caching, set `custom_fields.cache_breakpoint` at the top lev
 
 </details>
 
-### Explicit cache breakpoints
+##### Explicit cache breakpoints
 
 Explicit cache breakpoints give fine-grained control over which parts of the prompt get cached. You can place a cache breakpoint on individual system messages, user/assistant messages, or tool definitions. See [Explicit cache breakpoints](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#explicit-cache-breakpoints) in the Anthropic docs.
 
@@ -200,7 +542,7 @@ To add a breakpoint, set `custom_fields.cache_breakpoint` on a message or tool o
 
 </details>
 
-### TTL support
+##### TTL support
 
 A cache breakpoint may include an optional `ttl` field. Supported values are `5m` (5 minutes, default) and `1h` (one hour). The `ttl` field is supported on both top-level and explicit breakpoints. See [TTL support](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#ttl-support) in the Anthropic docs.
 
@@ -222,72 +564,89 @@ A cache breakpoint may include an optional `ttl` field. Supported values are `5m
 
 </details>
 
+##### DIAL Core configuration
+
+When a DIAL deployment has multiple upstreams, caching only pays off if the requests sharing a prefix reach the same upstream. Enable the corresponding feature flag in the DIAL Core config to make DIAL Core route them consistently: `cacheSupported` for explicit breakpoints, `autoCachingSupported` for automatic caching.
+
+A top-level cache breakpoint may also be preset for all the requests to the deployment via `defaults`:
+
+<details><summary>DIAL Core configuration</summary>
+
+```json
+{
+  "models": {
+    "${DIAL_DEPLOYMENT_ID}": {
+      "type": "chat",
+      "endpoint": "...",
+      "defaults": {
+        "custom_fields": {
+          "cache_breakpoint": {}
+        }
+      },
+      "features": {
+        "autoCachingSupported": true
+      },
+      "upstreams": ["..."]
+    }
+  }
+}
+```
+
+</details>
+
+The cache usage is reported in the `usage.prompt_tokens_details` object: `cached_tokens` for the cache hits and `cache_write_tokens` for the tokens written to the cache.
+
 ---
 
-## Web search
+## Anthropic API
 
-Web search gives Claude direct access to real-time web content, allowing it to answer questions with up-to-date information beyond its knowledge cutoff. It is an Anthropic server-side tool: the searches are executed on Anthropic's side, and the final response includes citations for the sources used. See [Web search tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool) in the Anthropic docs.
+The package supports the native [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages) in the **passthrough** mode: the requests are forwarded to the upstream as-is and the upstream errors are relayed to the caller in the native [Anthropic error schema](https://platform.claude.com/docs/en/api/errors).
 
-To enable web search, add a static tool named `web_search` to the request's `tools` list. The Anthropic web search tool definition goes into `static_function.configuration`; the `name` is defaulted from the static function, so you don't have to repeat it. Being a server-side tool, web search never forces a `tool_choice` and can be combined with ordinary function tools.
+The exposed API is compatible with the vanilla client from the Anthropic SDK:
 
-<details><summary>Enable web search</summary>
-
-```json
-{
-  "model": "claude-opus-4-8",
-  "messages": [
-    {"role": "user", "content": "What is the weather in NYC?"}
-  ],
-  "tools": [
-    {
-      "type": "static_function",
-      "static_function": {
-        "name": "web_search",
-        "configuration": {
-          "type": "web_search_20250305"
-        }
-      }
-    }
-  ]
-}
+```py
+from anthropic import Anthropic, AsyncAnthropic
+client = Anthropic(api_key="...", base_url="${ADAPTER_ORIGIN}/anthropic")
 ```
 
-</details>
+### Usage
 
-The tool definition supports optional fields such as `max_uses`, `allowed_domains`, `blocked_domains`, and `user_location`. See [Tool definition](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool#tool-definition) in the Anthropic docs.
+Mount the passthrough onto any Starlette/FastAPI host application (e.g. a `DIALApp`) with `mount_anthropic_api`. The upstream client is chosen per request by a factory you supply:
 
-<details><summary>Web search with optional fields</summary>
+```python
+from aidial_sdk import DIALApp
+from anthropic import AsyncAnthropic
+from aidial_adapter_anthropic.passthrough import mount_anthropic_api
 
-```json
-{
-  "model": "claude-opus-4-8",
-  "messages": [
-    {"role": "user", "content": "What is the weather in San Francisco?"}
-  ],
-  "tools": [
-    {
-      "type": "static_function",
-      "static_function": {
-        "name": "web_search",
-        "configuration": {
-          "type": "web_search_20250305",
-          "max_uses": 5,
-          "allowed_domains": ["example.com", "trusteddomain.org"],
-          "user_location": {
-            "type": "approximate",
-            "city": "San Francisco",
-            "region": "California",
-            "country": "US",
-            "timezone": "America/Los_Angeles"
-          }
-        }
-      }
-    }
-  ]
-}
+app = DIALApp(...)
+
+async def get_client(request):
+    return AsyncAnthropic(api_key=...)
+
+mount_anthropic_api(app, get_client)
 ```
 
-</details>
+The passthrough is mounted at `/anthropic` by default; pass `path=...` to change it. The `get_client` argument may also be a plain client instance instead of a factory.
+
+### Proxied endpoints
+
+The following Anthropic endpoints are forwarded (relative to the mount path):
+
+- `POST /v1/messages` — create a message (streaming and non-streaming)
+- `POST /v1/messages/batches` — create a message batch
+- `POST /v1/messages/count_tokens` — count tokens
+
+### Supported backends
+
+The client factory may return any of the Anthropic SDK's async clients: `AsyncAnthropic`, `AsyncAnthropicBedrock`, `AsyncAnthropicBedrockMantle`, `AsyncAnthropicVertex`, and `AsyncAnthropicFoundry`.
+
+The Bedrock backends require `botocore`, which is an optional dependency:
+
+```sh
+pip install aidial-adapter-anthropic[bedrock]
+```
+
+Endpoints a backend does not implement (e.g. Bedrock has no token-counting or batches route) surface as a `404` error.
 
 ---
 
