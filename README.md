@@ -387,7 +387,55 @@ The tool definition supports optional fields such as `max_uses`, `allowed_domain
 
 #### Prompt truncation
 
-When `max_prompt_tokens` is set, the adapter discards the oldest messages until the prompt fits the limit, keeping the system prompt and the last message. The indices of the discarded messages are reported in the `discarded_messages` field of the response.
+When `max_prompt_tokens` is set, the adapter discards the oldest messages until the prompt fits the limit, keeping the system prompt and the last message. The indices of the discarded messages are reported in the `statistics.discarded_messages` field of the response.
+
+<details><summary>Request with a prompt token limit</summary>
+
+```json
+{
+  "max_prompt_tokens": 1024,
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {
+      "role": "user",
+      "content": "Summarize the transcript: ${A_TRANSCRIPT_OVER_1024_TOKENS}"
+    },
+    {
+      "role": "assistant",
+      "content": "The speakers agree to revisit the Q3 plan in October, ..."
+    },
+    {"role": "user", "content": "What is the capital of France?"}
+  ]
+}
+```
+
+</details>
+
+<details><summary>Response with the discarded messages</summary>
+
+```json
+{
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {"role": "assistant", "content": "Paris."}
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 23,
+    "completion_tokens": 3,
+    "total_tokens": 26
+  },
+  "statistics": {
+    "discarded_messages": [1, 2]
+  }
+}
+```
+
+</details>
+
+The summarization turn alone busts the limit, so both of its messages are discarded and only the system prompt and the last question reach the model.
 
 The token counting is delegated to the Anthropic [count tokens](https://platform.claude.com/docs/en/api/messages-count-tokens) endpoint. For the backends that don't implement it, the host application may supply the bundled approximate tokenizer instead, which deliberately **overestimates** the token count, so that the truncated prompt never overflows the limit.
 
