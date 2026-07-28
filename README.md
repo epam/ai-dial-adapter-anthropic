@@ -23,6 +23,7 @@
     - [Maximum completion tokens](#maximum-completion-tokens)
     - [Function calling](#function-calling)
     - [Multi-modal inputs](#multi-modal-inputs)
+      - [File URL](#file-url)
     - [Reasoning effort](#reasoning-effort)
   - [DIAL extensions](#dial-extensions)
     - [Attachments](#attachments)
@@ -127,11 +128,68 @@ The legacy Functions API *(`functions` and `function_call`)* is supported as wel
 |Content part type|Support|
 |---|---|
 |`text`|Supported|
-|`image_url`|The URL is either a data URL, a public URL or a DIAL file URL|
+|`image_url`|The `image_url.url` field is a [file URL](#file-url)|
 |`file`|The `file.file_data` field is either a data URL or a base64-encoded PDF. The `file_id` field is unsupported|
 |`input_audio`, `refusal`|Unsupported|
 
+<details><summary>Request with an image content part</summary>
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Describe the image"},
+        {
+          "type": "image_url",
+          "image_url": {"url": "$file_url"}
+        }
+      ]
+    }
+  ]
+}
+```
+
+</details>
+
+<details><summary>Request with a document content part</summary>
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Summarize the document"},
+        {
+          "type": "file",
+          "file": {
+            "filename": "report.pdf",
+            "file_data": "data:application/pdf;base64,JVBERi0xLjQK..."
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+</details>
+
 Files of any supported type may also be passed as [DIAL attachments](#attachments).
+
+##### File URL
+
+The `$file_url` referenced in the examples is one of the three:
+
+|Mode|Example|
+|---|---|
+|Relative DIAL URL|`files/${DIAL_BUCKET}/images/cat.png`|
+|Public URL|`https://example.com/images/cat.png`|
+|Data URL|`data:image/png;base64,iVBORw0KGgo...`|
+
+The relative URLs are resolved against the DIAL file storage and downloaded with the caller's API key, which requires the host application to be configured with the storage. Any other URL is downloaded as-is, without the credentials.
 
 #### Reasoning effort
 
@@ -143,7 +201,7 @@ The features below are the DIAL extensions of the Chat Completions API.
 
 #### Attachments
 
-The attachments are passed in the `custom_content.attachments` field of a message, either inline *(`data`)* or by reference *(`url`)*. The supported types are:
+The attachments are passed in the `custom_content.attachments` field of a message. An attachment either points to the file via `url` — a [file URL](#file-url) — or carries it inline in the base64-encoded `data` field. The `type` field may be omitted as long as the MIME type is derivable from the URL. The supported types are:
 
 |Type|MIME types|
 |---|---|
@@ -152,6 +210,60 @@ The attachments are passed in the `custom_content.attachments` field of a messag
 |Text documents|`text/plain`, `text/html`, `text/css`, `text/javascript`, `text/x-typescript`, `text/csv`, `text/markdown`, `text/x-python`, `text/xml`, `text/rtf`, `application/json`|
 
 The documents are supported only by the models with [PDF support](https://platform.claude.com/docs/en/build-with-claude/pdf-support).
+
+<details><summary>Request with image attachments</summary>
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Is there any difference between these images?",
+      "custom_content": {
+        "attachments": [
+          {
+            "type": "image/png",
+            "url": "$file_url"
+          },
+          {
+            "type": "image/png",
+            "data": "iVBORw0KGgo..."
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+</details>
+
+<details><summary>Request with document attachments</summary>
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Summarize the documents",
+      "custom_content": {
+        "attachments": [
+          {
+            "type": "application/pdf",
+            "url": "$file_url"
+          },
+          {
+            "type": "application/pdf",
+            "data": "JVBERi0xLjQK..."
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+</details>
 
 Setting `enable_citations` in the [configuration](#configuration) makes Claude cite the documents it used; the citations are returned as numbered DIAL attachments.
 
