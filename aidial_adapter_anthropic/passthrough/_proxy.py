@@ -113,7 +113,13 @@ async def _proxy(
         and response.status_code == 200
         and is_message_params(json_body)
     ):
-        response.headers.update(get_cache_headers(json_body))
+        try:
+            response.headers.update(get_cache_headers(json_body))
+        except Exception:
+            # The cache affinity is an optimization on top of a response the
+            # upstream has already produced: a body this logic fails to read
+            # costs cache hits, it must never fail the request.
+            _log.exception("Failed to compute the DIAL cache headers.")
 
     if is_streaming:
 

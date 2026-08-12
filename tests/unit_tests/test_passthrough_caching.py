@@ -4,10 +4,13 @@ Like the rest of the passthrough tests, every test body runs against each
 supported Anthropic backend (see ``anthropic_mocks.py``).
 """
 
+import logging
+
 import httpx
 import pytest
 
 from aidial_adapter_anthropic.passthrough import _caching as caching_module
+from aidial_adapter_anthropic.passthrough import _proxy as proxy_module
 from tests.unit_tests.anthropic_mocks import (
     BASE_MESSAGES_REQUEST,
     MESSAGES_REQUEST,
@@ -16,6 +19,8 @@ from tests.unit_tests.anthropic_mocks import (
     read_fixture,
     split_sse_events,
 )
+
+_LOGGER_NAME = "aidial_adapter_anthropic.passthrough"
 
 _DIAL_CACHE_BREAKPOINT_PATH = "x-dial-cache-breakpoint-path"
 _DIAL_CACHE_EXPIRE_AT = "x-dial-cache-expire-at"
@@ -341,3 +346,60 @@ class TestCacheBreakpointReporting:
 
         assert _DIAL_CACHE_BREAKPOINT_PATH not in response.headers
         assert _DIAL_CACHE_EXPIRE_AT not in response.headers
+
+    async def test_broken_cache_logic_does_not_fail_the_request(
+        self,
+        mocker: AnthropicMocker,
+        http_client: httpx.AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        class _Mock(AnthropicAPIMock):
+            def on_block_messages(self, request) -> bytes:
+                return read_fixture("messages_non_streaming_response.json")
+
+        mocker.mock(_Mock())
+
+        def _boom(request) -> dict[str, str]:
+            raise ValueError("cannot read the body")
+
+        # The proxy imported the function by name, so the reference it calls is
+        # the one to replace.
+        monkeypatch.setattr(proxy_module, "get_cache_headers", _boom)
+
+        with caplog.at_level(logging.ERROR, logger=_LOGGER_NAME):
+            response = await http_client.post(
+                "/v1/messages",
+                json=_messages_request(
+                    system=[_text("be helpful", cache_control=_EPHEMERAL)]
+                ),
+            )
+
+        # The upstream has already answered; a failure to work out the cached
+        # prefix costs cache hits, never the response.
+        assert response.status_code == 200
+        assert response.json()["type"] == "message"
+        assert _DIAL_CACHE_BREAKPOINT_PATH not in response.headers
+        assert _DIAL_CACHE_EXPIRE_AT not in response.headers
+
+        errors = [r.getMessage() for r in caplog.records if r.exc_info]
+        assert errors == ["Failed to compute the DIAL cache headers."]
+
+    async def test_request_without_messages_is_relayed(
+        self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
+    ):
+        class _Mock(AnthropicAPIMock):
+            def on_block_messages(self, request) -> bytes:
+                return read_fixture("messages_non_streaming_response.json")
+
+        mocker.mock(_Mock())
+
+        # A body the cache logic can't read at all: `messages` is what the
+        # prefix paths are built from, and it is missing.
+        response = await http_client.post(
+            "/v1/messages",
+            json={"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024},
+        )
+
+        assert response.status_code == 200
+        assert _DIAL_CACHE_BREAKPOINT_PATH not in response.headers
