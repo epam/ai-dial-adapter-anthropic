@@ -1,20 +1,3 @@
-"""Reporting of the cache breakpoint for the Anthropic Messages API.
-
-DIAL Core keeps the requests sharing a cached prompt prefix on the same
-upstream. To make it work, the adapter reports back which prefix of the request
-is cached by the provider, addressed by a path into the request body, together
-with the moment the provider cache expires::
-
-    X-DIAL-CACHE-BREAKPOINT-PATH: prefix.body.messages[1].content[0]
-    X-DIAL-CACHE-EXPIRE-AT: 1765400000
-
-Unlike the Chat Completion API, where the breakpoints come from the DIAL-specific
-`custom_fields.cache_breakpoint` extension, here they are the native Anthropic
-`cache_control` markers the caller places into the body itself: on a `tools[i]`,
-a `system[i]` or a `messages[i].content[j]` block - or on the body itself, which
-asks Anthropic to cache the longest cacheable prefix (automatic caching).
-"""
-
 import time
 from collections.abc import Iterable, Iterator
 from typing import Any, Self, TypeGuard
@@ -34,12 +17,7 @@ _DIAL_CACHE_EXPIRE_AT = "X-DIAL-CACHE-EXPIRE-AT"
 
 
 class CacheBreakpointPath:
-    """A position in the Anthropic request body DIAL Core is able to address.
-
-    The Anthropic API counterpart of `aidial_sdk.chat_completion.
-    CacheBreakpointPath`: the breakpoints are content-block-granular here and
-    the system prompt is a body field of its own rather than a message.
-    """
+    """A position in the Anthropic request body DIAL Core is able to address."""
 
     path: str
 
@@ -60,11 +38,6 @@ class CacheBreakpointPath:
 
 
 def is_message_params(body: Any) -> TypeGuard[MessageCreateParamsBase]:
-    """Whether the parsed body may be read as a Messages API request.
-
-    Only the JSON shape is checked: rejecting a malformed request is the
-    upstream's job, and every field read below is verified as it goes.
-    """
     return isinstance(body, dict)
 
 
