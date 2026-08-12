@@ -30,10 +30,15 @@ from anthropic._models import FinalRequestOptions
 from fastapi import FastAPI, Request
 from fastapi.responses import Response, StreamingResponse
 
+from aidial_adapter_anthropic.passthrough._caching import (
+    get_cache_headers,
+    is_message_params,
+)
 from aidial_adapter_anthropic.passthrough._errors import (
     anthropic_response_decorator,
 )
 from aidial_adapter_anthropic.passthrough._helpers import (
+    MESSAGES_PATH,
     apply_anthropic_beta_features,
     bedrock_stream_to_sse,
     build_request_headers,
@@ -100,6 +105,16 @@ async def _proxy(
         stream_cls=None,
     )
 
+    if (
+        # Only the generating endpoint takes part in the cache affinity, and
+        # only on a success: a retriable failure makes DIAL Core try another
+        # upstream, whose provider cache is cold.
+        path == MESSAGES_PATH
+        and response.status_code == 200
+        and is_message_params(json_body)
+    ):
+        response.headers.update(get_cache_headers(json_body))
+
     if is_streaming:
 
         async def _stream() -> AsyncIterator[bytes]:
@@ -150,9 +165,9 @@ def _create_proxy_handler(
 
 
 _PROXIED_ENDPOINTS = [
-    ("POST", "/v1/messages"),
-    ("POST", "/v1/messages/batches"),
-    ("POST", "/v1/messages/count_tokens"),
+    ("POST", MESSAGES_PATH),
+    ("POST", f"{MESSAGES_PATH}/batches"),
+    ("POST", f"{MESSAGES_PATH}/count_tokens"),
 ]
 
 

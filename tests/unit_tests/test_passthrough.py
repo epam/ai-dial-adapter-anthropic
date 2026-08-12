@@ -12,47 +12,19 @@ import anthropic
 import httpx
 import pytest
 from anthropic.types.messages import MessageBatch
-from httpx import ASGITransport
 
 from aidial_adapter_anthropic.passthrough import create_anthropic_api_app
 from tests.unit_tests.anthropic_mocks import (
+    BASE_MESSAGES_REQUEST,
+    MESSAGES_REQUEST,
     AnthropicAPIMock,
     AnthropicMocker,
-    get_mocker_types,
+    asgi_client,
     read_fixture,
+    split_sse_events,
 )
 
 _LOGGER_NAME = "aidial_adapter_anthropic.passthrough"
-
-_BASE_MESSAGES_REQUEST = {
-    "model": "claude-3-5-sonnet-20241022",
-    "messages": [{"role": "user", "content": "Say hello."}],
-}
-_MESSAGES_REQUEST = {**_BASE_MESSAGES_REQUEST, "max_tokens": 1024}
-
-
-@pytest.fixture(
-    params=get_mocker_types(),
-    ids=[cls.id for cls in get_mocker_types()],
-)
-def mocker(request):
-    ret = request.param.create()
-    with ret.router:
-        yield ret
-
-
-def _asgi_client(app) -> httpx.AsyncClient:
-    return httpx.AsyncClient(
-        transport=ASGITransport(app),  # type: ignore[arg-type]
-        base_url="http://test-app.com",
-    )
-
-
-@pytest.fixture
-async def http_client(mocker: AnthropicMocker):
-    app = create_anthropic_api_app(mocker.make_client())
-    async with _asgi_client(app) as client:
-        yield client
 
 
 @pytest.fixture
@@ -60,15 +32,10 @@ async def anthropic_client(mocker: AnthropicMocker):
     app = create_anthropic_api_app(mocker.make_client())
     async with anthropic.AsyncAnthropic(
         api_key="test-dial-api-key",
-        http_client=_asgi_client(app),
+        http_client=asgi_client(app),
         max_retries=0,
     ) as client:
         yield client
-
-
-def _split_sse_events(raw: bytes) -> list[bytes]:
-    """Split an SSE body into its individual event chunks."""
-    return [event + b"\n\n" for event in raw.split(b"\n\n") if event.strip()]
 
 
 async def _assert_unsupported(run: Callable[[], Awaitable[object]]) -> None:
@@ -88,9 +55,7 @@ class TestMessagesNonStreaming:
         mocker.mock(_Mock())
 
     async def test_http_client(self, http_client: httpx.AsyncClient):
-        response = await http_client.post(
-            "/v1/messages", json=_MESSAGES_REQUEST
-        )
+        response = await http_client.post("/v1/messages", json=MESSAGES_REQUEST)
 
         assert response.status_code == 200
         body = response.json()
@@ -103,7 +68,7 @@ class TestMessagesNonStreaming:
     async def test_anthropic_client(
         self, anthropic_client: anthropic.AsyncAnthropic
     ):
-        response = await anthropic_client.messages.create(**_MESSAGES_REQUEST)
+        response = await anthropic_client.messages.create(**MESSAGES_REQUEST)
 
         assert response.type == "message"
         assert response.role == "assistant"
@@ -115,7 +80,7 @@ class TestMessagesNonStreaming:
 class TestMessagesStreaming:
     @pytest.fixture(autouse=True)
     def _setup(self, mocker: AnthropicMocker):
-        chunks = _split_sse_events(
+        chunks = split_sse_events(
             read_fixture("messages_streaming_response.txt")
         )
 
@@ -127,7 +92,7 @@ class TestMessagesStreaming:
 
     async def test_http_client(self, http_client: httpx.AsyncClient):
         response = await http_client.post(
-            "/v1/messages", json={**_MESSAGES_REQUEST, "stream": True}
+            "/v1/messages", json={**MESSAGES_REQUEST, "stream": True}
         )
 
         assert response.status_code == 200
@@ -147,7 +112,7 @@ class TestMessagesStreaming:
         self, anthropic_client: anthropic.AsyncAnthropic
     ):
         async with anthropic_client.messages.stream(
-            **_MESSAGES_REQUEST
+            **MESSAGES_REQUEST
         ) as stream:
             text = await stream.get_final_text()
 
@@ -156,11 +121,11 @@ class TestMessagesStreaming:
     async def test_http_client_relays_bytes(
         self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
     ):
-        chunks = _split_sse_events(
+        chunks = split_sse_events(
             read_fixture("messages_streaming_response.txt")
         )
         response = await http_client.post(
-            "/v1/messages", json={**_MESSAGES_REQUEST, "stream": True}
+            "/v1/messages", json={**MESSAGES_REQUEST, "stream": True}
         )
 
         assert response.status_code == 200
@@ -189,7 +154,7 @@ class TestCountTokens:
     ):
         async def _run() -> httpx.Response:
             return await http_client.post(
-                "/v1/messages/count_tokens", json=_BASE_MESSAGES_REQUEST
+                "/v1/messages/count_tokens", json=BASE_MESSAGES_REQUEST
             )
 
         response = await _run()
@@ -213,7 +178,7 @@ class TestCountTokens:
     ):
         async def _run() -> anthropic.types.MessageTokensCount:
             return await anthropic_client.messages.count_tokens(
-                **_BASE_MESSAGES_REQUEST
+                **BASE_MESSAGES_REQUEST
             )
 
         if mocker.supports_count_tokens:
@@ -226,7 +191,7 @@ class TestCountTokens:
 class TestMessageBatches:
     _BATCHES_REQUEST = {
         "requests": [
-            {"custom_id": "req-1", "params": _MESSAGES_REQUEST},
+            {"custom_id": "req-1", "params": MESSAGES_REQUEST},
         ],
     }
 
@@ -271,7 +236,7 @@ class TestMessageBatches:
         async def _run() -> MessageBatch:
             return await anthropic_client.messages.batches.create(
                 requests=[
-                    {"custom_id": "req-1", "params": _MESSAGES_REQUEST}  # type: ignore[typeddict-item]
+                    {"custom_id": "req-1", "params": MESSAGES_REQUEST}  # type: ignore[typeddict-item]
                 ]
             )
 
@@ -298,7 +263,7 @@ class TestRequestHeaderPassthrough:
     ):
         response = await http_client.post(
             "/v1/messages",
-            json=_MESSAGES_REQUEST,
+            json=MESSAGES_REQUEST,
             headers={
                 "anthropic-beta": "token-efficient-tools-2025-02-19",
                 "Accept-Encoding": "identity",
@@ -347,7 +312,7 @@ class TestAnthropicBetaAdaptation:
 
         response = await http_client.post(
             "/v1/messages",
-            json=_MESSAGES_REQUEST,
+            json=MESSAGES_REQUEST,
             headers={"anthropic-beta": beta_header},
         )
 
@@ -369,10 +334,10 @@ class TestAnthropicBetaAdaptation:
 
         client = mocker.make_client()
         app = create_anthropic_api_app(client, on_anthropic_beta_header=on_beta)
-        async with _asgi_client(app) as http_client:
+        async with asgi_client(app) as http_client:
             response = await http_client.post(
                 "/v1/messages",
-                json=_MESSAGES_REQUEST,
+                json=MESSAGES_REQUEST,
                 headers={"anthropic-beta": "keep-me,drop-me"},
             )
 
@@ -391,10 +356,10 @@ class TestAnthropicBetaAdaptation:
             mocker.make_client(),
             on_anthropic_beta_header=lambda client, features: [],
         )
-        async with _asgi_client(app) as http_client:
+        async with asgi_client(app) as http_client:
             response = await http_client.post(
                 "/v1/messages",
-                json=_MESSAGES_REQUEST,
+                json=MESSAGES_REQUEST,
                 headers={"anthropic-beta": "oauth-2025-04-20"},
             )
 
@@ -424,9 +389,7 @@ class TestErrorPassthrough:
         mocker.mock(_Mock())
 
     async def test_http_client(self, http_client: httpx.AsyncClient):
-        response = await http_client.post(
-            "/v1/messages", json=_MESSAGES_REQUEST
-        )
+        response = await http_client.post("/v1/messages", json=MESSAGES_REQUEST)
 
         # The upstream status, body and rate-limit headers must reach the
         # downstream client unchanged.
@@ -445,9 +408,7 @@ class TestUnexpectedError:
         mocker.mock(_Mock())
 
     async def test_http_client(self, http_client: httpx.AsyncClient):
-        response = await http_client.post(
-            "/v1/messages", json=_MESSAGES_REQUEST
-        )
+        response = await http_client.post("/v1/messages", json=MESSAGES_REQUEST)
 
         # An unexpected failure is reported in the Anthropic error schema as a
         # generic api_error, not the DIAL/OpenAI error shape. The SDK surfaces
@@ -483,7 +444,7 @@ class TestResponseEncodingStripped:
     async def test_http_client(self, http_client: httpx.AsyncClient):
         response = await http_client.post(
             "/v1/messages",
-            json=_MESSAGES_REQUEST,
+            json=MESSAGES_REQUEST,
             headers={"Accept-Encoding": "gzip"},
         )
 
@@ -515,7 +476,7 @@ class TestDebugLogging:
 
         with caplog.at_level(level, logger=_LOGGER_NAME):
             response = await http_client.post(
-                "/v1/messages", json=_MESSAGES_REQUEST
+                "/v1/messages", json=MESSAGES_REQUEST
             )
 
         assert response.status_code == 200
@@ -540,7 +501,7 @@ class TestDebugLogging:
         http_client: httpx.AsyncClient,
         caplog: pytest.LogCaptureFixture,
     ):
-        chunks = _split_sse_events(
+        chunks = split_sse_events(
             read_fixture("messages_streaming_response.txt")
         )
 
@@ -552,7 +513,7 @@ class TestDebugLogging:
 
         with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
             response = await http_client.post(
-                "/v1/messages", json={**_MESSAGES_REQUEST, "stream": True}
+                "/v1/messages", json={**MESSAGES_REQUEST, "stream": True}
             )
 
         assert response.status_code == 200
@@ -596,7 +557,7 @@ class TestDebugLogging:
 
         with caplog.at_level(level, logger=_LOGGER_NAME):
             response = await http_client.post(
-                "/v1/messages", json=_MESSAGES_REQUEST
+                "/v1/messages", json=MESSAGES_REQUEST
             )
 
         assert response.status_code == 200

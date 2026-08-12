@@ -13,6 +13,10 @@ import httpx
 from anthropic._streaming import ServerSentEvent
 from starlette.datastructures import Headers as StarletteHeaders
 
+# The only generating endpoint: the one that streams and takes part in the DIAL
+# upstream cache affinity.
+MESSAGES_PATH = "/v1/messages"
+
 
 def is_streaming_request(body: dict | None, path: str) -> bool:
     """Whether the request asks for a streamed response.
@@ -21,7 +25,7 @@ def is_streaming_request(body: dict | None, path: str) -> bool:
     backend returns the stream in its own event stream format
     (``application/vnd.amazon.eventstream``) rather than ``text/event-stream``.
     """
-    if path == "/v1/messages" and isinstance(body, dict):
+    if path == MESSAGES_PATH and isinstance(body, dict):
         return bool(body.get("stream"))
 
     return False
