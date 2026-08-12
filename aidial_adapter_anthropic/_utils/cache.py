@@ -1,5 +1,3 @@
-"""Shared handling of the Claude prompt cache breakpoint TTL."""
-
 import contextlib
 
 # 5min is a default TTL for Clade cache breakpoints
