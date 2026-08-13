@@ -16,6 +16,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from functools import partial
+from http import HTTPStatus
 from typing import TypeVar
 
 import httpx
@@ -110,7 +111,7 @@ async def _proxy(
         # only on a success: a retriable failure makes DIAL Core try another
         # upstream, whose provider cache is cold.
         path == MESSAGES_PATH
-        and response.status_code == 200
+        and response.status_code == HTTPStatus.OK
         and is_message_params(json_body)
     ):
         try:
