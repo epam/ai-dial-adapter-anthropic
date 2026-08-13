@@ -14,12 +14,32 @@ from anthropic import (
     AsyncAnthropicFoundry,
     AsyncAnthropicVertex,
 )
+from httpx import ASGITransport
 
 from aidial_adapter_anthropic.passthrough._proxy import AnthropicClient
 from tests.utils.bedrock import AMAZON_SSE_CONTENT_TYPE, sse_to_event_stream
 
 _JSON = "application/json"
 _SSE = "text/event-stream"
+
+BASE_MESSAGES_REQUEST = {
+    "model": "claude-3-5-sonnet-20241022",
+    "messages": [{"role": "user", "content": "Say hello."}],
+}
+MESSAGES_REQUEST = {**BASE_MESSAGES_REQUEST, "max_tokens": 1024}
+
+
+def asgi_client(app) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=ASGITransport(app),  # type: ignore[arg-type]
+        base_url="http://test-app.com",
+    )
+
+
+def split_sse_events(raw: bytes) -> list[bytes]:
+    """Split an SSE body into its individual event chunks."""
+    return [event + b"\n\n" for event in raw.split(b"\n\n") if event.strip()]
+
 
 # Fixed test credentials/coordinates shared by the backend mockers.
 _REGION = "test-region"

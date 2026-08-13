@@ -40,6 +40,7 @@
 - [Anthropic API](#anthropic-api)
   - [Usage](#usage)
   - [Proxied endpoints](#proxied-endpoints)
+  - [Cache breakpoints](#cache-breakpoints)
   - [Supported backends](#supported-backends)
 - [Development Environment](#development-environment)
   - [Setup](#setup)
@@ -635,6 +636,10 @@ The following Anthropic endpoints are forwarded (relative to the mount path):
 - `POST /v1/messages` — create a message (streaming and non-streaming)
 - `POST /v1/messages/batches` — create a message batch
 - `POST /v1/messages/count_tokens` — count tokens
+
+### Cache breakpoints
+
+The cache breakpoints are the native Anthropic [`cache_control`](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) markers and are forwarded to the upstream as-is: they may be placed on a `tools[i]`, a `system[i]` or a `messages[i].content[j]` block, or on the request body itself for [automatic caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#automatic-caching).
 
 ### Supported backends
 
