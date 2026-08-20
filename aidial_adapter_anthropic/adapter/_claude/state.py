@@ -32,7 +32,13 @@ class MessageState(BaseModel):
 def get_message_content_from_state(
     idx: int, message: AIRegularMessage | AIToolCallMessage
 ) -> list[ContentBlockParam] | None:
-    if (cc := message.custom_content) and (state_dict := cc.state):
+    # The state may have been written by another adapter,
+    # in which case the Claude-specific field is simply absent.
+    if (
+        (cc := message.custom_content)
+        and (state_dict := cc.state)
+        and "claude_message_content" in state_dict
+    ):
         try:
             state = MessageState.model_validate(state_dict)
             return [block.to_dict() for block in state.claude_message_content]  # type: ignore
