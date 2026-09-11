@@ -9,7 +9,7 @@ keywords = ["ai"]
 classifiers = ["Topic :: Software Development :: Libraries :: Python Modules"]
 requires-python = ">=3.11,<4.0"
 dependencies = [
-  "aidial-sdk (>=0.39.0,<1)",
+  "aidial-sdk (>=0.41.0,<1)",
   "anthropic (>=0.105.0,<1)",
   "pydantic (>=2.8.2,<3)",
   "pillow (>=12.3.0,<13)",

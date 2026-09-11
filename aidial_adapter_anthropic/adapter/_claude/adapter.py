@@ -506,6 +506,7 @@ class Adapter(ChatCompletionAdapter):
 
                     case ThinkingEvent(thinking=thinking):
                         thinking_stage.append_content(thinking)
+                        consumer.choice.append_reasoning_content(thinking)
 
                     case SignatureEvent() | MessageDeltaEvent():
                         pass
@@ -638,6 +639,7 @@ class Adapter(ChatCompletionAdapter):
                         )
                     case ThinkingBlock(thinking=thinking):
                         thinking_stage.append_content(thinking)
+                        consumer.choice.append_reasoning_content(thinking)
                     case RedactedThinkingBlock():
                         pass
                     case ServerToolUseBlock() | WebSearchToolResultBlock():
