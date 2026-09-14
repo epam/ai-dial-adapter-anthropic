@@ -12,7 +12,7 @@ from aidial_adapter_anthropic.adapter._claude.adapter import (
     Adapter,
     ClaudeRequest,
 )
-from aidial_adapter_anthropic.adapter._claude.converters import (
+from aidial_adapter_anthropic.adapter._claude.blocks import (
     to_claude_cache_control,
 )
 from aidial_adapter_anthropic.dial.request import AdapterRequest
@@ -40,6 +40,10 @@ def _sys(content: str, *, cache_breakpoint: dict | None = None) -> dict:
 
 
 _BREAKPOINT = {"mode": "explicit"}
+_PNG_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 
 def _text_part(text: str, *, breakpoint: bool = False) -> dict:
@@ -266,10 +270,6 @@ async def test_native_breakpoint_is_anchored_to_the_part_index(
     adapter: Adapter,
 ):
     """A non-text part occupies a part index just like a text one does."""
-    png = (
-        "data:image/png;base64,"
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-    )
     request = await _to_clade_request(
         adapter,
         {
@@ -277,7 +277,7 @@ async def test_native_breakpoint_is_anchored_to_the_part_index(
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image_url", "image_url": {"url": png}},
+                        {"type": "image_url", "image_url": {"url": _PNG_URL}},
                         _text_part("doc", breakpoint=True),
                         _text_part("question"),
                     ],
@@ -287,6 +287,31 @@ async def test_native_breakpoint_is_anchored_to_the_part_index(
     )
     assert _cache_controls(request.claude_messages[0]["content"]) == [
         None,
+        _EPHEMERAL,
+        None,
+    ]
+
+
+async def test_native_breakpoint_marks_a_non_text_part(adapter: Adapter):
+    request = await _to_clade_request(
+        adapter,
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": _PNG_URL},
+                            "prompt_cache_breakpoint": _BREAKPOINT,
+                        },
+                        _text_part("question"),
+                    ],
+                }
+            ]
+        },
+    )
+    assert _cache_controls(request.claude_messages[0]["content"]) == [
         _EPHEMERAL,
         None,
     ]

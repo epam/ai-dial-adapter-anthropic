@@ -1,5 +1,5 @@
 import json
-from typing import cast
+from typing import TypeVar, cast
 
 from aidial_sdk.chat_completion import ToolCall
 from anthropic.types.beta import (
@@ -31,76 +31,113 @@ from anthropic.types.beta.beta_tool_result_block_param import (
     Content as ToolResultInnerContent,
 )
 
+from aidial_adapter_anthropic._utils.cache import CacheBreakpoint
 from aidial_adapter_anthropic._utils.resource import Resource
-from aidial_adapter_anthropic.dial._attachments import AttachmentProcessor
+from aidial_adapter_anthropic.adapter._claude.config import Configuration
+from aidial_adapter_anthropic.dial._attachments import (
+    AttachmentProcessor,
+    PartContext,
+)
+
+_Block = TypeVar(
+    "_Block",
+    bound=TextBlockParam
+    | ImageBlockParam
+    | RequestDocumentBlockParam
+    | ToolResultBlockParam
+    | ToolUseBlockParam,
+)
 
 
-def set_cache_control(
-    block: ContentBlockParam, cache_control: CacheControlEphemeralParam
-) -> bool:
-    """Places a cache breakpoint on the block.
+def to_claude_cache_control(
+    breakpoint: CacheBreakpoint,
+) -> CacheControlEphemeralParam:
+    cache_control = CacheControlEphemeralParam(type="ephemeral")
+    if breakpoint.ttl is not None:
+        # Claude accepts "5m" and "1h" only, and rejects anything else itself.
+        cache_control["ttl"] = breakpoint.ttl  # type: ignore
+    return cache_control
 
-    Returns False for the thinking blocks, which can't carry one.
-    """
-    if (
-        isinstance(block, dict)
-        and block["type"] != "thinking"
-        and block["type"] != "redacted_thinking"
-    ):
+
+def _citations_config(config: Configuration | None) -> CitationsConfigParam:
+    return CitationsConfigParam(
+        enabled=config.enable_citations if config else False
+    )
+
+
+def _get_cache_control(ctx: PartContext) -> CacheControlEphemeralParam | None:
+    if (breakpoint := ctx.cache_breakpoint) is not None:
+        return to_claude_cache_control(breakpoint)
+    return None
+
+
+def _add_cache_control(ctx: PartContext, block: _Block) -> _Block:
+    cache_control = _get_cache_control(ctx)
+    if cache_control is not None:
         block["cache_control"] = cache_control
-        return True
-    return False
+    return block
 
 
-def create_text_block(text: str) -> TextBlockParam:
-    return TextBlockParam(text=text, type="text")
+def create_text_block(ctx: PartContext, text: str) -> TextBlockParam:
+    return _add_cache_control(ctx, TextBlockParam(type="text", text=text))
 
 
-def create_image_block(resource: Resource) -> ImageBlockParam:
-    return ImageBlockParam(
-        source=Base64ImageSourceParam(
-            data=resource.data_base64,
-            media_type=resource.type,  # type: ignore
-            type="base64",
+def create_image_block(
+    ctx: PartContext, resource: Resource, config: Configuration | None
+) -> ImageBlockParam:
+    return _add_cache_control(
+        ctx,
+        ImageBlockParam(
+            type="image",
+            source=Base64ImageSourceParam(
+                type="base64",
+                media_type=resource.type,  # type: ignore
+                data=resource.data_base64,
+            ),
         ),
-        type="image",
     )
 
 
 def create_text_document_block(
-    resource: Resource, *, enable_citations: bool = False
+    ctx: PartContext, resource: Resource, config: Configuration | None
 ) -> RequestDocumentBlockParam:
-    return RequestDocumentBlockParam(
-        source=PlainTextSourceParam(
-            data=resource.data.decode("utf-8"),
-            media_type="text/plain",
-            type="text",
+    return _add_cache_control(
+        ctx,
+        RequestDocumentBlockParam(
+            type="document",
+            source=PlainTextSourceParam(
+                type="text",
+                media_type="text/plain",
+                data=resource.data.decode("utf-8"),
+            ),
+            citations=_citations_config(config),
         ),
-        type="document",
-        citations=CitationsConfigParam(enabled=enable_citations),
     )
 
 
 def create_pdf_document_block(
-    resource: Resource, *, enable_citations: bool = False
+    ctx: PartContext, resource: Resource, config: Configuration | None
 ) -> RequestDocumentBlockParam:
-    return RequestDocumentBlockParam(
-        source=Base64PDFSourceParam(
-            data=resource.data_base64,
-            media_type="application/pdf",
-            type="base64",
+    return _add_cache_control(
+        ctx,
+        RequestDocumentBlockParam(
+            type="document",
+            source=Base64PDFSourceParam(
+                type="base64",
+                media_type="application/pdf",
+                data=resource.data_base64,
+            ),
+            citations=_citations_config(config),
         ),
-        type="document",
-        citations=CitationsConfigParam(enabled=enable_citations),
     )
 
 
 def create_tool_use_block(call: ToolCall) -> ContentBlockParam:
     return ToolUseBlockParam(
+        type="tool_use",
         id=call.id,
         name=call.function.name,
         input=json.loads(call.function.arguments),
-        type="tool_use",
     )
 
 
@@ -108,8 +145,8 @@ def create_tool_result_block(
     tool_use_id: str, content: list[ContentBlockParam]
 ) -> ToolResultBlockParam:
     return ToolResultBlockParam(
-        tool_use_id=tool_use_id,
         type="tool_result",
+        tool_use_id=tool_use_id,
         content=cast(list[ToolResultInnerContent], content),
     )
 

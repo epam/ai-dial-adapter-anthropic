@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, assert_never
 
@@ -10,9 +10,6 @@ from aidial_sdk.chat_completion.request import (
     ResponseFormatJsonObject,
     ResponseFormatJsonSchema,
     ResponseFormatText,
-)
-from anthropic.types.beta import (
-    BetaCacheControlEphemeralParam as CacheControlEphemeralParam,
 )
 from anthropic.types.beta import BetaContentBlockParam as ContentBlockParam
 from anthropic.types.beta import (
@@ -37,7 +34,7 @@ from aidial_adapter_anthropic.adapter._claude.blocks import (
     create_text_block,
     create_tool_result_block,
     create_tool_use_block,
-    set_cache_control,
+    to_claude_cache_control,
 )
 from aidial_adapter_anthropic.adapter._claude.config import (
     ClaudeConfiguration,
@@ -52,6 +49,7 @@ from aidial_adapter_anthropic.adapter._claude.state import (
 from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.dial._attachments import (
     AttachmentProcessors,
+    PartContext,
     WithResources,
 )
 from aidial_adapter_anthropic.dial._message import (
@@ -60,7 +58,6 @@ from aidial_adapter_anthropic.dial._message import (
     BaseMessage,
     HumanRegularMessage,
     HumanToolResultMessage,
-    MessageCacheBreakpoints,
     SystemMessage,
 )
 from aidial_adapter_anthropic.dial.request import AdapterRequest
@@ -74,35 +71,6 @@ _DialMessage = BaseMessage | HumanToolResultMessage | AIToolCallMessage
 _ClaudeMessagesElem = tuple[WithResources[MessageParam], set[int]]
 ClaudeMessagesList = list[_ClaudeMessagesElem]
 ClaudeMessages = ListProjection[WithResources[MessageParam]]
-
-
-def to_claude_cache_control(
-    breakpoint: CacheBreakpoint,
-) -> CacheControlEphemeralParam:
-    cache_control = CacheControlEphemeralParam(type="ephemeral")
-    if breakpoint.ttl is not None:
-        # Claude accepts "5m" and "1h" only, and rejects anything else itself.
-        cache_control["ttl"] = breakpoint.ttl  # type: ignore
-    return cache_control
-
-
-def _add_block_cache_control(
-    breakpoints: MessageCacheBreakpoints,
-) -> Callable[[int, ContentBlockParam], None]:
-    """Places the breakpoint of a content part on the block it has produced."""
-
-    def handler(part_idx: int, block: ContentBlockParam) -> None:
-        if (breakpoint := breakpoints.parts.get(part_idx)) is not None:
-            set_cache_control(block, to_claude_cache_control(breakpoint))
-
-    return handler
-
-
-def _add_message_cache_control(
-    breakpoints: MessageCacheBreakpoints, blocks: Sequence[ContentBlockParam]
-) -> None:
-    if (breakpoint := breakpoints.trailing) is not None and blocks:
-        set_cache_control(blocks[-1], to_claude_cache_control(breakpoint))
 
 
 def _get_claude_message_role(
@@ -156,28 +124,31 @@ async def _get_claude_blocks(
         TextBlockParam, ContentBlockParam, Configuration
     ],
     message: (
-        HumanRegularMessage
+        SystemMessage
+        | HumanRegularMessage
         | AIRegularMessage
         | AIToolCallMessage
         | HumanToolResultMessage
     ),
     message_idx: int,
 ) -> WithResources[Sequence[ContentBlockParam]]:
-    on_part_block = _add_block_cache_control(message.cache_breakpoints)
-
     match message:
+        case SystemMessage():
+            content = await handlers.process_system_message(message)
+            return WithResources(payload=content)
+
         case HumanRegularMessage():
-            return await handlers.process_attachments(message, on_part_block)
+            return await handlers.process_attachments(message)
 
         case HumanToolResultMessage():
-            inner = await handlers.process_attachments(message, on_part_block)
+            inner = await handlers.process_attachments(message)
             return WithResources(
                 payload=[create_tool_result_block(message.id, inner.payload)],
                 resources=inner.resources,
             )
 
         case AIRegularMessage():
-            content = await handlers.process_attachments(message, on_part_block)
+            content = await handlers.process_attachments(message)
 
             # Take the message content from the state if possible,
             # since it may include certain content blocks that
@@ -193,7 +164,8 @@ async def _get_claude_blocks(
         case AIToolCallMessage():
             blocks = [create_tool_use_block(call) for call in message.calls]
             if text_content := message.content:
-                blocks.insert(0, create_text_block(text_content))
+                ctx = PartContext(breakpoints=message.cache_breakpoints)
+                blocks.insert(0, create_text_block(ctx, text_content))
 
             content = WithResources(payload=blocks)
             if state := get_message_content_from_state(message_idx, message):
@@ -217,29 +189,16 @@ async def to_claude_messages(
     for idx, message in enumerate(messages):
         role = _get_claude_message_role(message)
 
-        if isinstance(message, SystemMessage):
-            content = await handlers.process_system_message(
-                message, _add_block_cache_control(message.cache_breakpoints)
-            )
-            _add_message_cache_control(message.cache_breakpoints, content)
-            if not claude_messages:
-                leading_sys_messages.extend(content)
-                continue
-
-            claude_message = WithResources(
-                payload=MessageParam(role=role, content=content)
-            )
+        if isinstance(message, SystemMessage) and not claude_messages:
+            content = await handlers.process_system_message(message)
+            leading_sys_messages.extend(content)
         else:
             blocks = await _get_claude_blocks(handlers, message, idx)
-            _add_message_cache_control(
-                message.cache_breakpoints, blocks.payload
-            )
             claude_message = WithResources(
                 payload=MessageParam(role=role, content=blocks.payload),
                 resources=blocks.resources,
             )
-
-        claude_messages.append(claude_message, idx)
+            claude_messages.append(claude_message, idx)
 
     return leading_sys_messages, _merge_messages_with_same_role(claude_messages)
 

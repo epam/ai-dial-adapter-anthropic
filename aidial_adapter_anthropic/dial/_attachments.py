@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -25,12 +24,14 @@ from aidial_sdk.chat_completion import (
 )
 from pydantic import BaseModel
 
+from aidial_adapter_anthropic._utils.cache import CacheBreakpoint
 from aidial_adapter_anthropic._utils.list import aiter_to_list
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic.adapter._errors import UserError, ValidationError
 from aidial_adapter_anthropic.dial._message import (
     BaseMessage,
     HumanToolResultMessage,
+    MessageCacheBreakpoints,
     SystemMessage,
 )
 from aidial_adapter_anthropic.dial.resource import (
@@ -48,14 +49,31 @@ _Config = TypeVar("_Config", bound=BaseModel, contravariant=True)
 AttachmentSourceMessage = BaseMessage | HumanToolResultMessage
 
 
-@runtime_checkable
-class Handler(Protocol, Generic[_T]):
-    def __call__(self, resource: Resource) -> _T: ...
+@dataclass
+class PartContext:
+    breakpoints: MessageCacheBreakpoints = field(
+        default_factory=MessageCacheBreakpoints
+    )
+    index: int = 0
+    n_parts: int = 1
+
+    @property
+    def cache_breakpoint(self) -> CacheBreakpoint | None:
+        if (brk := self.breakpoints.trailing) is not None and self.is_last:
+            return brk
+
+        return self.breakpoints.parts.get(self.index)
+
+    @property
+    def is_last(self) -> bool:
+        return self.index == self.n_parts - 1
 
 
 @runtime_checkable
-class HandlerWithConfig(Protocol, Generic[_T, _Config]):
-    def __call__(self, resource: Resource, config: _Config | None) -> _T: ...
+class ContentPartHandler(Protocol, Generic[_T, _Config]):
+    def __call__(
+        self, ctx: PartContext, resource: Resource, config: _Config | None
+    ) -> _T: ...
 
 
 @dataclass
@@ -63,24 +81,7 @@ class AttachmentProcessor(Generic[_T, _Config]):
     supported_types: dict[str, set[str]]
     """MIME type to file extensions mapping"""
 
-    handler: Handler[_T] | HandlerWithConfig[_T, _Config]
-
-    def handle(self, resource: Resource, config: _Config | None) -> _T:
-        sig = inspect.signature(self.handler)
-        params = list(sig.parameters.values())
-
-        with_config = (
-            len(params) >= 2
-            and params[1].kind
-            in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            )
-        ) or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
-
-        if with_config:
-            return self.handler(resource, config)  # type: ignore
-        return self.handler(resource)  # type: ignore
+    handler: ContentPartHandler[_T, _Config]
 
 
 @dataclass
@@ -98,7 +99,7 @@ class WithResources(Generic[_T]):
 @dataclass
 class AttachmentProcessors(Generic[_Txt, _T, _Config]):
     attachment_processors: Sequence[AttachmentProcessor[_T, _Config]]
-    text_handler: Callable[[str], _Txt]
+    text_handler: Callable[[PartContext, str], _Txt]
     file_storage: FileStorage | None
     config: _Config | None = field(default=None)
 
@@ -118,28 +119,28 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
     def supported_image_types(self) -> list[str]:
         return [t for t in self.supported_mime_types if t.startswith("image/")]
 
-    def _text_handler(self, text: str) -> WithResources[_Txt]:
-        return WithResources(self.text_handler(text))
+    def _text_handler(self, ctx: PartContext, text: str) -> WithResources[_Txt]:
+        return WithResources(self.text_handler(ctx, text))
 
     async def process_system_message(
-        self,
-        message: SystemMessage,
-        on_block: Callable[[int, _Txt], None] | None = None,
+        self, message: SystemMessage
     ) -> list[_Txt]:
+        breakpoints = message.cache_breakpoints
+
         def _gen():
             match content := message.content:
                 case str():
                     if content:
-                        yield self.text_handler(content)
+                        yield self.text_handler(
+                            PartContext(breakpoints), content
+                        )
                 case list():
                     for idx, part in enumerate(content):
+                        ctx = PartContext(breakpoints, idx, len(content))
                         match part:
                             case MessageContentTextPart(text=text):
                                 if text:
-                                    block = self.text_handler(text)
-                                    if on_block is not None:
-                                        on_block(idx, block)
-                                    yield block
+                                    yield self.text_handler(ctx, text)
                             case _:
                                 assert_never(part)
                 case _:
@@ -148,25 +149,20 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         return list(_gen())
 
     async def process_attachments(
-        self,
-        message: AttachmentSourceMessage,
-        on_block: Callable[[int, _T | _Txt], None] | None = None,
+        self, message: AttachmentSourceMessage
     ) -> WithResources[list[_T | _Txt]]:
         """Converts the message attachments and content parts into blocks"""
-        ret = await aiter_to_list(
-            self._process_attachments_iter(message, on_block)
-        )
-        ret = ret or [self._text_handler(" ")]
+        ret = await aiter_to_list(self._process_attachments_iter(message))
+        ret = ret or [self._text_handler(PartContext(), " ")]
         return WithResources.transpose(ret)
 
     async def _process_attachments_iter(
-        self,
-        message: AttachmentSourceMessage,
-        on_block: Callable[[int, _T | _Txt], None] | None,
+        self, message: AttachmentSourceMessage
     ) -> AsyncIterator[WithResources[_T | _Txt]]:
         if not isinstance(message, SystemMessage):
             for attachment in message.attachments:
                 yield await self._handle_dial_resource(
+                    PartContext(),
                     AttachmentResource(
                         attachment=attachment,
                         entity_name="attachment",
@@ -175,29 +171,31 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
                 )
 
         content = message.content
+        breakpoints = message.cache_breakpoints
 
         match content:
             case str():
                 if content:
-                    yield self._text_handler(content)
+                    yield self._text_handler(PartContext(breakpoints), content)
             case list():
                 for idx, part in enumerate(content):
-                    block = await self._process_content_part(part)
-                    if block is not None:
-                        if on_block is not None:
-                            on_block(idx, block.payload)
+                    ctx = PartContext(breakpoints, idx, len(content))
+                    if (
+                        block := await self._process_content_part(ctx, part)
+                    ) is not None:
                         yield block
             case _:
                 assert_never(content)
 
     async def _process_content_part(
-        self, part: MessageContentPart
+        self, ctx: PartContext, part: MessageContentPart
     ) -> WithResources[_T | _Txt] | None:
         match part:
             case MessageContentTextPart(text=text):
-                return self._text_handler(text) if text else None
+                return self._text_handler(ctx, text) if text else None
             case MessageContentImagePart(image_url=image_url):
                 return await self._handle_dial_resource(
+                    ctx,
                     URLResource(
                         url=image_url.url,
                         entity_name="image content part",
@@ -207,6 +205,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
             case MessageContentFilePart(file=file):
                 attachment = _file_content_part_to_attachment(file)
                 return await self._handle_dial_resource(
+                    ctx,
                     AttachmentResource(
                         attachment=attachment,
                         entity_name="file content part",
@@ -218,6 +217,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
             ):
                 attachment = Attachment(data=data, type=f"audio/{format}")
                 return await self._handle_dial_resource(
+                    ctx,
                     AttachmentResource(
                         attachment=attachment,
                         entity_name="audio content part",
@@ -238,10 +238,12 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
                 _get_usage_message(self.get_file_exts(e.supported_types)),
             ) from None
 
-    async def _handle_resource(self, resource: Resource) -> _T:
+    async def _handle_resource(
+        self, ctx: PartContext, resource: Resource
+    ) -> _T:
         for processor in self.attachment_processors:
             if resource.type in processor.supported_types:
-                return processor.handle(resource, self.config)
+                return processor.handler(ctx, resource, self.config)
 
         raise UserError(
             f"Unsupported media type: {resource.type}",
@@ -249,10 +251,10 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         )
 
     async def _handle_dial_resource(
-        self, dial_resource: DialResource
+        self, ctx: PartContext, dial_resource: DialResource
     ) -> WithResources[_T]:
         resource = await self._download_resource(dial_resource)
-        message = await self._handle_resource(resource)
+        message = await self._handle_resource(ctx, resource)
         return WithResources(message, resources=[dial_resource])
 
     def get_file_exts(self, mime_types: list[str]) -> list[str]:

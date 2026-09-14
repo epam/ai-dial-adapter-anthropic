@@ -24,7 +24,7 @@ from aidial_adapter_anthropic.dial._message import (
 @pytest.fixture
 def attachment_processors() -> AttachmentProcessors:
     return AttachmentProcessors(
-        text_handler=lambda text: text,
+        text_handler=lambda text, ctx: text,
         attachment_processors=[
             AttachmentProcessor(
                 supported_types={
@@ -33,7 +33,7 @@ def attachment_processors() -> AttachmentProcessors:
                     "application/pdf": {"pdf"},
                     "text/plain": {"txt"},
                 },
-                handler=lambda resource: resource,
+                handler=lambda ctx, resource, config: resource,
             )
         ],
         file_storage=None,
