@@ -8,21 +8,21 @@ from anthropic import Omit
 
 from aidial_adapter_anthropic.adapter import ValidationError
 from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
-from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 from tests.utils.openai import user
 
 
 async def test_adaptive_thinking_allows_custom_display(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        ModelParameters(
+        AdapterRequest(
             configuration={
                 "thinking": {
                     "type": "adaptive",
                     "display": "summarized",
                 }
-            }
-        ),
-        [user("hello")],
+            },
+            messages=[user("hello")],
+        )
     )
 
     assert request.params["thinking"] == {
@@ -33,13 +33,13 @@ async def test_adaptive_thinking_allows_custom_display(adapter: Adapter):
 
 async def test_enabled_thinking_still_omits_temperature(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        ModelParameters(
+        AdapterRequest(
             configuration={
                 "thinking": {"type": "enabled", "budget_tokens": 1024}
             },
             temperature=1.0,
-        ),
-        [user("hello")],
+            messages=[user("hello")],
+        )
     )
 
     assert request.params["thinking"] == {
@@ -51,12 +51,12 @@ async def test_enabled_thinking_still_omits_temperature(adapter: Adapter):
 
 async def test_thinking_configuration_free_format(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        ModelParameters(
+        AdapterRequest(
             configuration={
                 "thinking": {"my": "very", "secret": "configuration"}
             },
-        ),
-        [user("hello")],
+            messages=[user("hello")],
+        )
     )
 
     assert request.params["thinking"] == {
@@ -69,8 +69,7 @@ async def test_thinking_configuration_free_format(adapter: Adapter):
 async def test_thinking_effort_from_config(adapter: Adapter, effort: str):
     config = {"thinking": {"type": "adaptive"}, "effort": effort}
     request = await adapter._prepare_claude_request(
-        ModelParameters(configuration=config),
-        [user("hello")],
+        AdapterRequest(configuration=config, messages=[user("hello")])
     )
     assert request.params["thinking"] == {"type": "adaptive"}
     assert request.params["output_config"] == {"effort": effort}
@@ -79,10 +78,11 @@ async def test_thinking_effort_from_config(adapter: Adapter, effort: str):
 async def test_thinking_effort_from_model_params(adapter: Adapter):
     config = {"thinking": {"type": "adaptive"}}
     request = await adapter._prepare_claude_request(
-        ModelParameters(
-            configuration=config, reasoning_effort=ReasoningEffort.MEDIUM
-        ),
-        [user("hello")],
+        AdapterRequest(
+            configuration=config,
+            reasoning_effort=ReasoningEffort.MEDIUM,
+            messages=[user("hello")],
+        )
     )
     assert request.params["thinking"] == {"type": "adaptive"}
     assert request.params["output_config"] == {"effort": "medium"}
@@ -91,10 +91,11 @@ async def test_thinking_effort_from_model_params(adapter: Adapter):
 async def test_thinking_effort_both_provided(adapter: Adapter):
     config = {"thinking": {"type": "adaptive"}, "effort": "high"}
     request = adapter._prepare_claude_request(
-        ModelParameters(
-            configuration=config, reasoning_effort=ReasoningEffort.MEDIUM
-        ),
-        [user("hello")],
+        AdapterRequest(
+            configuration=config,
+            reasoning_effort=ReasoningEffort.MEDIUM,
+            messages=[user("hello")],
+        )
     )
     msg = (
         'Conflicting reasoning effort values: "reasoning_effort"=medium '
@@ -116,11 +117,11 @@ async def test_thinking_effort_preserved_when_response_format(adapter: Adapter):
         json_schema=json_schema,
     )
     request = await adapter._prepare_claude_request(
-        ModelParameters(
+        AdapterRequest(
             configuration=config,
             response_format=response_format,
-        ),
-        [user("hello")],
+            messages=[user("hello")],
+        )
     )
 
     output_config = request.params["output_config"]

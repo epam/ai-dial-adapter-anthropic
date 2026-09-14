@@ -1,47 +1,35 @@
 from abc import ABC, abstractmethod
-from typing import Any
 
-from aidial_sdk.chat_completion import Message
 from pydantic import BaseModel
 
 from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.dial._message import AdapterMessage, SystemMessage
 from aidial_adapter_anthropic.dial.consumer import Consumer
-from aidial_adapter_anthropic.dial.request import (
-    ModelParameters,
-    collect_text_content,
-    is_system_role,
-)
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 
 
 class ChatCompletionAdapter(ABC):
     @abstractmethod
-    async def chat(
-        self,
-        consumer: Consumer,
-        params: ModelParameters,
-        messages: list[Message],
-    ) -> None:
+    async def chat(self, consumer: Consumer, request: AdapterRequest) -> None:
         pass
 
     async def configuration(self) -> type[BaseModel]:
         raise NotImplementedError
 
-    async def count_prompt_tokens(
-        self, params: ModelParameters, messages: list[Message]
-    ) -> int:
+    async def count_prompt_tokens(self, request: AdapterRequest) -> int:
         raise NotImplementedError
 
     async def count_completion_tokens(self, string: str) -> int:
         raise NotImplementedError
 
     async def compute_discarded_messages(
-        self, params: ModelParameters, messages: list[Message]
+        self, request: AdapterRequest
     ) -> DiscardedMessages | None:
         """
         The method truncates the list of messages to fit
-        into the token limit set in `params.max_prompt_tokens`.
+        into the token limit set in `request.max_prompt_tokens`.
 
         If the limit isn't provided, then it returns None.
         Otherwise, returns the indices of _discarded_ messages which should be
@@ -51,15 +39,12 @@ class ChatCompletionAdapter(ABC):
 
 
 def default_preprocess_messages(
-    messages: list[Message],
-) -> ListProjection[Message]:
-    def _is_empty_system_message(msg: Message) -> bool:
-        return (
-            is_system_role(msg.role)
-            and collect_text_content(msg.content).strip() == ""
-        )
+    messages: list[AdapterMessage],
+) -> ListProjection[AdapterMessage]:
+    def _is_empty_system_message(msg: AdapterMessage) -> bool:
+        return isinstance(msg, SystemMessage) and msg.text_content.strip() == ""
 
-    ret: list[tuple[Message, set[int]]] = []
+    ret: list[tuple[AdapterMessage, set[int]]] = []
     idx: set[int] = set()
 
     for i, msg in enumerate(messages):
@@ -73,7 +58,3 @@ def default_preprocess_messages(
         raise ValidationError("List of messages must not be empty")
 
     return ListProjection(ret)
-
-
-def keep_last(messages: list[Any], idx: int) -> bool:
-    return idx == len(messages) - 1

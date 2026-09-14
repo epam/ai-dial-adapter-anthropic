@@ -3,7 +3,7 @@ from typing import Literal
 
 import anthropic
 import pytest
-from aidial_sdk.chat_completion import Function, Message, Tool
+from aidial_sdk.chat_completion import Function, Tool
 from aidial_sdk.exceptions import HTTPException as DialException
 from typing_extensions import override
 
@@ -17,8 +17,13 @@ from aidial_adapter_anthropic.adapter._claude.tokenizer.approximate import (
 )
 from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
 from aidial_adapter_anthropic.adapter.claude import create_adapter
-from aidial_adapter_anthropic.dial.request import ModelParameters
-from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
+from aidial_adapter_anthropic.dial._message import AdapterMessage
+from aidial_adapter_anthropic.dial.request import AdapterRequest
+from aidial_adapter_anthropic.dial.tools import (
+    ToolDefinition,
+    ToolsConfig,
+    ToolsMode,
+)
 from tests.utils.openai import (
     ai,
     ai_tool_call,
@@ -74,11 +79,11 @@ def raw_model() -> Adapter:
 
 async def truncate(
     raw_model: Adapter,
-    messages: list[Message],
+    messages: list[AdapterMessage],
     max_prompt_tokens: int,
 ) -> tuple[DiscardedMessages | None, ClaudeRequest]:
     request = await raw_model._prepare_claude_request(
-        ModelParameters(max_prompt_tokens=max_prompt_tokens), messages
+        AdapterRequest(max_prompt_tokens=max_prompt_tokens, messages=messages)
     )
     return await raw_model._compute_discarded_messages(
         request, max_prompt_tokens
@@ -87,25 +92,27 @@ async def truncate(
 
 async def tokenize(
     model: ChatCompletionAdapter,
-    messages: list[Message],
+    messages: list[AdapterMessage],
     tool_config: ToolsConfig | None = None,
 ) -> int:
-    params = ModelParameters(tool_config=tool_config)
-    return await model.count_prompt_tokens(params, messages)
+    params = AdapterRequest(tool_config=tool_config, messages=messages)
+    return await model.count_prompt_tokens(params)
 
 
 async def compute_discarded_messages(
     model: ChatCompletionAdapter,
-    messages: list[Message],
+    messages: list[AdapterMessage],
     max_prompt_tokens: int | None,
     tool_config: ToolsConfig | None = None,
 ) -> DiscardedMessages | str:
-    params = ModelParameters(
-        max_prompt_tokens=max_prompt_tokens, tool_config=tool_config
+    params = AdapterRequest(
+        max_prompt_tokens=max_prompt_tokens,
+        tool_config=tool_config,
+        messages=messages,
     )
 
     try:
-        return await model.compute_discarded_messages(params, messages) or []
+        return await model.compute_discarded_messages(params) or []
     except DialException as e:
         return e.message
 
@@ -115,7 +122,11 @@ def _index_range(start: int, end: int) -> list[int]:
 
 
 _TOOL_CONFIG = ToolsConfig(
-    tools=[Tool(type="function", function=Function(name="function"))],
+    tools=[
+        ToolDefinition(
+            0, Tool(type="function", function=Function(name="function")), None
+        )
+    ],
     static_tools=[],
     tool_choice="auto",
     tool_ids={},

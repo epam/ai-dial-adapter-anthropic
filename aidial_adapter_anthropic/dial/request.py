@@ -1,22 +1,8 @@
-from typing import (
-    Literal,
-    TypeGuard,
-    TypeVar,
-    assert_never,
-)
+from dataclasses import dataclass, field
+from typing import Self, TypeVar
 
-from aidial_sdk.chat_completion import (
-    CacheBreakpoint,
-    MessageContentAudioPart,
-    MessageContentFilePart,
-    MessageContentImagePart,
-    MessageContentPart,
-    MessageContentTextPart,
-    Role,
-)
 from aidial_sdk.chat_completion.request import (
     ChatCompletionRequest,
-    MessageContentRefusalPart,
     ReasoningEffort,
     ResponseFormat,
 )
@@ -24,28 +10,27 @@ from aidial_sdk.exceptions import RequestValidationError
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
-from aidial_adapter_anthropic.adapter._errors import ValidationError
+from aidial_adapter_anthropic._utils.cache import CacheBreakpoint
+from aidial_adapter_anthropic.dial._message import (
+    AdapterMessage,
+    parse_dial_message,
+)
 from aidial_adapter_anthropic.dial.tools import (
     ToolsConfig,
     ToolsMode,
-    validate_messages,
-)
-
-MessageContent = str | list[MessageContentPart] | None
-MessageContentSpecialized = (
-    MessageContent
-    | list[MessageContentTextPart]
-    | list[MessageContentImagePart]
+    validate_tools_usage,
 )
 
 _Model = TypeVar("_Model", bound=BaseModel)
 
 
-class ModelParameters(BaseModel):
+@dataclass
+class AdapterRequest:
+    messages: list[AdapterMessage]
     temperature: float | None = None
     top_p: float | None = None
     n: int = 1
-    stop: list[str] = []
+    stop: list[str] = field(default_factory=list)
     seed: int | None = None
     max_tokens: int | None = None
     max_prompt_tokens: int | None = None
@@ -57,7 +42,7 @@ class ModelParameters(BaseModel):
     reasoning_effort: ReasoningEffort | None = None
 
     @classmethod
-    def create(cls, request: ChatCompletionRequest) -> "ModelParameters":
+    def create(cls, request: ChatCompletionRequest) -> Self:
         stop: list[str] = []
         if request.stop is not None:
             stop = (
@@ -66,7 +51,7 @@ class ModelParameters(BaseModel):
                 else request.stop
             )
 
-        validate_messages(request)
+        validate_tools_usage(request)
 
         configuration = (
             cf.configuration
@@ -74,13 +59,8 @@ class ModelParameters(BaseModel):
             else None
         )
 
-        cache_breakpoint = (
-            cf.cache_breakpoint
-            if (cf := request.custom_fields) is not None
-            else None
-        )
-
         return cls(
+            messages=[parse_dial_message(m) for m in request.messages],
             temperature=request.temperature,
             top_p=request.top_p,
             n=request.n or 1,
@@ -92,7 +72,7 @@ class ModelParameters(BaseModel):
             tool_config=ToolsConfig.from_request(request),
             configuration=configuration,
             response_format=request.response_format,
-            cache_breakpoint=cache_breakpoint,
+            cache_breakpoint=_automatic_cache_breakpoint(request),
             reasoning_effort=request.reasoning_effort,
         )
 
@@ -116,74 +96,15 @@ class ModelParameters(BaseModel):
             raise RequestValidationError(msg) from None
 
 
-def collect_text_content(
-    content: MessageContentSpecialized, delimiter: str = "\n\n"
-) -> str:
-    match content:
-        case None:
-            return ""
-        case str():
-            return content
-        case list():
-            texts: list[str] = []
-            for part in content:
-                match part:
-                    case MessageContentTextPart(text=text):
-                        texts.append(text)
-                    case MessageContentImagePart():
-                        raise ValidationError(
-                            "Can't extract text from an image content part"
-                        )
-                    case MessageContentAudioPart():
-                        raise ValidationError(
-                            "Can't extract text from an audio content part"
-                        )
-                    case MessageContentFilePart():
-                        raise ValidationError(
-                            "Can't extract text from a file content part"
-                        )
-                    case MessageContentRefusalPart():
-                        raise ValidationError(
-                            "Can't extract text from a refusal content part"
-                        )
-                    case _:
-                        assert_never(part)
-            return delimiter.join(texts)
-        case _:
-            assert_never(content)
+def _automatic_cache_breakpoint(
+    request: ChatCompletionRequest,
+) -> CacheBreakpoint | None:
+    """
+    The breakpoint enabling automatic caching of the whole prompt.
+    The native breakpoint wins over the DIAL breakpoint.
+    """
+    if (options := request.prompt_cache_options) is not None:
+        return CacheBreakpoint.from_native(options)
 
-
-def to_message_content(content: MessageContentSpecialized) -> MessageContent:
-    match content:
-        case None | str():
-            return content
-        case list():
-            return [*content]
-        case _:
-            assert_never(content)
-
-
-def is_text_content(
-    content: MessageContent,
-) -> TypeGuard[str | list[MessageContentTextPart]]:
-    match content:
-        case None:
-            return False
-        case str():
-            return True
-        case list():
-            return all(
-                isinstance(part, MessageContentTextPart) for part in content
-            )
-        case _:
-            assert_never(content)
-
-
-def is_plain_text_content(content: MessageContent) -> TypeGuard[str | None]:
-    return content is None or isinstance(content, str)
-
-
-def is_system_role(
-    role: Role,
-) -> TypeGuard[Literal[Role.SYSTEM, Role.DEVELOPER]]:
-    return role in [Role.SYSTEM, Role.DEVELOPER]
+    cf = request.custom_fields
+    return CacheBreakpoint.from_dial(cf.cache_breakpoint if cf else None)

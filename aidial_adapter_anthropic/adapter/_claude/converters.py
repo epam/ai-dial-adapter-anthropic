@@ -1,9 +1,9 @@
 import logging
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, assert_never
 
-from aidial_sdk.chat_completion import CacheBreakpoint, FinishReason, Tool
+from aidial_sdk.chat_completion import FinishReason, Tool
 from aidial_sdk.chat_completion import ToolChoice as DialToolChoice
 from aidial_sdk.chat_completion.request import (
     ResponseFormat,
@@ -30,12 +30,14 @@ from anthropic.types.beta import BetaToolChoiceToolParam as ToolChoiceToolParam
 from anthropic.types.beta import BetaToolParam as ToolParam
 from anthropic.types.beta import BetaUsage as Usage
 
+from aidial_adapter_anthropic._utils.cache import CacheBreakpoint
 from aidial_adapter_anthropic._utils.json import traverse_json
 from aidial_adapter_anthropic._utils.list import ListProjection, group_by
 from aidial_adapter_anthropic.adapter._claude.blocks import (
     create_text_block,
     create_tool_result_block,
     create_tool_use_block,
+    set_cache_control,
 )
 from aidial_adapter_anthropic.adapter._claude.config import (
     ClaudeConfiguration,
@@ -58,9 +60,10 @@ from aidial_adapter_anthropic.dial._message import (
     BaseMessage,
     HumanRegularMessage,
     HumanToolResultMessage,
+    MessageCacheBreakpoints,
     SystemMessage,
 )
-from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 from aidial_adapter_anthropic.dial.static_tools import parse_static_function
 from aidial_adapter_anthropic.dial.token_usage import TokenUsage
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
@@ -74,26 +77,32 @@ ClaudeMessages = ListProjection[WithResources[MessageParam]]
 
 
 def to_claude_cache_control(
-    cache_breakpoint: CacheBreakpoint,
+    breakpoint: CacheBreakpoint,
 ) -> CacheControlEphemeralParam:
-    extra = cache_breakpoint.model_extra or {}
-    return CacheControlEphemeralParam(type="ephemeral", **extra)
+    cache_control = CacheControlEphemeralParam(type="ephemeral")
+    if breakpoint.ttl is not None:
+        # Claude accepts "5m" and "1h" only, and rejects anything else itself.
+        cache_control["ttl"] = breakpoint.ttl  # type: ignore
+    return cache_control
 
 
-def _add_cache_control(
-    message: _DialMessage, claude_messages: Sequence[ContentBlockParam]
+def _add_block_cache_control(
+    breakpoints: MessageCacheBreakpoints,
+) -> Callable[[int, ContentBlockParam], None]:
+    """Places the breakpoint of a content part on the block it has produced."""
+
+    def handler(part_idx: int, block: ContentBlockParam) -> None:
+        if (breakpoint := breakpoints.parts.get(part_idx)) is not None:
+            set_cache_control(block, to_claude_cache_control(breakpoint))
+
+    return handler
+
+
+def _add_message_cache_control(
+    breakpoints: MessageCacheBreakpoints, blocks: Sequence[ContentBlockParam]
 ) -> None:
-    if (breakpoint := message.cache_breakpoint) is None:
-        return
-
-    for block in reversed(claude_messages):
-        if (
-            isinstance(block, dict)
-            and block["type"] != "thinking"
-            and block["type"] != "redacted_thinking"
-        ):
-            block["cache_control"] = to_claude_cache_control(breakpoint)
-            return
+    if (breakpoint := breakpoints.trailing) is not None and blocks:
+        set_cache_control(blocks[-1], to_claude_cache_control(breakpoint))
 
 
 def _get_claude_message_role(
@@ -154,24 +163,28 @@ async def _get_claude_blocks(
     ),
     message_idx: int,
 ) -> WithResources[Sequence[ContentBlockParam]]:
+    on_part_block = _add_block_cache_control(message.cache_breakpoints)
+
     match message:
         case HumanRegularMessage():
-            return await handlers.process_attachments(message)
+            return await handlers.process_attachments(message, on_part_block)
 
         case HumanToolResultMessage():
-            inner = await handlers.process_attachments(message)
+            inner = await handlers.process_attachments(message, on_part_block)
             return WithResources(
                 payload=[create_tool_result_block(message.id, inner.payload)],
                 resources=inner.resources,
             )
 
         case AIRegularMessage():
-            content = await handlers.process_attachments(message)
+            content = await handlers.process_attachments(message, on_part_block)
 
             # Take the message content from the state if possible,
             # since it may include certain content blocks that
             # are missing from the DIAL message itself,
             # such as thinking signatures and redacted thinking blocks.
+            # The state blocks have no content parts to anchor the native
+            # breakpoints to, so those are dropped along with the blocks.
             if state := get_message_content_from_state(message_idx, message):
                 content.payload = state
 
@@ -205,8 +218,10 @@ async def to_claude_messages(
         role = _get_claude_message_role(message)
 
         if isinstance(message, SystemMessage):
-            content = await handlers.process_system_message(message)
-            _add_cache_control(message, content)
+            content = await handlers.process_system_message(
+                message, _add_block_cache_control(message.cache_breakpoints)
+            )
+            _add_message_cache_control(message.cache_breakpoints, content)
             if not claude_messages:
                 leading_sys_messages.extend(content)
                 continue
@@ -216,7 +231,9 @@ async def to_claude_messages(
             )
         else:
             blocks = await _get_claude_blocks(handlers, message, idx)
-            _add_cache_control(message, blocks.payload)
+            _add_message_cache_control(
+                message.cache_breakpoints, blocks.payload
+            )
             claude_message = WithResources(
                 payload=MessageParam(role=role, content=blocks.payload),
                 resources=blocks.resources,
@@ -307,7 +324,9 @@ def to_dial_usage(usage: Usage) -> TokenUsage:
     )
 
 
-def _to_claude_tool(tool: Tool) -> ToolParam:
+def _to_claude_tool(
+    tool: Tool, breakpoint: CacheBreakpoint | None
+) -> ToolParam:
     function = tool.function
     tool_param = ToolParam(
         input_schema=function.parameters
@@ -316,9 +335,7 @@ def _to_claude_tool(tool: Tool) -> ToolParam:
         description=function.description or "",
     )
 
-    if tool.custom_fields and (
-        breakpoint := tool.custom_fields.cache_breakpoint
-    ):
+    if breakpoint is not None:
         tool_param["cache_control"] = to_claude_cache_control(breakpoint)
 
     return tool_param
@@ -356,7 +373,10 @@ def to_claude_tool_config(
     if tools_config is None:
         return None
 
-    function_tools = [_to_claude_tool(tool) for tool in tools_config.tools]
+    function_tools = [
+        _to_claude_tool(tool.tool, tool.cache_breakpoint)
+        for tool in tools_config.tools
+    ]
     static_tools = [
         parse_static_function(str(idx), tool.static_function)
         for idx, tool in enumerate(tools_config.static_tools)
@@ -421,10 +441,10 @@ def to_claude_output_config(
 
 
 def to_claude_effort(
-    params: ModelParameters, configuration: ClaudeConfiguration
+    request: AdapterRequest, configuration: ClaudeConfiguration
 ) -> ClaudeEffort | str | None:
     reasoning_effort = (
-        params.reasoning_effort.value if params.reasoning_effort else None
+        request.reasoning_effort.value if request.reasoning_effort else None
     )
     effort_from_config = (
         configuration.effort

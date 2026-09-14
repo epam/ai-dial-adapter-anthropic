@@ -1,7 +1,5 @@
 from collections.abc import Callable
-from dataclasses import dataclass
-
-from aidial_sdk.chat_completion import Message
+from dataclasses import dataclass, replace
 
 from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter._decorator.base import (
@@ -9,12 +7,15 @@ from aidial_adapter_anthropic.adapter._decorator.base import (
     ChatCompletionTransformer,
 )
 from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
+from aidial_adapter_anthropic.dial._message import AdapterMessage
 from aidial_adapter_anthropic.dial.consumer import Consumer
-from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.request import AdapterRequest
+
+OnMessages = Callable[[list[AdapterMessage]], ListProjection[AdapterMessage]]
 
 
 def preprocess_messages_decorator(
-    on_messages: Callable[[list[Message]], ListProjection[Message]],
+    on_messages: OnMessages,
 ) -> ChatCompletionTransformer:
     return lambda adapter: PreprocessMessagesDecorator(
         on_messages=on_messages, adapter=adapter
@@ -23,16 +24,17 @@ def preprocess_messages_decorator(
 
 @dataclass
 class PreprocessMessagesDecorator(ChatCompletionDecorator):
-    on_messages: Callable[[list[Message]], ListProjection[Message]]
+    on_messages: OnMessages
 
-    async def chat(
-        self,
-        consumer: Consumer,
-        params: ModelParameters,
-        messages: list[Message],
-    ) -> None:
-        new_messages = self.on_messages(messages)
-        await self.adapter.chat(consumer, params, new_messages.raw_list)
+    def _preprocess(
+        self, request: AdapterRequest
+    ) -> tuple[AdapterRequest, ListProjection[AdapterMessage]]:
+        messages = self.on_messages(request.messages)
+        return replace(request, messages=messages.raw_list), messages
+
+    async def chat(self, consumer: Consumer, request: AdapterRequest) -> None:
+        new_params, new_messages = self._preprocess(request)
+        await self.adapter.chat(consumer, new_params)
         if (
             discarded_messages := await consumer.get_discarded_messages()
         ) is not None:
@@ -41,20 +43,16 @@ class PreprocessMessagesDecorator(ChatCompletionDecorator):
             )
             await consumer.set_discarded_messages(discarded_messages)
 
-    async def count_prompt_tokens(
-        self, params: ModelParameters, messages: list[Message]
-    ) -> int:
-        new_messages = self.on_messages(messages)
-        return await self.adapter.count_prompt_tokens(
-            params, new_messages.raw_list
-        )
+    async def count_prompt_tokens(self, request: AdapterRequest) -> int:
+        new_params, _ = self._preprocess(request)
+        return await self.adapter.count_prompt_tokens(new_params)
 
     async def compute_discarded_messages(
-        self, params: ModelParameters, messages: list[Message]
+        self, request: AdapterRequest
     ) -> DiscardedMessages | None:
-        new_messages = self.on_messages(messages)
+        new_params, new_messages = self._preprocess(request)
         discarded_messages = await self.adapter.compute_discarded_messages(
-            params, new_messages.raw_list
+            new_params
         )
 
         if discarded_messages is not None:

@@ -19,6 +19,7 @@ from aidial_sdk.chat_completion import (
     MessageContentAudioPart,
     MessageContentFilePart,
     MessageContentImagePart,
+    MessageContentPart,
     MessageContentRefusalPart,
     MessageContentTextPart,
 )
@@ -121,7 +122,9 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         return WithResources(self.text_handler(text))
 
     async def process_system_message(
-        self, message: SystemMessage
+        self,
+        message: SystemMessage,
+        on_block: Callable[[int, _Txt], None] | None = None,
     ) -> list[_Txt]:
         def _gen():
             match content := message.content:
@@ -129,11 +132,14 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
                     if content:
                         yield self.text_handler(content)
                 case list():
-                    for part in content:
+                    for idx, part in enumerate(content):
                         match part:
                             case MessageContentTextPart(text=text):
                                 if text:
-                                    yield self.text_handler(text)
+                                    block = self.text_handler(text)
+                                    if on_block is not None:
+                                        on_block(idx, block)
+                                    yield block
                             case _:
                                 assert_never(part)
                 case _:
@@ -142,14 +148,21 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         return list(_gen())
 
     async def process_attachments(
-        self, message: AttachmentSourceMessage
+        self,
+        message: AttachmentSourceMessage,
+        on_block: Callable[[int, _T | _Txt], None] | None = None,
     ) -> WithResources[list[_T | _Txt]]:
-        ret = await aiter_to_list(self._process_attachments_iter(message))
+        """Converts the message attachments and content parts into blocks"""
+        ret = await aiter_to_list(
+            self._process_attachments_iter(message, on_block)
+        )
         ret = ret or [self._text_handler(" ")]
         return WithResources.transpose(ret)
 
     async def _process_attachments_iter(
-        self, message: AttachmentSourceMessage
+        self,
+        message: AttachmentSourceMessage,
+        on_block: Callable[[int, _T | _Txt], None] | None,
     ) -> AsyncIterator[WithResources[_T | _Txt]]:
         if not isinstance(message, SystemMessage):
             for attachment in message.attachments:
@@ -168,49 +181,53 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
                 if content:
                     yield self._text_handler(content)
             case list():
-                for part in content:
-                    match part:
-                        case MessageContentTextPart(text=text):
-                            if text:
-                                yield self._text_handler(text)
-                        case MessageContentImagePart(image_url=image_url):
-                            yield await self._handle_dial_resource(
-                                URLResource(
-                                    url=image_url.url,
-                                    entity_name="image content part",
-                                    supported_types=self.supported_image_types,
-                                ),
-                            )
-                        case MessageContentFilePart(file=file):
-                            attachment = _file_content_part_to_attachment(file)
-                            yield await self._handle_dial_resource(
-                                AttachmentResource(
-                                    attachment=attachment,
-                                    entity_name="file content part",
-                                    supported_types=self.supported_mime_types,
-                                ),
-                            )
-                        case MessageContentAudioPart(
-                            input_audio=InputAudio(data=data, format=format)
-                        ):
-                            attachment = Attachment(
-                                data=data, type=f"audio/{format}"
-                            )
-                            yield await self._handle_dial_resource(
-                                AttachmentResource(
-                                    attachment=attachment,
-                                    entity_name="audio content part",
-                                    supported_types=self.supported_mime_types,
-                                ),
-                            )
-                        case MessageContentRefusalPart():
-                            raise ValidationError(
-                                "Refuse content parts aren't supported"
-                            )
-                        case _:
-                            assert_never(part)
+                for idx, part in enumerate(content):
+                    block = await self._process_content_part(part)
+                    if block is not None:
+                        if on_block is not None:
+                            on_block(idx, block.payload)
+                        yield block
             case _:
                 assert_never(content)
+
+    async def _process_content_part(
+        self, part: MessageContentPart
+    ) -> WithResources[_T | _Txt] | None:
+        match part:
+            case MessageContentTextPart(text=text):
+                return self._text_handler(text) if text else None
+            case MessageContentImagePart(image_url=image_url):
+                return await self._handle_dial_resource(
+                    URLResource(
+                        url=image_url.url,
+                        entity_name="image content part",
+                        supported_types=self.supported_image_types,
+                    ),
+                )
+            case MessageContentFilePart(file=file):
+                attachment = _file_content_part_to_attachment(file)
+                return await self._handle_dial_resource(
+                    AttachmentResource(
+                        attachment=attachment,
+                        entity_name="file content part",
+                        supported_types=self.supported_mime_types,
+                    ),
+                )
+            case MessageContentAudioPart(
+                input_audio=InputAudio(data=data, format=format)
+            ):
+                attachment = Attachment(data=data, type=f"audio/{format}")
+                return await self._handle_dial_resource(
+                    AttachmentResource(
+                        attachment=attachment,
+                        entity_name="audio content part",
+                        supported_types=self.supported_mime_types,
+                    ),
+                )
+            case MessageContentRefusalPart():
+                raise ValidationError("Refuse content parts aren't supported")
+            case _:
+                assert_never(part)
 
     async def _download_resource(self, dial_resource: DialResource) -> Resource:
         try:

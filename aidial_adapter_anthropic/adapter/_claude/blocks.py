@@ -6,6 +6,9 @@ from anthropic.types.beta import (
     BetaBase64PDFSourceParam as Base64PDFSourceParam,
 )
 from anthropic.types.beta import (
+    BetaCacheControlEphemeralParam as CacheControlEphemeralParam,
+)
+from anthropic.types.beta import (
     BetaCitationsConfigParam as CitationsConfigParam,
 )
 from anthropic.types.beta import BetaContentBlockParam as ContentBlockParam
@@ -30,6 +33,23 @@ from anthropic.types.beta.beta_tool_result_block_param import (
 
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic.dial._attachments import AttachmentProcessor
+
+
+def set_cache_control(
+    block: ContentBlockParam, cache_control: CacheControlEphemeralParam
+) -> bool:
+    """Places a cache breakpoint on the block.
+
+    Returns False for the thinking blocks, which can't carry one.
+    """
+    if (
+        isinstance(block, dict)
+        and block["type"] != "thinking"
+        and block["type"] != "redacted_thinking"
+    ):
+        block["cache_control"] = cache_control
+        return True
+    return False
 
 
 def create_text_block(text: str) -> TextBlockParam:

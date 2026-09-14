@@ -9,14 +9,14 @@ from pydantic import SecretStr
 from starlette.requests import Request as StarletteRequest
 
 from aidial_adapter_anthropic.adapter import ChatCompletionAdapter
-from aidial_adapter_anthropic.adapter._claude import caching as caching_module
 from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.adapter._claude.tokenizer import (
     ApproximateTokenizer,
 )
 from aidial_adapter_anthropic.adapter.claude import create_adapter
+from aidial_adapter_anthropic.dial import cache_info as cache_info_module
 from aidial_adapter_anthropic.dial.consumer import ChoiceConsumer
-from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 
 _DIAL_CACHE_BREAKPOINT_PATH = "X-DIAL-CACHE-BREAKPOINT-PATH"
 _DIAL_CACHE_EXPIRE_AT = "X-DIAL-CACHE-EXPIRE-AT"
@@ -89,7 +89,7 @@ async def adapter() -> ChatCompletionAdapter:
 
 @pytest.fixture(autouse=True)
 def mock_current_time_1000s(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(caching_module.time, "time", lambda: 1000)
+    monkeypatch.setattr(cache_info_module.time, "time", lambda: 1000)
 
 
 @pytest.fixture(autouse=True)
@@ -106,7 +106,7 @@ async def _invoke_chat(
 ) -> ChoiceConsumer:
     req = _request(request)
     consumer = ChoiceConsumer(_response(req))
-    await adapter.chat(consumer, ModelParameters.create(req), req.messages)
+    await adapter.chat(consumer, AdapterRequest.create(req))
     return consumer
 
 
@@ -315,6 +315,114 @@ async def test_adapter_chat_sets_headers_for_last_tool_breakpoint(
             "tools": [
                 _tool(),
                 _tool(cache_breakpoint={"ttl": "5m"}),
+            ],
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.tools[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "1300"),
+    ]
+
+
+async def test_adapter_chat_sets_headers_for_native_content_part_breakpoint(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [
+                _user("first"),
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "doc",
+                            "prompt_cache_breakpoint": {"mode": "explicit"},
+                        },
+                    ],
+                },
+            ]
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "1300"),
+    ]
+
+
+async def test_adapter_chat_sets_headers_for_native_prompt_cache_options(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [_user("first"), _user("second")],
+            "prompt_cache_options": {"ttl": "1h"},
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "4600"),
+    ]
+
+
+async def test_adapter_chat_does_not_set_headers_for_native_explicit_mode(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [_user("first"), _user("second")],
+            "prompt_cache_options": {"mode": "explicit"},
+            "custom_fields": {"cache_breakpoint": {}},
+        },
+    )
+
+    assert consumer.response.headers == []
+
+
+async def test_adapter_chat_reports_path_in_request_body_coordinates(
+    adapter: ChatCompletionAdapter,
+):
+    """The reported path addresses the request body DIAL Core has sent.
+
+    The empty system message is stripped before the messages reach the model,
+    but it still occupies an index in the request body.
+    """
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [
+                _sys("  "),
+                _user("first"),
+                _user("second", cache_breakpoint={}),
+            ]
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[2]"),
+        (_DIAL_CACHE_EXPIRE_AT, "1300"),
+    ]
+
+
+async def test_adapter_chat_reports_tool_path_past_a_static_tool(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [_user("What's the weather?")],
+            "tools": [
+                {
+                    "type": "static_function",
+                    "static_function": {"name": "web_search"},
+                },
+                _tool(cache_breakpoint={}),
             ],
         },
     )

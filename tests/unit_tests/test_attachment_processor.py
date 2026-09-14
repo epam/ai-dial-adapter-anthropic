@@ -15,7 +15,10 @@ from aidial_adapter_anthropic.dial._attachments import (
     AttachmentProcessor,
     AttachmentProcessors,
 )
-from aidial_adapter_anthropic.dial._message import HumanRegularMessage
+from aidial_adapter_anthropic.dial._message import (
+    HumanRegularMessage,
+    MessageCacheBreakpoints,
+)
 
 
 @pytest.fixture
@@ -40,7 +43,9 @@ def attachment_processors() -> AttachmentProcessors:
 async def _process_part(
     attachment_processors: AttachmentProcessors, part: MessageContentPart
 ) -> Resource:
-    message = HumanRegularMessage(content=[part])
+    message = HumanRegularMessage(
+        cache_breakpoints=MessageCacheBreakpoints(), content=[part]
+    )
     [resource] = (
         await attachment_processors.process_attachments(message)
     ).payload
