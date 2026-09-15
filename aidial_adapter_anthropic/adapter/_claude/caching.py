@@ -34,7 +34,7 @@ def get_cache_info(
     def _path(indices: set[int]) -> CacheBreakpointPath:
         return CacheBreakpointPath.messages(max(indices))
 
-    if automatic_cache_breakpoint is not None:
+    if automatic_cache_breakpoint is not None and messages.lst:
         ttl = _ttl_from_breakpoint(automatic_cache_breakpoint)
         automatic_path = _path(messages.lst[-1][1])
 

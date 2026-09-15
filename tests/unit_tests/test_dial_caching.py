@@ -14,6 +14,7 @@ from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.adapter._claude.tokenizer import (
     ApproximateTokenizer,
 )
+from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.adapter.claude import create_adapter
 from aidial_adapter_anthropic.dial.consumer import ChoiceConsumer
 from aidial_adapter_anthropic.dial.request import AdapterRequest
@@ -364,3 +365,39 @@ async def test_adapter_chat_reports_the_original_last_message_index(
         (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[2]"),
         (_DIAL_CACHE_EXPIRE_AT, "4600"),
     ]
+
+
+async def test_adapter_chat_sets_the_headers_once_per_request(
+    adapter: ChatCompletionAdapter,
+):
+    """
+    The cache headers describe the request, so they must be set once even
+    though the request is replicated into `n` completions.
+    """
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [_user("first"), _user("second")],
+            "n": 2,
+            "custom_fields": {"cache_breakpoint": {"ttl": "1h"}},
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "4600"),
+    ]
+
+
+async def test_adapter_chat_rejects_an_empty_prompt(
+    adapter: ChatCompletionAdapter,
+):
+    """The caching decorator runs first, so it must tolerate an empty prompt."""
+    with pytest.raises(ValidationError, match="must not be empty"):
+        await _invoke_chat(
+            adapter,
+            {
+                "messages": [],
+                "custom_fields": {"cache_breakpoint": {"ttl": "1h"}},
+            },
+        )

@@ -280,10 +280,12 @@ async def create_adapter(
         supports_thinking=supports_thinking,
     )
 
+    # The caching decorator reports on the request as a whole, so it comes
+    # first: outside the replicator, which would run it once per completion.
     return compose_decorators(
+        caching_decorator(),
         preprocess_messages_decorator(default_preprocess_messages),
         replicator_decorator(),
-        caching_decorator(),
     )(model)
 
 
