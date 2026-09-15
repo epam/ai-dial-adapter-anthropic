@@ -9,7 +9,7 @@ from anthropic import Omit
 from aidial_adapter_anthropic.adapter import ValidationError
 from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.dial.request import AdapterRequest
-from tests.utils.openai import user
+from tests.utils.openai import prompt, user
 
 
 async def test_adaptive_thinking_allows_custom_display(adapter: Adapter):
@@ -21,7 +21,7 @@ async def test_adaptive_thinking_allows_custom_display(adapter: Adapter):
                     "display": "summarized",
                 }
             },
-            messages=[user("hello")],
+            messages=prompt(user("hello")),
         )
     )
 
@@ -38,7 +38,7 @@ async def test_enabled_thinking_still_omits_temperature(adapter: Adapter):
                 "thinking": {"type": "enabled", "budget_tokens": 1024}
             },
             temperature=1.0,
-            messages=[user("hello")],
+            messages=prompt(user("hello")),
         )
     )
 
@@ -55,7 +55,7 @@ async def test_thinking_configuration_free_format(adapter: Adapter):
             configuration={
                 "thinking": {"my": "very", "secret": "configuration"}
             },
-            messages=[user("hello")],
+            messages=prompt(user("hello")),
         )
     )
 
@@ -69,7 +69,7 @@ async def test_thinking_configuration_free_format(adapter: Adapter):
 async def test_thinking_effort_from_config(adapter: Adapter, effort: str):
     config = {"thinking": {"type": "adaptive"}, "effort": effort}
     request = await adapter._prepare_claude_request(
-        AdapterRequest(configuration=config, messages=[user("hello")])
+        AdapterRequest(configuration=config, messages=prompt(user("hello")))
     )
     assert request.params["thinking"] == {"type": "adaptive"}
     assert request.params["output_config"] == {"effort": effort}
@@ -81,7 +81,7 @@ async def test_thinking_effort_from_model_params(adapter: Adapter):
         AdapterRequest(
             configuration=config,
             reasoning_effort=ReasoningEffort.MEDIUM,
-            messages=[user("hello")],
+            messages=prompt(user("hello")),
         )
     )
     assert request.params["thinking"] == {"type": "adaptive"}
@@ -94,7 +94,7 @@ async def test_thinking_effort_both_provided(adapter: Adapter):
         AdapterRequest(
             configuration=config,
             reasoning_effort=ReasoningEffort.MEDIUM,
-            messages=[user("hello")],
+            messages=prompt(user("hello")),
         )
     )
     msg = (
@@ -120,7 +120,7 @@ async def test_thinking_effort_preserved_when_response_format(adapter: Adapter):
         AdapterRequest(
             configuration=config,
             response_format=response_format,
-            messages=[user("hello")],
+            messages=prompt(user("hello")),
         )
     )
 

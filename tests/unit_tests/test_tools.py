@@ -15,6 +15,7 @@ from aidial_adapter_anthropic.dial.tools import ToolsConfig
 from tests.utils.openai import (
     GET_WEATHER_TOOL,
     GET_WEATHER_TOOL_WITH_REFERENCES,
+    prompt,
     user,
 )
 
@@ -85,7 +86,7 @@ async def test_web_search_minimal_passthrough(adapter: Adapter, tool_type: str):
             tool_config=_tool_config(
                 [web_search_static_tool({"type": tool_type})]
             ),
-            messages=[user("What is the weather in NYC?")],
+            messages=prompt(user("What is the weather in NYC?")),
         )
     )
 
@@ -100,7 +101,7 @@ async def test_web_search_all_optional_fields_preserved(adapter: Adapter):
             tool_config=_tool_config(
                 [web_search_static_tool(WEB_SEARCH_CONFIGURATION)]
             ),
-            messages=[user("What is the weather in NYC?")],
+            messages=prompt(user("What is the weather in NYC?")),
         )
     )
 
@@ -116,7 +117,7 @@ async def test_web_search_tool_choice_left_default(adapter: Adapter):
             tool_config=_tool_config(
                 [web_search_static_tool(WEB_SEARCH_CONFIGURATION)]
             ),
-            messages=[user("hello")],
+            messages=prompt(user("hello")),
         )
     )
 
@@ -132,7 +133,7 @@ async def test_web_search_appended_after_function_tools(adapter: Adapter):
                     web_search_static_tool(WEB_SEARCH_CONFIGURATION),
                 ]
             ),
-            messages=[user("What is the weather in NYC?")],
+            messages=prompt(user("What is the weather in NYC?")),
         )
     )
 
@@ -145,7 +146,7 @@ async def test_web_search_appended_after_function_tools(adapter: Adapter):
 
 async def test_no_web_search_keeps_tools_omitted(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        AdapterRequest(messages=[user("hello")])
+        AdapterRequest(messages=prompt(user("hello")))
     )
 
     assert isinstance(request.params["tools"], Omit)

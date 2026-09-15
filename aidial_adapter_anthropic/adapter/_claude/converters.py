@@ -201,12 +201,12 @@ async def to_claude_messages(
     handlers: AttachmentProcessors[
         TextBlockParam, ContentBlockParam, Configuration
     ],
-    messages: list[_DialMessage],
+    messages: ListProjection[_DialMessage],
 ) -> tuple[list[TextBlockParam], ClaudeMessages]:
     leading_sys_messages: list[TextBlockParam] = []
     claude_messages: ClaudeMessages = ListProjection()
 
-    for idx, message in enumerate(messages):
+    for idx, (message, indices) in enumerate(messages.lst):
         if isinstance(message, SystemMessage) and not claude_messages:
             content = await handlers.process_system_message(message)
             _add_cache_control(message, content)
@@ -218,7 +218,7 @@ async def to_claude_messages(
             payload = MessageParam(role=role, content=blocks.payload)
             claude_messages.append(
                 WithResources(payload=payload, resources=blocks.resources),
-                idx,
+                indices,
             )
 
     return leading_sys_messages, _merge_messages_with_same_role(claude_messages)

@@ -332,8 +332,7 @@ class Adapter(ChatCompletionAdapter):
         tools = list(tools_config.tools) if tools_config else []
 
         system_prompt, claude_messages = await to_claude_messages(
-            self.attachment_processors,
-            [function_to_tool_messages(m) for m in messages],
+            self.attachment_processors, messages.map(function_to_tool_messages)
         )
 
         thinking: ThinkingConfigParam | Omit = omit

@@ -5,6 +5,7 @@ from aidial_sdk.chat_completion import CacheBreakpoint, CacheBreakpointPath
 from aidial_sdk.chat_completion import Tool as DialTool
 
 from aidial_adapter_anthropic._utils.cache import parse_ttl_sec
+from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.dial._message import AdapterMessage
 
 
@@ -20,7 +21,7 @@ class CacheInfo:
 
 def get_cache_info(
     automatic_cache_breakpoint: CacheBreakpoint | None,
-    messages: list[AdapterMessage],
+    messages: ListProjection[AdapterMessage],
     tools: list[DialTool],
 ) -> CacheInfo | None:
     ttl = 0
@@ -28,16 +29,21 @@ def get_cache_info(
     message_path = None
     tool_path = None
 
+    # The paths are reported to DIAL Core, so they must address the messages
+    # of the original request, not the preprocessed ones.
+    def _path(indices: set[int]) -> CacheBreakpointPath:
+        return CacheBreakpointPath.messages(max(indices))
+
     if automatic_cache_breakpoint is not None:
         ttl = _ttl_from_breakpoint(automatic_cache_breakpoint)
-        automatic_path = CacheBreakpointPath.messages(len(messages) - 1)
+        automatic_path = _path(messages.lst[-1][1])
 
-    for i, message in enumerate(messages):
+    for message, indices in messages.lst:
         if (breakpoint := message.cache_breakpoint) and (
             msg_ttl := _ttl_from_breakpoint(breakpoint)
         ):
             ttl = max(ttl, msg_ttl)
-            message_path = CacheBreakpointPath.messages(i)
+            message_path = _path(indices)
 
     for i, tool in enumerate(tools):
         if (

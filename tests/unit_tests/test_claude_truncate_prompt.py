@@ -7,6 +7,7 @@ from aidial_sdk.chat_completion import Function, Tool
 from aidial_sdk.exceptions import HTTPException as DialException
 from typing_extensions import override
 
+from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter import ChatCompletionAdapter
 from aidial_adapter_anthropic.adapter._claude.adapter import (
     Adapter,
@@ -79,7 +80,10 @@ async def truncate(
     max_prompt_tokens: int,
 ) -> tuple[DiscardedMessages | None, ClaudeRequest]:
     request = await raw_model._prepare_claude_request(
-        AdapterRequest(max_prompt_tokens=max_prompt_tokens, messages=messages)
+        AdapterRequest(
+            max_prompt_tokens=max_prompt_tokens,
+            messages=ListProjection.create(messages),
+        )
     )
     return await raw_model._compute_discarded_messages(
         request, max_prompt_tokens
@@ -91,7 +95,9 @@ async def tokenize(
     messages: list[AdapterMessage],
     tool_config: ToolsConfig | None = None,
 ) -> int:
-    request = AdapterRequest(tool_config=tool_config, messages=messages)
+    request = AdapterRequest(
+        tool_config=tool_config, messages=ListProjection.create(messages)
+    )
     return await model.count_prompt_tokens(request)
 
 
@@ -104,7 +110,7 @@ async def compute_discarded_messages(
     request = AdapterRequest(
         max_prompt_tokens=max_prompt_tokens,
         tool_config=tool_config,
-        messages=messages,
+        messages=ListProjection.create(messages),
     )
 
     try:

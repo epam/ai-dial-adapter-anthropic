@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import builtins
 from collections.abc import AsyncIterator, Callable, Container, Iterable
 from dataclasses import dataclass, field
 from typing import (
@@ -60,17 +59,24 @@ class ListProjection(Generic[_T]):
 
     lst: list[tuple[_T, set[int]]] = field(default_factory=list)
 
+    @classmethod
+    def create(cls, lst: list[_T]) -> Self:
+        return cls([(elem, {idx}) for idx, elem in enumerate(lst)])
+
     @property
-    def raw_list(self) -> builtins.list[_T]:
+    def raw_list(self) -> list[_T]:
         return [msg for msg, _ in self.lst]
+
+    def map(self, fn: Callable[[_T], _V]) -> ListProjection[_V]:
+        return ListProjection([(fn(elem), idx) for elem, idx in self.lst])
 
     def to_original_indices(self, indices: Iterable[int]) -> set[int]:
         return {
             orig_index for index in indices for orig_index in self.lst[index][1]
         }
 
-    def append(self, elem: _T, idx: int) -> Self:
-        self.lst.append((elem, {idx}))
+    def append(self, elem: _T, indices: set[int]) -> Self:
+        self.lst.append((elem, indices))
         return self
 
     def drop(self, idx: int) -> ListProjection:

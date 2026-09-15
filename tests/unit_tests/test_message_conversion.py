@@ -1,11 +1,11 @@
 from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.dial.request import AdapterRequest
-from tests.utils.openai import ai, sys, user
+from tests.utils.openai import ai, prompt, sys, user
 
 
 async def test_empty_message_is_replaced_with_space(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        AdapterRequest(messages=[user("")])
+        AdapterRequest(messages=prompt(user("")))
     )
     assert request.claude_messages == [
         {"role": "user", "content": [{"text": " ", "type": "text"}]}
@@ -14,7 +14,7 @@ async def test_empty_message_is_replaced_with_space(adapter: Adapter):
 
 async def test_assistant_message_is_replaced_with_space(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        AdapterRequest(messages=[ai("")])
+        AdapterRequest(messages=prompt(ai("")))
     )
     assert request.claude_messages == [
         {"role": "assistant", "content": [{"text": " ", "type": "text"}]}
@@ -23,7 +23,7 @@ async def test_assistant_message_is_replaced_with_space(adapter: Adapter):
 
 async def test_empty_system_message_is_removed(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        AdapterRequest(messages=[sys(""), user("hello")])
+        AdapterRequest(messages=prompt(sys(""), user("hello")))
     )
     assert request.claude_messages == [
         {"role": "user", "content": [{"text": "hello", "type": "text"}]}
@@ -33,7 +33,7 @@ async def test_empty_system_message_is_removed(adapter: Adapter):
 async def test_mid_conversation_system_message(adapter: Adapter):
     request = await adapter._prepare_claude_request(
         AdapterRequest(
-            messages=[sys("top"), user("hi"), sys("mid"), ai("last")]
+            messages=prompt(sys("top"), user("hi"), sys("mid"), ai("last"))
         )
     )
 
@@ -50,7 +50,7 @@ async def test_consecutive_mid_conversation_system_messages_are_merged(
 ):
     request = await adapter._prepare_claude_request(
         AdapterRequest(
-            messages=[user("hi"), sys("mid1"), sys("mid2"), ai("last")]
+            messages=prompt(user("hi"), sys("mid1"), sys("mid2"), ai("last"))
         )
     )
 

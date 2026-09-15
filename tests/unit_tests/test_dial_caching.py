@@ -323,3 +323,44 @@ async def test_adapter_chat_sets_headers_for_last_tool_breakpoint(
         (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.tools[1]"),
         (_DIAL_CACHE_EXPIRE_AT, "1300"),
     ]
+
+
+async def test_adapter_chat_reports_the_original_message_index(
+    adapter: ChatCompletionAdapter,
+):
+    """
+    The empty system message is dropped before the request reaches the model,
+    but the path reported to DIAL Core still addresses the original request.
+    """
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [
+                _sys(""),
+                _user("first", cache_breakpoint={"ttl": "5m"}),
+                _user("second"),
+            ]
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "1300"),
+    ]
+
+
+async def test_adapter_chat_reports_the_original_last_message_index(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [_user("first"), _sys(""), _user("second")],
+            "custom_fields": {"cache_breakpoint": {"ttl": "1h"}},
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[2]"),
+        (_DIAL_CACHE_EXPIRE_AT, "4600"),
+    ]

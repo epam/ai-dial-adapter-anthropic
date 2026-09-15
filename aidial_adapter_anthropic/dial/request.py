@@ -11,6 +11,7 @@ from aidial_sdk.exceptions import RequestValidationError
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
+from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.dial._message import (
     AdapterMessage,
     parse_dial_message,
@@ -26,7 +27,7 @@ _Model = TypeVar("_Model", bound=BaseModel)
 
 @dataclass
 class AdapterRequest:
-    messages: list[AdapterMessage]
+    messages: ListProjection[AdapterMessage]
     temperature: float | None = None
     top_p: float | None = None
     n: int = 1
@@ -56,9 +57,10 @@ class AdapterRequest:
         cf = request.custom_fields
         configuration = cf.configuration if cf is not None else None
         cache_breakpoint = cf.cache_breakpoint if cf is not None else None
+        messages = [parse_dial_message(m) for m in request.messages]
 
         return cls(
-            messages=[parse_dial_message(m) for m in request.messages],
+            messages=ListProjection.create(messages),
             temperature=request.temperature,
             top_p=request.top_p,
             n=request.n or 1,
