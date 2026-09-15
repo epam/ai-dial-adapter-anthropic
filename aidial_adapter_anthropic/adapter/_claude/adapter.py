@@ -5,7 +5,6 @@ from logging import DEBUG
 from typing import assert_never
 
 from aidial_sdk.chat_completion import Attachment as DialAttachment
-from aidial_sdk.chat_completion import Message as DialMessage
 from anthropic import (
     AsyncAnthropic,
     AsyncAnthropicBedrock,
@@ -155,11 +154,8 @@ from aidial_adapter_anthropic.dial._attachments import (
     AttachmentProcessors,
 )
 from aidial_adapter_anthropic.dial._lazy_stage import LazyStage
-from aidial_adapter_anthropic.dial._message import parse_dial_message
 from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
-from aidial_adapter_anthropic.dial.request import (
-    ModelParameters as DialParameters,
-)
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 from aidial_adapter_anthropic.dial.resource import DialResource
 from aidial_adapter_anthropic.dial.storage import FileStorage
 from aidial_adapter_anthropic.dial.tools import ToolsMode
@@ -322,23 +318,22 @@ class Adapter(ChatCompletionAdapter):
         )
 
     async def _prepare_claude_request(
-        self, params: DialParameters, messages: list[DialMessage]
+        self, request: AdapterRequest
     ) -> ClaudeRequest:
-        configuration = params.parse_configuration(await self.configuration())
+        messages = request.messages
+
+        configuration = request.parse_configuration(await self.configuration())
 
         if len(messages) == 0:
             raise ValidationError("List of messages must not be empty")
 
-        tools_config = to_claude_tool_config(params.tool_config)
+        tools_config = to_claude_tool_config(request.tool_config)
 
         tools = list(tools_config.tools) if tools_config else []
 
-        parsed_messages = [
-            function_to_tool_messages(parse_dial_message(m)) for m in messages
-        ]
-
         system_prompt, claude_messages = await to_claude_messages(
-            self.attachment_processors, parsed_messages
+            self.attachment_processors,
+            [function_to_tool_messages(m) for m in messages],
         )
 
         thinking: ThinkingConfigParam | Omit = omit
@@ -353,11 +348,11 @@ class Adapter(ChatCompletionAdapter):
                 thinking = configuration.thinking.to_claude()
 
         temperature = omit
-        if params.temperature is not None:
+        if request.temperature is not None:
             # Mapping OpenAI temp [0,2] range to Anthropic temp [0,1] range
-            temperature = params.temperature / 2
+            temperature = request.temperature / 2
 
-        top_p = params.top_p
+        top_p = request.top_p
         match thinking:
             case {"type": "enabled"}:
                 # Thinking isn’t compatible with temperature, top_p, or top_k
@@ -371,17 +366,17 @@ class Adapter(ChatCompletionAdapter):
                 pass
 
         output_config = to_claude_output_config(
-            response_format=params.response_format,
-            effort=to_claude_effort(params, configuration),
+            response_format=request.response_format,
+            effort=to_claude_effort(request, configuration),
         )
 
         cache_control: CacheControlEphemeralParam | Omit = omit
-        if params.cache_breakpoint:
-            cache_control = to_claude_cache_control(params.cache_breakpoint)
+        if request.cache_breakpoint:
+            cache_control = to_claude_cache_control(request.cache_breakpoint)
 
         claude_params = ClaudeParameters(
-            max_tokens=params.max_tokens or self.default_max_tokens,
-            stop_sequences=params.stop,
+            max_tokens=request.max_tokens or self.default_max_tokens,
+            stop_sequences=request.stop,
             system=system_prompt or omit,
             temperature=temperature,
             top_p=top_p or omit,
@@ -422,51 +417,44 @@ class Adapter(ChatCompletionAdapter):
 
         return discarded_messages, truncated
 
-    async def chat(
-        self,
-        consumer: Consumer,
-        params: DialParameters,
-        messages: list[DialMessage],
-    ):
-        request = await self._prepare_claude_request(params, messages)
+    async def chat(self, consumer: Consumer, request: AdapterRequest):
+        claude_request = await self._prepare_claude_request(request)
 
-        discarded_messages, request = await self._compute_discarded_messages(
-            request, params.max_prompt_tokens
+        discarded, claude_request = await self._compute_discarded_messages(
+            claude_request, request.max_prompt_tokens
         )
 
-        if params.stream:
+        if request.stream:
             await self.invoke_streaming(
                 consumer,
-                params.tools_mode,
-                request,
-                discarded_messages,
+                request.tools_mode,
+                claude_request,
+                discarded,
             )
         else:
             await self.invoke_non_streaming(
                 consumer,
-                params.tools_mode,
-                request,
-                discarded_messages,
+                request.tools_mode,
+                claude_request,
+                discarded,
             )
 
-    async def count_prompt_tokens(
-        self, params: DialParameters, messages: list[DialMessage]
-    ) -> int:
-        request = await self._prepare_claude_request(params, messages)
-        tokenizer = create_tokenizer(self.tokenizer, request.params)
-        return await tokenizer(request.messages.lst)
+    async def count_prompt_tokens(self, request: AdapterRequest) -> int:
+        claude_request = await self._prepare_claude_request(request)
+        tokenizer = create_tokenizer(self.tokenizer, claude_request.params)
+        return await tokenizer(claude_request.messages.lst)
 
     async def count_completion_tokens(self, string: str) -> int:
         return self.tokenizer.tokenize_text(string)
 
     async def compute_discarded_messages(
-        self, params: DialParameters, messages: list[DialMessage]
+        self, request: AdapterRequest
     ) -> DiscardedMessages | None:
-        request = await self._prepare_claude_request(params, messages)
-        discarded_messages, _request = await self._compute_discarded_messages(
-            request, params.max_prompt_tokens
+        claude_request = await self._prepare_claude_request(request)
+        discarded, _ = await self._compute_discarded_messages(
+            claude_request, request.max_prompt_tokens
         )
-        return discarded_messages
+        return discarded
 
     async def invoke_streaming(
         self,

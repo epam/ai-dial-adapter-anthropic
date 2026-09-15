@@ -60,7 +60,7 @@ from aidial_adapter_anthropic.dial._message import (
     HumanToolResultMessage,
     SystemMessage,
 )
-from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 from aidial_adapter_anthropic.dial.static_tools import parse_static_function
 from aidial_adapter_anthropic.dial.token_usage import TokenUsage
 from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
@@ -147,7 +147,8 @@ async def _get_claude_blocks(
         TextBlockParam, ContentBlockParam, Configuration
     ],
     message: (
-        HumanRegularMessage
+        SystemMessage
+        | HumanRegularMessage
         | AIRegularMessage
         | AIToolCallMessage
         | HumanToolResultMessage
@@ -155,6 +156,10 @@ async def _get_claude_blocks(
     message_idx: int,
 ) -> WithResources[Sequence[ContentBlockParam]]:
     match message:
+        case SystemMessage():
+            content = await handlers.process_system_message(message)
+            return WithResources(payload=content)
+
         case HumanRegularMessage():
             return await handlers.process_attachments(message)
 
@@ -202,27 +207,19 @@ async def to_claude_messages(
     claude_messages: ClaudeMessages = ListProjection()
 
     for idx, message in enumerate(messages):
-        role = _get_claude_message_role(message)
-
-        if isinstance(message, SystemMessage):
+        if isinstance(message, SystemMessage) and not claude_messages:
             content = await handlers.process_system_message(message)
             _add_cache_control(message, content)
-            if not claude_messages:
-                leading_sys_messages.extend(content)
-                continue
-
-            claude_message = WithResources(
-                payload=MessageParam(role=role, content=content)
-            )
+            leading_sys_messages.extend(content)
         else:
             blocks = await _get_claude_blocks(handlers, message, idx)
             _add_cache_control(message, blocks.payload)
-            claude_message = WithResources(
-                payload=MessageParam(role=role, content=blocks.payload),
-                resources=blocks.resources,
+            role = _get_claude_message_role(message)
+            payload = MessageParam(role=role, content=blocks.payload)
+            claude_messages.append(
+                WithResources(payload=payload, resources=blocks.resources),
+                idx,
             )
-
-        claude_messages.append(claude_message, idx)
 
     return leading_sys_messages, _merge_messages_with_same_role(claude_messages)
 
@@ -421,10 +418,10 @@ def to_claude_output_config(
 
 
 def to_claude_effort(
-    params: ModelParameters, configuration: ClaudeConfiguration
+    request: AdapterRequest, configuration: ClaudeConfiguration
 ) -> ClaudeEffort | str | None:
     reasoning_effort = (
-        params.reasoning_effort.value if params.reasoning_effort else None
+        request.reasoning_effort.value if request.reasoning_effort else None
     )
     effort_from_config = (
         configuration.effort

@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import Self
+from typing import Literal, Self, TypeGuard, assert_never
 
 from aidial_sdk.chat_completion import (
     Attachment,
     CacheBreakpoint,
     CustomContent,
     FunctionCall,
+    MessageContentAudioPart,
+    MessageContentFilePart,
+    MessageContentImagePart,
     MessageContentPart,
     MessageContentTextPart,
     MessageCustomFields,
@@ -13,15 +16,16 @@ from aidial_sdk.chat_completion import (
     ToolCall,
 )
 from aidial_sdk.chat_completion import Message as DialMessage
+from aidial_sdk.chat_completion.request import MessageContentRefusalPart
 from pydantic import BaseModel
 
 from aidial_adapter_anthropic.adapter._errors import ValidationError
-from aidial_adapter_anthropic.dial.request import (
-    collect_text_content,
-    is_plain_text_content,
-    is_system_role,
-    is_text_content,
-    to_message_content,
+
+MessageContent = str | list[MessageContentPart] | None
+MessageContentSpecialized = (
+    MessageContent
+    | list[MessageContentTextPart]
+    | list[MessageContentImagePart]
 )
 
 
@@ -330,8 +334,10 @@ ToolMessage = (
     | AIFunctionCallMessage
 )
 
+AdapterMessage = BaseMessage | ToolMessage
 
-def parse_dial_message(msg: DialMessage) -> BaseMessage | ToolMessage:
+
+def parse_dial_message(msg: DialMessage) -> AdapterMessage:
     message = (
         SystemMessage.from_message(msg)
         or HumanRegularMessage.from_message(msg)
@@ -346,3 +352,76 @@ def parse_dial_message(msg: DialMessage) -> BaseMessage | ToolMessage:
         raise ValidationError("Unknown message type or invalid message")
 
     return message
+
+
+def collect_text_content(
+    content: MessageContentSpecialized, delimiter: str = "\n\n"
+) -> str:
+    match content:
+        case None:
+            return ""
+        case str():
+            return content
+        case list():
+            texts: list[str] = []
+            for part in content:
+                match part:
+                    case MessageContentTextPart(text=text):
+                        texts.append(text)
+                    case MessageContentImagePart():
+                        raise ValidationError(
+                            "Can't extract text from an image content part"
+                        )
+                    case MessageContentAudioPart():
+                        raise ValidationError(
+                            "Can't extract text from an audio content part"
+                        )
+                    case MessageContentFilePart():
+                        raise ValidationError(
+                            "Can't extract text from a file content part"
+                        )
+                    case MessageContentRefusalPart():
+                        raise ValidationError(
+                            "Can't extract text from a refusal content part"
+                        )
+                    case _:
+                        assert_never(part)
+            return delimiter.join(texts)
+        case _:
+            assert_never(content)
+
+
+def to_message_content(content: MessageContentSpecialized) -> MessageContent:
+    match content:
+        case None | str():
+            return content
+        case list():
+            return [*content]
+        case _:
+            assert_never(content)
+
+
+def is_text_content(
+    content: MessageContent,
+) -> TypeGuard[str | list[MessageContentTextPart]]:
+    match content:
+        case None:
+            return False
+        case str():
+            return True
+        case list():
+            return all(
+                isinstance(part, MessageContentTextPart) for part in content
+            )
+        case _:
+            assert_never(content)
+
+
+def is_plain_text_content(content: MessageContent) -> TypeGuard[str | None]:
+    return content is None or isinstance(content, str)
+
+
+def is_system_role(
+    role: Role,
+) -> TypeGuard[Literal[Role.SYSTEM, Role.DEVELOPER]]:
+    return role in [Role.SYSTEM, Role.DEVELOPER]

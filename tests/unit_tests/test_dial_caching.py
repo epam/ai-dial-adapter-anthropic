@@ -16,7 +16,7 @@ from aidial_adapter_anthropic.adapter._claude.tokenizer import (
 )
 from aidial_adapter_anthropic.adapter.claude import create_adapter
 from aidial_adapter_anthropic.dial.consumer import ChoiceConsumer
-from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 
 _DIAL_CACHE_BREAKPOINT_PATH = "X-DIAL-CACHE-BREAKPOINT-PATH"
 _DIAL_CACHE_EXPIRE_AT = "X-DIAL-CACHE-EXPIRE-AT"
@@ -106,7 +106,7 @@ async def _invoke_chat(
 ) -> ChoiceConsumer:
     req = _request(request)
     consumer = ChoiceConsumer(_response(req))
-    await adapter.chat(consumer, ModelParameters.create(req), req.messages)
+    await adapter.chat(consumer, AdapterRequest.create(req))
     return consumer
 
 

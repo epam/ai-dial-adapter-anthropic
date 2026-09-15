@@ -7,6 +7,7 @@ from anthropic.types.beta import BetaToolUseBlock as ToolUseBlock
 
 from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.dial._message import (
+    AdapterMessage,
     AIFunctionCallMessage,
     AIRegularMessage,
     AIToolCallMessage,
@@ -15,7 +16,6 @@ from aidial_adapter_anthropic.dial._message import (
     HumanRegularMessage,
     HumanToolResultMessage,
     SystemMessage,
-    ToolMessage,
 )
 from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
 from aidial_adapter_anthropic.dial.tools import ToolsMode
@@ -68,7 +68,7 @@ async def process_tools_block(
 
 
 def function_to_tool_messages(
-    message: BaseMessage | ToolMessage,
+    message: AdapterMessage,
 ) -> BaseMessage | HumanToolResultMessage | AIToolCallMessage:
     match message:
         case (

@@ -12,7 +12,7 @@ from aidial_sdk.chat_completion import (
 from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.dial._lazy_stage import LazyStage
 from aidial_adapter_anthropic.dial.consumer import Consumer, ToolUseMessage
-from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 from tests.utils.openai import user
 
 
@@ -144,8 +144,7 @@ async def invoke_non_streaming(
     adapter: Adapter, content: list[object]
 ) -> ConsumerSpy:
     request = await adapter._prepare_claude_request(
-        ModelParameters(),
-        [user("hello")],
+        AdapterRequest(messages=[user("hello")])
     )
     consumer = ConsumerSpy()
     _mock_non_streaming_create(adapter, content)

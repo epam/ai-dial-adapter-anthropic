@@ -2,10 +2,10 @@ import time
 from dataclasses import dataclass
 
 from aidial_sdk.chat_completion import CacheBreakpoint, CacheBreakpointPath
-from aidial_sdk.chat_completion import Message as DialMessage
 from aidial_sdk.chat_completion import Tool as DialTool
 
 from aidial_adapter_anthropic._utils.cache import parse_ttl_sec
+from aidial_adapter_anthropic.dial._message import AdapterMessage
 
 
 def _ttl_from_breakpoint(breakpoint: CacheBreakpoint) -> int:
@@ -20,7 +20,7 @@ class CacheInfo:
 
 def get_cache_info(
     automatic_cache_breakpoint: CacheBreakpoint | None,
-    messages: list[DialMessage],
+    messages: list[AdapterMessage],
     tools: list[DialTool],
 ) -> CacheInfo | None:
     ttl = 0
@@ -33,10 +33,8 @@ def get_cache_info(
         automatic_path = CacheBreakpointPath.messages(len(messages) - 1)
 
     for i, message in enumerate(messages):
-        if (
-            (cf := message.custom_fields)
-            and (breakpoint := cf.cache_breakpoint)
-            and (msg_ttl := _ttl_from_breakpoint(breakpoint))
+        if (breakpoint := message.cache_breakpoint) and (
+            msg_ttl := _ttl_from_breakpoint(breakpoint)
         ):
             ttl = max(ttl, msg_ttl)
             message_path = CacheBreakpointPath.messages(i)

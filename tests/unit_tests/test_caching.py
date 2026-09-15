@@ -15,15 +15,14 @@ from aidial_adapter_anthropic.adapter._claude.adapter import (
 from aidial_adapter_anthropic.adapter._claude.converters import (
     to_claude_cache_control,
 )
-from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 
 _EPHEMERAL = CacheControlEphemeralParam(type="ephemeral")
 
 
 async def _to_clade_request(adapter: Adapter, request: dict) -> ClaudeRequest:
     req = ChatCompletionRequest.model_validate(request)
-    params = ModelParameters.create(req)
-    return await adapter._prepare_claude_request(params, req.messages)
+    return await adapter._prepare_claude_request(AdapterRequest.create(req))
 
 
 def _user(content: str, *, cache_breakpoint: dict | None = None) -> dict:
