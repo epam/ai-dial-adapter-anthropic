@@ -7,13 +7,19 @@ from aidial_sdk.chat_completion import (
 from openai.types.chat import ChatCompletionToolParam
 from openai.types.shared_params.function_definition import FunctionDefinition
 
+from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.dial._message import (
+    AdapterMessage,
     AIRegularMessage,
     AIToolCallMessage,
     HumanRegularMessage,
     HumanToolResultMessage,
     SystemMessage,
 )
+
+
+def prompt(*messages: AdapterMessage) -> ListProjection[AdapterMessage]:
+    return ListProjection.create(list(messages))
 
 
 def sys(content: str) -> SystemMessage:

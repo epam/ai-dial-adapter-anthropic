@@ -39,7 +39,7 @@ class ChatCompletionAdapter(ABC):
 
 
 def default_preprocess_messages(
-    messages: list[AdapterMessage],
+    messages: ListProjection[AdapterMessage],
 ) -> ListProjection[AdapterMessage]:
     def _is_empty_system_message(msg: AdapterMessage) -> bool:
         return isinstance(msg, SystemMessage) and msg.text_content.strip() == ""
@@ -47,8 +47,9 @@ def default_preprocess_messages(
     ret: list[tuple[AdapterMessage, set[int]]] = []
     idx: set[int] = set()
 
-    for i, msg in enumerate(messages):
-        idx.add(i)
+    # A dropped message is attributed to the message that follows it.
+    for msg, indices in messages.lst:
+        idx |= indices
         if _is_empty_system_message(msg):
             continue
         ret.append((msg, idx))

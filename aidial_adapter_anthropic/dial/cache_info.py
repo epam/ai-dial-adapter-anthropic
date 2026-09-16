@@ -33,7 +33,7 @@ def _tools(request: AdapterRequest) -> list[ToolDefinition]:
 def _all(request: AdapterRequest) -> Iterator[CacheBreakpoint]:
     if request.cache_breakpoint is not None:
         yield request.cache_breakpoint
-    for message in request.messages:
+    for message in request.messages.raw_list:
         yield from message.cache_breakpoints.all()
     for tool in _tools(request):
         if tool.cache_breakpoint is not None:
@@ -42,14 +42,17 @@ def _all(request: AdapterRequest) -> Iterator[CacheBreakpoint]:
 
 def _breakpoint_path(request: AdapterRequest) -> CacheBreakpointPath | None:
     """The last position of the request body that is expected to be cached."""
-    messages = request.messages
+
+    # The paths are reported to DIAL Core, so they must address the messages
+    # of the original request, not the preprocessed ones.
+    messages = request.messages.lst
 
     if request.cache_breakpoint is not None and messages:
-        return CacheBreakpointPath.messages(len(messages) - 1)
+        return CacheBreakpointPath.messages(max(messages[-1][1]))
 
-    for idx in reversed(range(len(messages))):
-        if messages[idx].cache_breakpoints:
-            return CacheBreakpointPath.messages(idx)
+    for message, indices in reversed(messages):
+        if message.cache_breakpoints:
+            return CacheBreakpointPath.messages(max(indices))
 
     for tool in reversed(_tools(request)):
         if tool.cache_breakpoint is not None:
