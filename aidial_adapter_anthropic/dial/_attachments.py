@@ -44,13 +44,14 @@ from aidial_adapter_anthropic.dial.storage import FileStorage
 
 _T = TypeVar("_T", covariant=True)
 _Txt = TypeVar("_Txt", covariant=True)
-_Config = TypeVar("_Config", bound=BaseModel, contravariant=True)
+_Config = TypeVar("_Config", bound=BaseModel)
 
 AttachmentSourceMessage = BaseMessage | HumanToolResultMessage
 
 
 @dataclass
-class PartContext:
+class PartContext(Generic[_Config]):
+    config: _Config | None = None
     breakpoints: MessageCacheBreakpoints = field(
         default_factory=MessageCacheBreakpoints
     )
@@ -71,9 +72,7 @@ class PartContext:
 
 @runtime_checkable
 class ContentPartHandler(Protocol, Generic[_T, _Config]):
-    def __call__(
-        self, ctx: PartContext, resource: Resource, config: _Config | None
-    ) -> _T: ...
+    def __call__(self, ctx: PartContext[_Config], resource: Resource) -> _T: ...
 
 
 @dataclass
@@ -99,7 +98,7 @@ class WithResources(Generic[_T]):
 @dataclass
 class AttachmentProcessors(Generic[_Txt, _T, _Config]):
     attachment_processors: Sequence[AttachmentProcessor[_T, _Config]]
-    text_handler: Callable[[PartContext, str], _Txt]
+    text_handler: Callable[[PartContext[_Config], str], _Txt]
     file_storage: FileStorage | None
     config: _Config | None = field(default=None)
 
@@ -119,7 +118,9 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
     def supported_image_types(self) -> list[str]:
         return [t for t in self.supported_mime_types if t.startswith("image/")]
 
-    def _text_handler(self, ctx: PartContext, text: str) -> WithResources[_Txt]:
+    def _text_handler(
+        self, ctx: PartContext[_Config], text: str
+    ) -> WithResources[_Txt]:
         return WithResources(self.text_handler(ctx, text))
 
     async def process_system_message(
@@ -132,11 +133,13 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
                 case str():
                     if content:
                         yield self.text_handler(
-                            PartContext(breakpoints), content
+                            PartContext(self.config, breakpoints), content
                         )
                 case list():
                     for idx, part in enumerate(content):
-                        ctx = PartContext(breakpoints, idx, len(content))
+                        ctx = PartContext(
+                            self.config, breakpoints, idx, len(content)
+                        )
                         match part:
                             case MessageContentTextPart(text=text):
                                 if text:
@@ -153,7 +156,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
     ) -> WithResources[list[_T | _Txt]]:
         """Converts the message attachments and content parts into blocks"""
         ret = await aiter_to_list(self._process_attachments_iter(message))
-        ret = ret or [self._text_handler(PartContext(), " ")]
+        ret = ret or [self._text_handler(PartContext(self.config), " ")]
         return WithResources.transpose(ret)
 
     async def _process_attachments_iter(
@@ -162,7 +165,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         if not isinstance(message, SystemMessage):
             for attachment in message.attachments:
                 yield await self._handle_dial_resource(
-                    PartContext(),
+                    PartContext(self.config),
                     AttachmentResource(
                         attachment=attachment,
                         entity_name="attachment",
@@ -176,10 +179,14 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         match content:
             case str():
                 if content:
-                    yield self._text_handler(PartContext(breakpoints), content)
+                    yield self._text_handler(
+                        PartContext(self.config, breakpoints), content
+                    )
             case list():
                 for idx, part in enumerate(content):
-                    ctx = PartContext(breakpoints, idx, len(content))
+                    ctx = PartContext(
+                        self.config, breakpoints, idx, len(content)
+                    )
                     if (
                         block := await self._process_content_part(ctx, part)
                     ) is not None:
@@ -188,7 +195,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
                 assert_never(content)
 
     async def _process_content_part(
-        self, ctx: PartContext, part: MessageContentPart
+        self, ctx: PartContext[_Config], part: MessageContentPart
     ) -> WithResources[_T | _Txt] | None:
         match part:
             case MessageContentTextPart(text=text):
@@ -239,11 +246,11 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
             ) from None
 
     async def _handle_resource(
-        self, ctx: PartContext, resource: Resource
+        self, ctx: PartContext[_Config], resource: Resource
     ) -> _T:
         for processor in self.attachment_processors:
             if resource.type in processor.supported_types:
-                return processor.handler(ctx, resource, self.config)
+                return processor.handler(ctx, resource)
 
         raise UserError(
             f"Unsupported media type: {resource.type}",
@@ -251,7 +258,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
         )
 
     async def _handle_dial_resource(
-        self, ctx: PartContext, dial_resource: DialResource
+        self, ctx: PartContext[_Config], dial_resource: DialResource
     ) -> WithResources[_T]:
         resource = await self._download_resource(dial_resource)
         message = await self._handle_resource(ctx, resource)

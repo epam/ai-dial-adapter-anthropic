@@ -33,7 +33,7 @@ def attachment_processors() -> AttachmentProcessors:
                     "application/pdf": {"pdf"},
                     "text/plain": {"txt"},
                 },
-                handler=lambda ctx, resource, config: resource,
+                handler=lambda ctx, resource: resource,
             )
         ],
         file_storage=None,

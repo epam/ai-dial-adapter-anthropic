@@ -65,25 +65,31 @@ def _citations_config(config: Configuration | None) -> CitationsConfigParam:
     )
 
 
-def _get_cache_control(ctx: PartContext) -> CacheControlEphemeralParam | None:
+def _get_cache_control(
+    ctx: PartContext[Configuration],
+) -> CacheControlEphemeralParam | None:
     if (breakpoint := ctx.cache_breakpoint) is not None:
         return to_claude_cache_control(breakpoint)
     return None
 
 
-def _add_cache_control(ctx: PartContext, block: _Block) -> _Block:
+def _add_cache_control(
+    ctx: PartContext[Configuration], block: _Block
+) -> _Block:
     cache_control = _get_cache_control(ctx)
     if cache_control is not None:
         block["cache_control"] = cache_control
     return block
 
 
-def create_text_block(ctx: PartContext, text: str) -> TextBlockParam:
+def create_text_block(
+    ctx: PartContext[Configuration], text: str
+) -> TextBlockParam:
     return _add_cache_control(ctx, TextBlockParam(type="text", text=text))
 
 
 def create_image_block(
-    ctx: PartContext, resource: Resource, config: Configuration | None
+    ctx: PartContext[Configuration], resource: Resource
 ) -> ImageBlockParam:
     return _add_cache_control(
         ctx,
@@ -99,7 +105,7 @@ def create_image_block(
 
 
 def create_text_document_block(
-    ctx: PartContext, resource: Resource, config: Configuration | None
+    ctx: PartContext[Configuration], resource: Resource
 ) -> RequestDocumentBlockParam:
     return _add_cache_control(
         ctx,
@@ -110,13 +116,13 @@ def create_text_document_block(
                 media_type="text/plain",
                 data=resource.data.decode("utf-8"),
             ),
-            citations=_citations_config(config),
+            citations=_citations_config(ctx.config),
         ),
     )
 
 
 def create_pdf_document_block(
-    ctx: PartContext, resource: Resource, config: Configuration | None
+    ctx: PartContext[Configuration], resource: Resource
 ) -> RequestDocumentBlockParam:
     return _add_cache_control(
         ctx,
@@ -127,7 +133,7 @@ def create_pdf_document_block(
                 media_type="application/pdf",
                 data=resource.data_base64,
             ),
-            citations=_citations_config(config),
+            citations=_citations_config(ctx.config),
         ),
     )
 
