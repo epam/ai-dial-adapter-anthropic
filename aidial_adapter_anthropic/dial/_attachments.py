@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -19,6 +18,7 @@ from aidial_sdk.chat_completion import (
     MessageContentAudioPart,
     MessageContentFilePart,
     MessageContentImagePart,
+    MessageContentPart,
     MessageContentRefusalPart,
     MessageContentTextPart,
 )
@@ -48,12 +48,7 @@ AttachmentSourceMessage = BaseMessage | HumanToolResultMessage
 
 
 @runtime_checkable
-class Handler(Protocol, Generic[_T]):
-    def __call__(self, resource: Resource) -> _T: ...
-
-
-@runtime_checkable
-class HandlerWithConfig(Protocol, Generic[_T, _Config]):
+class ContentPartHandler(Protocol, Generic[_T, _Config]):
     def __call__(self, resource: Resource, config: _Config | None) -> _T: ...
 
 
@@ -62,24 +57,7 @@ class AttachmentProcessor(Generic[_T, _Config]):
     supported_types: dict[str, set[str]]
     """MIME type to file extensions mapping"""
 
-    handler: Handler[_T] | HandlerWithConfig[_T, _Config]
-
-    def handle(self, resource: Resource, config: _Config | None) -> _T:
-        sig = inspect.signature(self.handler)
-        params = list(sig.parameters.values())
-
-        with_config = (
-            len(params) >= 2
-            and params[1].kind
-            in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            )
-        ) or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
-
-        if with_config:
-            return self.handler(resource, config)  # type: ignore
-        return self.handler(resource)  # type: ignore
+    handler: ContentPartHandler[_T, _Config]
 
 
 @dataclass
@@ -169,48 +147,51 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
                     yield self._text_handler(content)
             case list():
                 for part in content:
-                    match part:
-                        case MessageContentTextPart(text=text):
-                            if text:
-                                yield self._text_handler(text)
-                        case MessageContentImagePart(image_url=image_url):
-                            yield await self._handle_dial_resource(
-                                URLResource(
-                                    url=image_url.url,
-                                    entity_name="image content part",
-                                    supported_types=self.supported_image_types,
-                                ),
-                            )
-                        case MessageContentFilePart(file=file):
-                            attachment = _file_content_part_to_attachment(file)
-                            yield await self._handle_dial_resource(
-                                AttachmentResource(
-                                    attachment=attachment,
-                                    entity_name="file content part",
-                                    supported_types=self.supported_mime_types,
-                                ),
-                            )
-                        case MessageContentAudioPart(
-                            input_audio=InputAudio(data=data, format=format)
-                        ):
-                            attachment = Attachment(
-                                data=data, type=f"audio/{format}"
-                            )
-                            yield await self._handle_dial_resource(
-                                AttachmentResource(
-                                    attachment=attachment,
-                                    entity_name="audio content part",
-                                    supported_types=self.supported_mime_types,
-                                ),
-                            )
-                        case MessageContentRefusalPart():
-                            raise ValidationError(
-                                "Refuse content parts aren't supported"
-                            )
-                        case _:
-                            assert_never(part)
+                    if (
+                        block := await self._process_content_part(part)
+                    ) is not None:
+                        yield block
             case _:
                 assert_never(content)
+
+    async def _process_content_part(
+        self, part: MessageContentPart
+    ) -> WithResources[_T | _Txt] | None:
+        match part:
+            case MessageContentTextPart(text=text):
+                return self._text_handler(text) if text else None
+            case MessageContentImagePart(image_url=image_url):
+                return await self._handle_dial_resource(
+                    URLResource(
+                        url=image_url.url,
+                        entity_name="image content part",
+                        supported_types=self.supported_image_types,
+                    ),
+                )
+            case MessageContentFilePart(file=file):
+                attachment = _file_content_part_to_attachment(file)
+                return await self._handle_dial_resource(
+                    AttachmentResource(
+                        attachment=attachment,
+                        entity_name="file content part",
+                        supported_types=self.supported_mime_types,
+                    ),
+                )
+            case MessageContentAudioPart(
+                input_audio=InputAudio(data=data, format=format)
+            ):
+                attachment = Attachment(data=data, type=f"audio/{format}")
+                return await self._handle_dial_resource(
+                    AttachmentResource(
+                        attachment=attachment,
+                        entity_name="audio content part",
+                        supported_types=self.supported_mime_types,
+                    ),
+                )
+            case MessageContentRefusalPart():
+                raise ValidationError("Refuse content parts aren't supported")
+            case _:
+                assert_never(part)
 
     async def _download_resource(self, dial_resource: DialResource) -> Resource:
         try:
@@ -224,7 +205,7 @@ class AttachmentProcessors(Generic[_Txt, _T, _Config]):
     async def _handle_resource(self, resource: Resource) -> _T:
         for processor in self.attachment_processors:
             if resource.type in processor.supported_types:
-                return processor.handle(resource, self.config)
+                return processor.handler(resource, self.config)
 
         raise UserError(
             f"Unsupported media type: {resource.type}",

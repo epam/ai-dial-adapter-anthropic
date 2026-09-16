@@ -2,7 +2,6 @@ from typing import Any, Literal
 
 from anthropic.types.beta import BetaMessageParam as MessageParam
 
-from aidial_adapter_anthropic.adapter._base import keep_last
 from aidial_adapter_anthropic.adapter._claude.converters import (
     ClaudeMessagesList,
 )
@@ -78,8 +77,8 @@ def claude_partitioner(messages: ClaudeMessagesList) -> list[int]:
 
 
 def keep_last_or_system(messages: ClaudeMessagesList, idx: int) -> bool:
-    return _role(messages[idx][0].payload) == "system" or keep_last(
-        messages, idx
+    return (
+        _role(messages[idx][0].payload) == "system" or idx == len(messages) - 1
     )
 
 

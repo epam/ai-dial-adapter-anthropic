@@ -2,13 +2,14 @@ from aidial_sdk.chat_completion import (
     Attachment,
     CustomContent,
     FunctionCall,
-    Message,
     ToolCall,
 )
 from openai.types.chat import ChatCompletionToolParam
 from openai.types.shared_params.function_definition import FunctionDefinition
 
+from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.dial._message import (
+    AdapterMessage,
     AIRegularMessage,
     AIToolCallMessage,
     HumanRegularMessage,
@@ -17,30 +18,32 @@ from aidial_adapter_anthropic.dial._message import (
 )
 
 
-def sys(content: str) -> Message:
-    return SystemMessage(content=content).to_message()
+def prompt(*messages: AdapterMessage) -> ListProjection[AdapterMessage]:
+    return ListProjection.create(list(messages))
 
 
-def ai(content: str) -> Message:
-    return AIRegularMessage(content=content).to_message()
+def sys(content: str) -> SystemMessage:
+    return SystemMessage(content=content)
 
 
-def user(content: str) -> Message:
-    return HumanRegularMessage(content=content).to_message()
+def ai(content: str) -> AIRegularMessage:
+    return AIRegularMessage(content=content)
 
 
-def user_with_image(content: str, image_base64: str) -> Message:
+def user(content: str) -> HumanRegularMessage:
+    return HumanRegularMessage(content=content)
+
+
+def user_with_image(content: str, image_base64: str) -> HumanRegularMessage:
     custom_content = CustomContent(
         attachments=[Attachment(type="image/png", data=image_base64)]
     )
-    return HumanRegularMessage(
-        content=content, custom_content=custom_content
-    ).to_message()
+    return HumanRegularMessage(content=content, custom_content=custom_content)
 
 
 def ai_tool_call(
     message_id: str, content: str = "call", name: str = "test_tool"
-) -> Message:
+) -> AIToolCallMessage:
     return AIToolCallMessage(
         content=content,
         calls=[
@@ -50,11 +53,13 @@ def ai_tool_call(
                 function=FunctionCall(name=name, arguments="{}"),
             )
         ],
-    ).to_message()
+    )
 
 
-def tool_result(message_id: str, content: str = "result") -> Message:
-    return HumanToolResultMessage(id=message_id, content=content).to_message()
+def tool_result(
+    message_id: str, content: str = "result"
+) -> HumanToolResultMessage:
+    return HumanToolResultMessage(id=message_id, content=content)
 
 
 def function_to_tool(function: FunctionDefinition) -> ChatCompletionToolParam:

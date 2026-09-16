@@ -103,7 +103,7 @@ class ToolsConfig(BaseModel):
 
     @classmethod
     def from_request(cls, request: AzureChatCompletionRequest) -> Self | None:
-        validate_messages(request)
+        validate_tools_usage(request)
 
         tool_ids = _collect_tool_ids(request.messages)
 
@@ -135,7 +135,7 @@ class ToolsConfig(BaseModel):
         )
 
 
-def validate_messages(request: AzureChatCompletionRequest) -> None:
+def validate_tools_usage(request: AzureChatCompletionRequest) -> None:
     decl_tools = request.tools is not None
     decl_functions = request.functions is not None
 

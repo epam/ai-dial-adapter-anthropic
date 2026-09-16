@@ -29,58 +29,67 @@ from anthropic.types.beta.beta_tool_result_block_param import (
 )
 
 from aidial_adapter_anthropic._utils.resource import Resource
+from aidial_adapter_anthropic.adapter._claude.config import Configuration
 from aidial_adapter_anthropic.dial._attachments import AttachmentProcessor
 
 
+def _citations_config(config: Configuration | None) -> CitationsConfigParam:
+    return CitationsConfigParam(
+        enabled=config.enable_citations if config else False
+    )
+
+
 def create_text_block(text: str) -> TextBlockParam:
-    return TextBlockParam(text=text, type="text")
+    return TextBlockParam(type="text", text=text)
 
 
-def create_image_block(resource: Resource) -> ImageBlockParam:
+def create_image_block(
+    resource: Resource, config: Configuration | None
+) -> ImageBlockParam:
     return ImageBlockParam(
-        source=Base64ImageSourceParam(
-            data=resource.data_base64,
-            media_type=resource.type,  # type: ignore
-            type="base64",
-        ),
         type="image",
+        source=Base64ImageSourceParam(
+            type="base64",
+            media_type=resource.type,  # type: ignore
+            data=resource.data_base64,
+        ),
     )
 
 
 def create_text_document_block(
-    resource: Resource, *, enable_citations: bool = False
+    resource: Resource, config: Configuration | None
 ) -> RequestDocumentBlockParam:
     return RequestDocumentBlockParam(
-        source=PlainTextSourceParam(
-            data=resource.data.decode("utf-8"),
-            media_type="text/plain",
-            type="text",
-        ),
         type="document",
-        citations=CitationsConfigParam(enabled=enable_citations),
+        source=PlainTextSourceParam(
+            type="text",
+            media_type="text/plain",
+            data=resource.data.decode("utf-8"),
+        ),
+        citations=_citations_config(config),
     )
 
 
 def create_pdf_document_block(
-    resource: Resource, *, enable_citations: bool = False
+    resource: Resource, config: Configuration | None
 ) -> RequestDocumentBlockParam:
     return RequestDocumentBlockParam(
-        source=Base64PDFSourceParam(
-            data=resource.data_base64,
-            media_type="application/pdf",
-            type="base64",
-        ),
         type="document",
-        citations=CitationsConfigParam(enabled=enable_citations),
+        source=Base64PDFSourceParam(
+            type="base64",
+            media_type="application/pdf",
+            data=resource.data_base64,
+        ),
+        citations=_citations_config(config),
     )
 
 
 def create_tool_use_block(call: ToolCall) -> ContentBlockParam:
     return ToolUseBlockParam(
+        type="tool_use",
         id=call.id,
         name=call.function.name,
         input=json.loads(call.function.arguments),
-        type="tool_use",
     )
 
 
@@ -88,8 +97,8 @@ def create_tool_result_block(
     tool_use_id: str, content: list[ContentBlockParam]
 ) -> ToolResultBlockParam:
     return ToolResultBlockParam(
-        tool_use_id=tool_use_id,
         type="tool_result",
+        tool_use_id=tool_use_id,
         content=cast(list[ToolResultInnerContent], content),
     )
 

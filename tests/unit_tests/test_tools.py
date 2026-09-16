@@ -10,11 +10,12 @@ from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.adapter._claude.converters import (
     to_claude_tool_config,
 )
-from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 from aidial_adapter_anthropic.dial.tools import ToolsConfig
 from tests.utils.openai import (
     GET_WEATHER_TOOL,
     GET_WEATHER_TOOL_WITH_REFERENCES,
+    prompt,
     user,
 )
 
@@ -81,12 +82,12 @@ def test_tools_schemas_without_references():
 )
 async def test_web_search_minimal_passthrough(adapter: Adapter, tool_type: str):
     request = await adapter._prepare_claude_request(
-        ModelParameters(
+        AdapterRequest(
             tool_config=_tool_config(
                 [web_search_static_tool({"type": tool_type})]
-            )
-        ),
-        [user("What is the weather in NYC?")],
+            ),
+            messages=prompt(user("What is the weather in NYC?")),
+        )
     )
 
     assert request.params["tools"] == [
@@ -96,12 +97,12 @@ async def test_web_search_minimal_passthrough(adapter: Adapter, tool_type: str):
 
 async def test_web_search_all_optional_fields_preserved(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        ModelParameters(
+        AdapterRequest(
             tool_config=_tool_config(
                 [web_search_static_tool(WEB_SEARCH_CONFIGURATION)]
-            )
-        ),
-        [user("What is the weather in NYC?")],
+            ),
+            messages=prompt(user("What is the weather in NYC?")),
+        )
     )
 
     tools = request.params["tools"]
@@ -112,12 +113,12 @@ async def test_web_search_all_optional_fields_preserved(adapter: Adapter):
 async def test_web_search_tool_choice_left_default(adapter: Adapter):
     # Web search is a server tool: enabling it must not force a tool_choice.
     request = await adapter._prepare_claude_request(
-        ModelParameters(
+        AdapterRequest(
             tool_config=_tool_config(
                 [web_search_static_tool(WEB_SEARCH_CONFIGURATION)]
-            )
-        ),
-        [user("hello")],
+            ),
+            messages=prompt(user("hello")),
+        )
     )
 
     assert isinstance(request.params["tool_choice"], Omit)
@@ -125,15 +126,15 @@ async def test_web_search_tool_choice_left_default(adapter: Adapter):
 
 async def test_web_search_appended_after_function_tools(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        ModelParameters(
+        AdapterRequest(
             tool_config=_tool_config(
                 [
                     GET_WEATHER_TOOL,
                     web_search_static_tool(WEB_SEARCH_CONFIGURATION),
                 ]
             ),
-        ),
-        [user("What is the weather in NYC?")],
+            messages=prompt(user("What is the weather in NYC?")),
+        )
     )
 
     tools = request.params["tools"]
@@ -145,8 +146,7 @@ async def test_web_search_appended_after_function_tools(adapter: Adapter):
 
 async def test_no_web_search_keeps_tools_omitted(adapter: Adapter):
     request = await adapter._prepare_claude_request(
-        ModelParameters(),
-        [user("hello")],
+        AdapterRequest(messages=prompt(user("hello")))
     )
 
     assert isinstance(request.params["tools"], Omit)

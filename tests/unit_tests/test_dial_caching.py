@@ -14,9 +14,10 @@ from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
 from aidial_adapter_anthropic.adapter._claude.tokenizer import (
     ApproximateTokenizer,
 )
+from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.adapter.claude import create_adapter
 from aidial_adapter_anthropic.dial.consumer import ChoiceConsumer
-from aidial_adapter_anthropic.dial.request import ModelParameters
+from aidial_adapter_anthropic.dial.request import AdapterRequest
 
 _DIAL_CACHE_BREAKPOINT_PATH = "X-DIAL-CACHE-BREAKPOINT-PATH"
 _DIAL_CACHE_EXPIRE_AT = "X-DIAL-CACHE-EXPIRE-AT"
@@ -106,7 +107,7 @@ async def _invoke_chat(
 ) -> ChoiceConsumer:
     req = _request(request)
     consumer = ChoiceConsumer(_response(req))
-    await adapter.chat(consumer, ModelParameters.create(req), req.messages)
+    await adapter.chat(consumer, AdapterRequest.create(req))
     return consumer
 
 
@@ -323,3 +324,80 @@ async def test_adapter_chat_sets_headers_for_last_tool_breakpoint(
         (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.tools[1]"),
         (_DIAL_CACHE_EXPIRE_AT, "1300"),
     ]
+
+
+async def test_adapter_chat_reports_the_original_message_index(
+    adapter: ChatCompletionAdapter,
+):
+    """
+    The empty system message is dropped before the request reaches the model,
+    but the path reported to DIAL Core still addresses the original request.
+    """
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [
+                _sys(""),
+                _user("first", cache_breakpoint={"ttl": "5m"}),
+                _user("second"),
+            ]
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "1300"),
+    ]
+
+
+async def test_adapter_chat_reports_the_original_last_message_index(
+    adapter: ChatCompletionAdapter,
+):
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [_user("first"), _sys(""), _user("second")],
+            "custom_fields": {"cache_breakpoint": {"ttl": "1h"}},
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[2]"),
+        (_DIAL_CACHE_EXPIRE_AT, "4600"),
+    ]
+
+
+async def test_adapter_chat_sets_the_headers_once_per_request(
+    adapter: ChatCompletionAdapter,
+):
+    """
+    The cache headers describe the request, so they must be set once even
+    though the request is replicated into `n` completions.
+    """
+    consumer = await _invoke_chat(
+        adapter,
+        {
+            "messages": [_user("first"), _user("second")],
+            "n": 2,
+            "custom_fields": {"cache_breakpoint": {"ttl": "1h"}},
+        },
+    )
+
+    assert consumer.response.headers == [
+        (_DIAL_CACHE_BREAKPOINT_PATH, "prefix.body.messages[1]"),
+        (_DIAL_CACHE_EXPIRE_AT, "4600"),
+    ]
+
+
+async def test_adapter_chat_rejects_an_empty_prompt(
+    adapter: ChatCompletionAdapter,
+):
+    """The caching decorator runs first, so it must tolerate an empty prompt."""
+    with pytest.raises(ValidationError, match="must not be empty"):
+        await _invoke_chat(
+            adapter,
+            {
+                "messages": [],
+                "custom_fields": {"cache_breakpoint": {"ttl": "1h"}},
+            },
+        )

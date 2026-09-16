@@ -1,6 +1,7 @@
 import pytest
 from aidial_sdk.chat_completion import Attachment, CustomContent
 
+from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.adapter._claude.blocks import (
     IMAGE_ATTACHMENT_PROCESSOR,
     create_text_block,
@@ -47,7 +48,9 @@ async def test_tool_result_text_and_image(image_handlers: AttachmentProcessors):
         content="tool result",
         custom_content=CustomContent(attachments=[_PNG_ATTACHMENT]),
     )
-    system, claude_msgs = await to_claude_messages(image_handlers, [msg])
+    system, claude_msgs = await to_claude_messages(
+        image_handlers, ListProjection.create([msg])
+    )
     assert system == []
     assert claude_msgs.raw_list[0].payload == {
         "role": "user",
@@ -73,7 +76,9 @@ async def test_tool_result_text_and_image(image_handlers: AttachmentProcessors):
 
 async def test_tool_result_text_only(image_handlers: AttachmentProcessors):
     msg = HumanToolResultMessage(id="tool-call-id1", content="tool result")
-    system, claude_msgs = await to_claude_messages(image_handlers, [msg])
+    system, claude_msgs = await to_claude_messages(
+        image_handlers, ListProjection.create([msg])
+    )
     assert system == []
     assert claude_msgs.raw_list[0].payload == {
         "content": [
