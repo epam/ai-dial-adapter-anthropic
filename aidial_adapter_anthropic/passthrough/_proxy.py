@@ -42,8 +42,7 @@ from aidial_adapter_anthropic.passthrough._helpers import (
 from aidial_adapter_anthropic.passthrough._logging import logging_decorator
 from aidial_adapter_anthropic.passthrough._middleware import (
     AnthropicClient,
-    get_cloud,
-    get_cloud_middlewares,
+    apply_middlewares,
 )
 
 _log = logging.getLogger(__name__)
@@ -67,8 +66,7 @@ async def _proxy(
     method, path = endpoint.to_endpoints()
     headers = build_request_headers(request.headers)
 
-    for middleware in get_cloud_middlewares(get_cloud(client)):
-        middleware.on_request(headers, json_body, endpoint)
+    apply_middlewares(client, headers, json_body, endpoint)
 
     if _log.isEnabledFor(logging.DEBUG):
         # Ask the upstream not to compress the response so its body (and

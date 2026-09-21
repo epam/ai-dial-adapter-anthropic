@@ -7,9 +7,11 @@ after the package's middlewares had their say.
 """
 
 import json
+from copy import deepcopy
 
 import anthropic
 import pytest
+from anthropic import AsyncAnthropicBedrock
 from anthropic.types.beta import (
     BetaAdvisorTool20260301Param,
     BetaToolParam,
@@ -23,7 +25,7 @@ from aidial_adapter_anthropic.passthrough._helpers import (
 )
 from aidial_adapter_anthropic.passthrough._middleware import (
     MessagesAPICloud,
-    get_cloud_middlewares,
+    apply_middlewares,
 )
 from tests.unit_tests.anthropic_mocks import (
     BASE_MESSAGES_REQUEST,
@@ -85,12 +87,37 @@ def _forwarded_body(mocker: AnthropicMocker) -> dict:
 
 
 @pytest.mark.parametrize("endpoint", list(MessagesAPIEndpoint))
-@pytest.mark.parametrize("body", [None, [1, 2, 3], "text", 42])
-def test_a_non_object_body_is_left_to_the_upstream(body, endpoint):
-    # A body that isn't a JSON object can't be rewritten, so it must reach the
-    # upstream to be rejected there rather than blow up in a middleware.
-    for middleware in get_cloud_middlewares(MessagesAPICloud.AWS):
-        middleware.on_request({}, body, endpoint)
+@pytest.mark.parametrize(
+    "body",
+    [
+        # Not a JSON object at all.
+        None,
+        [1, 2, 3],
+        "text",
+        42,
+        # An object, but shaped unlike anything the SDK types describe.
+        {"tools": 42},
+        {"tools": "web_search"},
+        {"tools": [42, None, "web_search_20250305"]},
+        {"requests": 42},
+        {"requests": [{"params": 42}]},
+        {"requests": [{"no_params": {}}]},
+    ],
+)
+def test_an_unreadable_body_is_left_to_the_upstream(body, endpoint):
+    # The body is unvalidated JSON: one the middlewares cannot read must reach
+    # the upstream to be rejected there rather than fail the request here.
+    before = deepcopy(body)
+    client = AsyncAnthropicBedrock(
+        aws_region="r",
+        aws_access_key="k",
+        aws_secret_key="s",  # noqa: S106
+        max_retries=0,
+    )
+
+    apply_middlewares(client, {}, body, endpoint)
+
+    assert body == before
 
 
 class TestBetaFeatures:

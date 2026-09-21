@@ -15,6 +15,7 @@ from anthropic import (
     AsyncAnthropicVertex,
 )
 from anthropic.types import AnthropicBetaParam
+from anthropic.types.beta import BetaToolUnionParam
 from anthropic.types.beta.message_count_tokens_params import (
     MessageCountTokensParams,
 )
@@ -124,14 +125,12 @@ class RemoveTools(MessagesMiddleware):
         for params in _tool_containers(body, endpoint):
             self._strip(params)
 
-    def _unsupported_type(self, tool: Any) -> str | None:
-        """The tool's type, if the upstream has no implementation of it."""
-        if (
-            isinstance(tool, dict)
-            and isinstance(tool_type := tool.get("type"), str)
-            and self.is_unsupported(tool_type)
-        ):
-            return tool_type
+    def _unsupported_type(self, tool: BetaToolUnionParam) -> str | None:
+        if (ty := tool.get("type")) is None:
+            return None
+
+        if self.is_unsupported(ty):
+            return ty
 
         return None
 
@@ -139,7 +138,7 @@ class RemoveTools(MessagesMiddleware):
         if (tools := params.get("tools")) is None:
             return None
 
-        kept: list[Any] = []
+        kept: list[BetaToolUnionParam] = []
         dropped: set[str] = set()
         for tool in tools:
             if (tool_type := self._unsupported_type(tool)) is None:
@@ -200,6 +199,19 @@ def unsupported_beta_features(
 # web_search_20260209, ...) and a list of them here would go stale behind the
 # next one.
 _remove_web_search = RemoveTools(lambda t: t.startswith("web_search_"))
+
+
+def apply_middlewares(
+    client: AnthropicClient,
+    headers: dict[str, str],
+    body: Any | None,
+    endpoint: MessagesAPIEndpoint,
+) -> None:
+    for middleware in get_cloud_middlewares(get_cloud(client)):
+        try:
+            middleware.on_request(headers, body, endpoint)
+        except Exception:
+            _log.exception("Failed to apply middleware to the request.")
 
 
 def get_cloud_middlewares(cloud: MessagesAPICloud) -> list[MessagesMiddleware]:
