@@ -38,7 +38,6 @@ from tests.unit_tests.anthropic_mocks import (
 
 _AWS = MessagesAPICloud.AWS
 _AZURE = MessagesAPICloud.AZURE
-_GCP = MessagesAPICloud.GCP
 _PLATFORM = MessagesAPICloud.PLATFORM
 _EVERY_CLOUD = set(MessagesAPICloud)
 
