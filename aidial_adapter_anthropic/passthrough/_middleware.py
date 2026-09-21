@@ -181,32 +181,40 @@ def unsupported_beta_features(
 # next one.
 _remove_web_search = RemoveTools(lambda t: t.startswith("web_search_"))
 
-_CLOUD_MIDDLEWARES: dict[MessagesAPICloud, list[MessagesMiddleware]] = {
-    MessagesAPICloud.AWS: [
-        *unsupported_beta_features(
-            [
-                "oauth-2025-04-20",
-                "redact-thinking-2026-02-12",
-                "thinking-token-count-2026-05-13",
-                "prompt-caching-scope-2026-01-05",
-                "claude-code-20250219",
-                "advanced-tool-use-2025-11-20",
-                _ADVISOR_TOOL_FEATURE,
-            ]
-        ),
-        _remove_web_search,
-    ],
-    MessagesAPICloud.GCP: unsupported_beta_features(
-        [
-            "thinking-token-count-2026-05-13",
-            "prompt-caching-scope-2026-01-05",
-            _ADVISOR_TOOL_FEATURE,
-        ]
-    ),
-    MessagesAPICloud.AZURE: unsupported_beta_features([_ADVISOR_TOOL_FEATURE]),
-    MessagesAPICloud.PLATFORM: [],
-}
-
 
 def get_cloud_middlewares(cloud: MessagesAPICloud) -> list[MessagesMiddleware]:
-    return _CLOUD_MIDDLEWARES[cloud]
+    match cloud:
+        # https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html
+        case MessagesAPICloud.AWS:
+            return [
+                *unsupported_beta_features(
+                    [
+                        "oauth-2025-04-20",
+                        "redact-thinking-2026-02-12",
+                        "thinking-token-count-2026-05-13",
+                        "prompt-caching-scope-2026-01-05",
+                        "claude-code-20250219",
+                        "advanced-tool-use-2025-11-20",
+                        _ADVISOR_TOOL_FEATURE,
+                    ]
+                ),
+                _remove_web_search,
+            ]
+        # https://platform.claude.com/docs/en/build-with-claude/claude-on-vertex-ai#features-not-supported
+        case MessagesAPICloud.GCP:
+            return unsupported_beta_features(
+                [
+                    "thinking-token-count-2026-05-13",
+                    "prompt-caching-scope-2026-01-05",
+                    _ADVISOR_TOOL_FEATURE,
+                ]
+            )
+        # https://platform.claude.com/docs/en/build-with-claude/claude-in-microsoft-foundry#claude-features-not-supported-for-claude-in-microsoft-foundry
+        case MessagesAPICloud.AZURE:
+            return unsupported_beta_features([_ADVISOR_TOOL_FEATURE])
+        # Nothing to strip; the per-cloud matrix the cases above follow:
+        # https://platform.claude.com/docs/en/build-with-claude/overview
+        case MessagesAPICloud.PLATFORM:
+            return []
+        case _:
+            assert_never(cloud)
