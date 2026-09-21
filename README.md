@@ -653,6 +653,15 @@ pip install aidial-adapter-anthropic[bedrock]
 
 Endpoints a backend does not implement (e.g. Bedrock has no token-counting or batches route) surface as a `404` error.
 
+### Per-cloud adaptation
+
+Not every backend implements every Anthropic feature, and an unimplemented beta flag or server tool makes the upstream reject the whole request. The package rewrites such a request into one the backend accepts — the model then answers without the feature instead of failing — by dropping:
+
+- the `anthropic-beta` flags the upstream cloud is known to reject, on every endpoint;
+- the server tools it has no implementation of: the web search tools on AWS, and the advisor tool wherever its beta flag is dropped.
+
+This requires no configuration: which adaptations apply follows from the client the factory returns.
+
 ---
 
 ## Development Environment
