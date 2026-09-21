@@ -15,10 +15,15 @@ from anthropic import (
     AsyncAnthropicVertex,
 )
 from anthropic.types import AnthropicBetaParam
+from anthropic.types.beta.message_count_tokens_params import (
+    MessageCountTokensParams,
+)
+from anthropic.types.beta.message_create_params import MessageCreateParamsBase
 
 from aidial_adapter_anthropic.passthrough._helpers import (
     BETA_HEADER,
     MessagesAPIEndpoint,
+    typecast_request_body,
 )
 
 _log = logging.getLogger(__name__)
@@ -51,6 +56,9 @@ def get_cloud(client: AnthropicClient) -> MessagesAPICloud:
             return MessagesAPICloud.PLATFORM
         case _:
             assert_never(client)
+
+
+_ToolContainer = MessageCreateParamsBase | MessageCountTokensParams
 
 
 class MessagesMiddleware(ABC):
@@ -116,40 +124,52 @@ class RemoveTools(MessagesMiddleware):
         for params in _tool_containers(body, endpoint):
             self._strip(params)
 
-    def _not_supported(self, tool: object) -> bool:
-        return (
+    def _unsupported_type(self, tool: Any) -> str | None:
+        """The tool's type, if the upstream has no implementation of it."""
+        if (
             isinstance(tool, dict)
             and isinstance(tool_type := tool.get("type"), str)
             and self.is_unsupported(tool_type)
-        )
+        ):
+            return tool_type
 
-    def _strip(self, params: dict) -> None:
-        tools = params.get("tools")
-        if not isinstance(tools, list):
-            return
+        return None
 
-        dropped = sorted({t["type"] for t in tools if self._not_supported(t)})
+    def _strip(self, params: _ToolContainer) -> None:
+        if (tools := params.get("tools")) is None:
+            return None
+
+        kept: list[Any] = []
+        dropped: set[str] = set()
+        for tool in tools:
+            if (tool_type := self._unsupported_type(tool)) is None:
+                kept.append(tool)
+            else:
+                dropped.add(tool_type)
+
         if dropped:
-            params["tools"] = [t for t in tools if not self._not_supported(t)]
-            _log.debug(f"Dropped tools unsupported by the upstream: {dropped}")
+            params["tools"] = kept
+            _log.debug(
+                f"Dropped tools unsupported by the upstream: {sorted(dropped)}"
+            )
 
 
 def _tool_containers(
     body: Any, endpoint: MessagesAPIEndpoint
-) -> Iterator[dict]:
-    if not isinstance(body, dict):
-        # A malformed body is the upstream's to reject, not ours to rewrite.
-        return
-
-    if endpoint is MessagesAPIEndpoint.POST_BATCHES:
-        requests = body.get("requests")
-        for request in requests if isinstance(requests, list) else []:
-            if isinstance(request, dict) and isinstance(
-                params := request.get("params"), dict
-            ):
-                yield params
-    else:
-        yield body
+) -> Iterator[_ToolContainer]:
+    match endpoint:
+        case MessagesAPIEndpoint.POST_MESSAGES:
+            if typecast_request_body(body, endpoint):
+                yield body
+        case MessagesAPIEndpoint.POST_COUNT_TOKENS:
+            if typecast_request_body(body, endpoint):
+                yield body
+        case MessagesAPIEndpoint.POST_BATCHES:
+            if typecast_request_body(body, endpoint):
+                for request in body["requests"]:
+                    yield request["params"]
+        case _:
+            assert_never(endpoint)
 
 
 _ADVISOR_TOOL_FEATURE = "advisor-tool-2026-03-01"

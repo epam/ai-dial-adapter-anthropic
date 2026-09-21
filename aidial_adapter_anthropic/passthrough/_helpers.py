@@ -9,10 +9,15 @@ stream conversion.
 import json
 from collections.abc import AsyncIterator
 from enum import Enum
-from typing import assert_never
+from typing import Any, Literal, TypeGuard, assert_never, overload
 
 import httpx
 from anthropic._streaming import ServerSentEvent
+from anthropic.types.beta.message_count_tokens_params import (
+    MessageCountTokensParams,
+)
+from anthropic.types.beta.message_create_params import MessageCreateParamsBase
+from anthropic.types.beta.messages.batch_create_params import BatchCreateParams
 from starlette.datastructures import Headers as StarletteHeaders
 
 BETA_HEADER = "anthropic-beta"
@@ -33,6 +38,28 @@ class MessagesAPIEndpoint(Enum):
                 return "POST", "/v1/messages/count_tokens"
             case _:
                 assert_never(self)
+
+
+@overload
+def typecast_request_body(
+    body: Any, endpoint: Literal[MessagesAPIEndpoint.POST_MESSAGES]
+) -> TypeGuard[MessageCreateParamsBase]: ...
+
+
+@overload
+def typecast_request_body(
+    body: Any, endpoint: Literal[MessagesAPIEndpoint.POST_BATCHES]
+) -> TypeGuard[BatchCreateParams]: ...
+
+
+@overload
+def typecast_request_body(
+    body: Any, endpoint: Literal[MessagesAPIEndpoint.POST_COUNT_TOKENS]
+) -> TypeGuard[MessageCountTokensParams]: ...
+
+
+def typecast_request_body(body: Any, endpoint: MessagesAPIEndpoint) -> bool:
+    return isinstance(body, dict)
 
 
 def is_streaming_request(

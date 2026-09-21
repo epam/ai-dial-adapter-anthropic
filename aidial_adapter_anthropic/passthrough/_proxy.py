@@ -26,10 +26,7 @@ from anthropic._models import FinalRequestOptions
 from fastapi import FastAPI, Request
 from fastapi.responses import Response, StreamingResponse
 
-from aidial_adapter_anthropic.passthrough._caching import (
-    get_cache_headers,
-    is_message_params,
-)
+from aidial_adapter_anthropic.passthrough._caching import get_cache_headers
 from aidial_adapter_anthropic.passthrough._errors import (
     anthropic_response_decorator,
 )
@@ -40,6 +37,7 @@ from aidial_adapter_anthropic.passthrough._helpers import (
     is_streaming_request,
     sse_to_bytes_iterator,
     strip_content_headers,
+    typecast_request_body,
 )
 from aidial_adapter_anthropic.passthrough._logging import logging_decorator
 from aidial_adapter_anthropic.passthrough._middleware import (
@@ -98,7 +96,7 @@ async def _proxy(
         # upstream, whose provider cache is cold.
         endpoint is MessagesAPIEndpoint.POST_MESSAGES
         and response.status_code == HTTPStatus.OK
-        and is_message_params(json_body)
+        and typecast_request_body(json_body, endpoint)
     ):
         try:
             response.headers.update(get_cache_headers(json_body))
