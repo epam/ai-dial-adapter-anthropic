@@ -38,6 +38,7 @@ from tests.unit_tests.anthropic_mocks import (
 
 _AWS = MessagesAPICloud.AWS
 _AZURE = MessagesAPICloud.AZURE
+_GCP = MessagesAPICloud.GCP
 _PLATFORM = MessagesAPICloud.PLATFORM
 _EVERY_CLOUD = set(MessagesAPICloud)
 
@@ -134,9 +135,9 @@ class TestBetaFeatures:
             ("redact-thinking-2026-02-12", _EVERY_CLOUD - {_AWS}),
             ("claude-code-20250219", _EVERY_CLOUD - {_AWS}),
             ("advanced-tool-use-2025-11-20", _EVERY_CLOUD - {_AWS}),
-            ("thinking-token-count-2026-05-13", {_PLATFORM, _AZURE}),
-            ("prompt-caching-scope-2026-01-05", {_PLATFORM, _AZURE}),
-            (_ADVISOR_FEATURE, {_PLATFORM}),
+            ("thinking-token-count-2026-05-13", _EVERY_CLOUD - {_AWS, _GCP}),
+            ("prompt-caching-scope-2026-01-05", _EVERY_CLOUD - {_AWS, _GCP}),
+            (_ADVISOR_FEATURE, _EVERY_CLOUD - {_AWS, _GCP, _AZURE}),
         ],
     )
     async def test_stripped_only_where_unsupported(
