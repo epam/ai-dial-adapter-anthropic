@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, assert_never
@@ -111,7 +111,7 @@ class RemoveTools(MessagesMiddleware):
     doesn't know, so a tool it cannot run is better dropped than forwarded.
     """
 
-    is_unsupported: Callable[[str], bool]
+    unsupported_tools: list[str]
 
     def on_request(
         self,
@@ -125,15 +125,6 @@ class RemoveTools(MessagesMiddleware):
         for params in _tool_containers(body, endpoint):
             self._strip(params)
 
-    def _unsupported_type(self, tool: BetaToolUnionParam) -> str | None:
-        if (ty := tool.get("type")) is None:
-            return None
-
-        if self.is_unsupported(ty):
-            return ty
-
-        return None
-
     def _strip(self, params: _ToolContainer) -> None:
         if (tools := params.get("tools")) is None:
             return None
@@ -141,10 +132,10 @@ class RemoveTools(MessagesMiddleware):
         kept: list[BetaToolUnionParam] = []
         dropped: set[str] = set()
         for tool in tools:
-            if (tool_type := self._unsupported_type(tool)) is None:
-                kept.append(tool)
+            if (name := tool.get("name")) in self.unsupported_tools:
+                dropped.add(name)
             else:
-                dropped.add(tool_type)
+                kept.append(tool)
 
         if dropped:
             params["tools"] = kept
@@ -177,7 +168,7 @@ _ADVISOR_TOOL_FEATURE = "advisor-tool-2026-03-01"
 _BETA_FEATURE_COMPANIONS: dict[AnthropicBetaParam, MessagesMiddleware] = {
     # The advisor tool is only usable together with its flag, so a cloud that
     # doesn't take the flag can't run the tool either.
-    _ADVISOR_TOOL_FEATURE: RemoveTools(lambda t: t == "advisor_20260301"),
+    _ADVISOR_TOOL_FEATURE: RemoveTools(["advisor"]),
 }
 
 
@@ -195,10 +186,7 @@ def unsupported_beta_features(
 # No version of the web search tool is offered by Bedrock:
 # https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
 # -- "Web search is not available on Amazon Bedrock."
-# Matched by prefix because the versions are dated (web_search_20250305,
-# web_search_20260209, ...) and a list of them here would go stale behind the
-# next one.
-_remove_web_search = RemoveTools(lambda t: t.startswith("web_search_"))
+_remove_web_search = RemoveTools(["web_search"])
 
 
 def apply_middlewares(
