@@ -9,6 +9,7 @@ stream conversion.
 import json
 from collections.abc import AsyncIterator
 from enum import Enum
+from typing import assert_never
 
 import httpx
 from anthropic._streaming import ServerSentEvent
@@ -18,9 +19,20 @@ BETA_HEADER = "anthropic-beta"
 
 
 class MessagesAPIEndpoint(Enum):
-    MESSAGES = "/v1/messages"
-    BATCHES = "/v1/messages/batches"
-    COUNT_TOKENS = "/v1/messages/count_tokens"
+    POST_MESSAGES = "postMessages"
+    POST_BATCHES = "postBatches"
+    POST_COUNT_TOKENS = "postCountTokens"
+
+    def to_endpoints(self) -> tuple[str, str]:
+        match self:
+            case MessagesAPIEndpoint.POST_MESSAGES:
+                return "POST", "/v1/messages"
+            case MessagesAPIEndpoint.POST_BATCHES:
+                return "POST", "/v1/messages/batches"
+            case MessagesAPIEndpoint.POST_COUNT_TOKENS:
+                return "POST", "/v1/messages/count_tokens"
+            case _:
+                assert_never(self)
 
 
 def is_streaming_request(
@@ -32,7 +44,7 @@ def is_streaming_request(
     backend returns the stream in its own event stream format
     (``application/vnd.amazon.eventstream``) rather than ``text/event-stream``.
     """
-    if endpoint is MessagesAPIEndpoint.MESSAGES and isinstance(body, dict):
+    if endpoint is MessagesAPIEndpoint.POST_MESSAGES and isinstance(body, dict):
         return bool(body.get("stream"))
 
     return False

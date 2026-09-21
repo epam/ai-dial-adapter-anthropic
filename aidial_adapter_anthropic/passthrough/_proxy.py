@@ -66,6 +66,7 @@ async def _proxy(
 
     is_streaming = is_streaming_request(json_body, endpoint)
 
+    method, path = endpoint.to_endpoints()
     headers = build_request_headers(request.headers)
 
     for middleware in get_cloud_middlewares(get_cloud(client)):
@@ -78,8 +79,8 @@ async def _proxy(
         headers["accept-encoding"] = "identity"
 
     options = FinalRequestOptions.construct(
-        method=request.method.lower(),
-        url=endpoint.value,
+        method=method.lower(),
+        url=path,
         json_data=json_body,
         headers=headers,
     )
@@ -95,7 +96,7 @@ async def _proxy(
         # Only the generating endpoint takes part in the cache affinity, and
         # only on a success: a retriable failure makes DIAL Core try another
         # upstream, whose provider cache is cold.
-        endpoint is MessagesAPIEndpoint.MESSAGES
+        endpoint is MessagesAPIEndpoint.POST_MESSAGES
         and response.status_code == HTTPStatus.OK
         and is_message_params(json_body)
     ):
@@ -157,9 +158,10 @@ def _create_proxy_handler(
 def create_anthropic_api_app(get_client: ClientFactory[ClientT]) -> FastAPI:
     app = FastAPI()
     for endpoint in MessagesAPIEndpoint:
+        method, path = endpoint.to_endpoints()
         app.router.add_api_route(
-            path=endpoint.value,
-            methods=["POST"],
+            path=path,
+            methods=[method],
             endpoint=_create_proxy_handler(endpoint, get_client),
         )
     return app

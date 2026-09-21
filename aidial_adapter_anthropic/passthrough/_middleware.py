@@ -141,7 +141,7 @@ def _tool_containers(
         # A malformed body is the upstream's to reject, not ours to rewrite.
         return
 
-    if endpoint is MessagesAPIEndpoint.BATCHES:
+    if endpoint is MessagesAPIEndpoint.POST_BATCHES:
         requests = body.get("requests")
         for request in requests if isinstance(requests, list) else []:
             if isinstance(request, dict) and isinstance(
