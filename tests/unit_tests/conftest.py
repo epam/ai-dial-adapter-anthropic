@@ -1,3 +1,5 @@
+import anthropic
+import httpx
 import pytest
 
 from aidial_adapter_anthropic.passthrough import create_anthropic_api_app
@@ -22,4 +24,14 @@ def mocker(request):
 async def http_client(mocker: AnthropicMocker):
     app = create_anthropic_api_app(mocker.make_client())
     async with asgi_client(app) as client:
+        yield client
+
+
+@pytest.fixture
+async def anthropic_client(http_client: httpx.AsyncClient):
+    async with anthropic.AsyncAnthropic(
+        api_key="test-dial-api-key",
+        http_client=http_client,
+        max_retries=0,
+    ) as client:
         yield client

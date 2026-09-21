@@ -34,11 +34,12 @@ async def _log_stream_chunks(
         yield chunk
 
 
-# The trailing parameters (the upstream client) are relayed untouched, so the
-# decorator stays agnostic of their type and preserves the handler signature.
+# The trailing parameters (the endpoint, the upstream client) are relayed
+# untouched, so the decorator stays agnostic of their type and preserves the
+# handler signature.
 _P = ParamSpec("_P")
 
-_Handler = Callable[Concatenate[Request, str, _P], Awaitable[Response]]
+_Handler = Callable[Concatenate[Request, _P], Awaitable[Response]]
 
 
 def logging_decorator(func: _Handler[_P]) -> _Handler[_P]:
@@ -47,15 +48,15 @@ def logging_decorator(func: _Handler[_P]) -> _Handler[_P]:
 
     @wraps(func)
     async def wrapper(
-        request: Request, path: str, *args: _P.args, **kwargs: _P.kwargs
+        request: Request, *args: _P.args, **kwargs: _P.kwargs
     ) -> Response:
         if not _log.isEnabledFor(logging.DEBUG):
-            return await func(request, path, *args, **kwargs)
+            return await func(request, *args, **kwargs)
 
         with contextlib.suppress(Exception):
             _log.debug(f"request: {one_line(_as_text(await request.body()))}")
 
-        response = await func(request, path, *args, **kwargs)
+        response = await func(request, *args, **kwargs)
 
         if isinstance(response, StreamingResponse):
             response.body_iterator = _log_stream_chunks(response.body_iterator)

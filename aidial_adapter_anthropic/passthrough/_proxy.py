@@ -9,24 +9,19 @@ AWS event stream decoding.
 The client used for a given request is supplied by the caller via a
 ``ClientFactory``, which is the sole point of variation between deployments
 (platform key, Bedrock credentials, Vertex project, Foundry endpoint, ...).
+The adaptation each upstream cloud requires is the package's own business:
+see ``_middleware``.
 """
 
 import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
-from functools import partial
 from http import HTTPStatus
 from typing import TypeVar
 
 import httpx
-from anthropic import (
-    AsyncAnthropic,
-    AsyncAnthropicBedrock,
-    AsyncAnthropicBedrockMantle,
-    AsyncAnthropicFoundry,
-    AsyncAnthropicVertex,
-)
+from anthropic import AsyncAnthropicBedrock
 from anthropic._models import FinalRequestOptions
 from fastapi import FastAPI, Request
 from fastapi.responses import Response, StreamingResponse
@@ -39,8 +34,7 @@ from aidial_adapter_anthropic.passthrough._errors import (
     anthropic_response_decorator,
 )
 from aidial_adapter_anthropic.passthrough._helpers import (
-    MESSAGES_PATH,
-    apply_anthropic_beta_features,
+    MessagesAPIEndpoint,
     bedrock_stream_to_sse,
     build_request_headers,
     is_streaming_request,
@@ -48,43 +42,34 @@ from aidial_adapter_anthropic.passthrough._helpers import (
     strip_content_headers,
 )
 from aidial_adapter_anthropic.passthrough._logging import logging_decorator
+from aidial_adapter_anthropic.passthrough._middleware import (
+    AnthropicClient,
+    get_cloud,
+    get_cloud_middlewares,
+)
 
 _log = logging.getLogger(__name__)
 
-AnthropicClient = (
-    AsyncAnthropic
-    | AsyncAnthropicBedrock
-    | AsyncAnthropicBedrockMantle
-    | AsyncAnthropicVertex
-    | AsyncAnthropicFoundry
-)
-
 ClientT = TypeVar("ClientT", bound=AnthropicClient)
 ClientFactory = Callable[[Request], Awaitable[ClientT]] | ClientT
-OnAnthropicBetaHeader = Callable[[ClientT, list[str]], list[str]]
 
 
 @anthropic_response_decorator
 @logging_decorator
 async def _proxy(
-    request: Request,
-    path: str,
-    client: AnthropicClient,
-    on_anthropic_beta_header: OnAnthropicBetaHeader[AnthropicClient] | None,
+    request: Request, endpoint: MessagesAPIEndpoint, client: AnthropicClient
 ) -> Response:
     json_body = None
     if content := await request.body():
         with contextlib.suppress(json.JSONDecodeError):
             json_body = json.loads(content)
 
-    is_streaming = is_streaming_request(json_body, path)
+    is_streaming = is_streaming_request(json_body, endpoint)
 
     headers = build_request_headers(request.headers)
 
-    if on_anthropic_beta_header is not None:
-        apply_anthropic_beta_features(
-            headers, partial(on_anthropic_beta_header, client)
-        )
+    for middleware in get_cloud_middlewares(get_cloud(client)):
+        middleware.on_request(headers, json_body, endpoint)
 
     if _log.isEnabledFor(logging.DEBUG):
         # Ask the upstream not to compress the response so its body (and
@@ -94,7 +79,7 @@ async def _proxy(
 
     options = FinalRequestOptions.construct(
         method=request.method.lower(),
-        url=path,
+        url=endpoint.value,
         json_data=json_body,
         headers=headers,
     )
@@ -110,7 +95,7 @@ async def _proxy(
         # Only the generating endpoint takes part in the cache affinity, and
         # only on a success: a retriable failure makes DIAL Core try another
         # upstream, whose provider cache is cold.
-        path == MESSAGES_PATH
+        endpoint is MessagesAPIEndpoint.MESSAGES
         and response.status_code == HTTPStatus.OK
         and is_message_params(json_body)
     ):
@@ -156,9 +141,7 @@ async def _proxy(
 
 
 def _create_proxy_handler(
-    path: str,
-    get_client: ClientFactory[ClientT],
-    on_anthropic_beta_header: OnAnthropicBetaHeader[ClientT] | None,
+    endpoint: MessagesAPIEndpoint, get_client: ClientFactory[ClientT]
 ) -> Callable[[Request], Awaitable[Response]]:
     async def handler(request: Request) -> Response:
         client = (
@@ -166,30 +149,17 @@ def _create_proxy_handler(
             if isinstance(get_client, AnthropicClient)
             else await get_client(request)
         )
-        return await _proxy(request, path, client, on_anthropic_beta_header)
+        return await _proxy(request, endpoint, client)
 
     return handler
 
 
-_PROXIED_ENDPOINTS = [
-    ("POST", MESSAGES_PATH),
-    ("POST", f"{MESSAGES_PATH}/batches"),
-    ("POST", f"{MESSAGES_PATH}/count_tokens"),
-]
-
-
-def create_anthropic_api_app(
-    get_client: ClientFactory[ClientT],
-    *,
-    on_anthropic_beta_header: OnAnthropicBetaHeader[ClientT] | None = None,
-) -> FastAPI:
+def create_anthropic_api_app(get_client: ClientFactory[ClientT]) -> FastAPI:
     app = FastAPI()
-    for method, path in _PROXIED_ENDPOINTS:
+    for endpoint in MessagesAPIEndpoint:
         app.router.add_api_route(
-            path=path,
-            methods=[method],
-            endpoint=_create_proxy_handler(
-                path, get_client, on_anthropic_beta_header
-            ),
+            path=endpoint.value,
+            methods=["POST"],
+            endpoint=_create_proxy_handler(endpoint, get_client),
         )
     return app

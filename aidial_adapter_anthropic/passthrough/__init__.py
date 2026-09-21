@@ -15,22 +15,24 @@ Typical usage::
         return AsyncAnthropic(api_key=...)
 
     mount_anthropic_api(app, get_client)
+
+Adapting a request to what its upstream cloud actually implements (dropping
+beta flags and server tools the backend has no support for) needs no
+configuration: it follows from the client the factory returns.
 """
 
 from starlette.applications import Starlette
 
+from aidial_adapter_anthropic.passthrough._middleware import AnthropicClient
 from aidial_adapter_anthropic.passthrough._proxy import (
-    AnthropicClient,
     ClientFactory,
     ClientT,
-    OnAnthropicBetaHeader,
     create_anthropic_api_app,
 )
 
 __all__ = [
     "AnthropicClient",
     "ClientFactory",
-    "OnAnthropicBetaHeader",
     "create_anthropic_api_app",
     "mount_anthropic_api",
 ]
@@ -42,9 +44,6 @@ def mount_anthropic_api(
     *,
     path: str = "/anthropic",
     name: str = "Claude API passthrough",
-    on_anthropic_beta_header: OnAnthropicBetaHeader[ClientT] | None = None,
 ) -> None:
-    passthrough_app = create_anthropic_api_app(
-        get_client, on_anthropic_beta_header=on_anthropic_beta_header
-    )
+    passthrough_app = create_anthropic_api_app(get_client)
     app.mount(path=path, app=passthrough_app, name=name)

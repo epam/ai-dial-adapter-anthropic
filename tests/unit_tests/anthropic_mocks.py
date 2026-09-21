@@ -1,11 +1,13 @@
 import json
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self, TypeVar
 
+import anthropic
 import httpx
+import pytest
 import respx
 from anthropic import (
     AsyncAnthropic,
@@ -16,7 +18,10 @@ from anthropic import (
 )
 from httpx import ASGITransport
 
-from aidial_adapter_anthropic.passthrough._proxy import AnthropicClient
+from aidial_adapter_anthropic.passthrough._middleware import (
+    AnthropicClient,
+    MessagesAPICloud,
+)
 from tests.utils.bedrock import AMAZON_SSE_CONTENT_TYPE, sse_to_event_stream
 
 _JSON = "application/json"
@@ -34,6 +39,15 @@ def asgi_client(app) -> httpx.AsyncClient:
         transport=ASGITransport(app),  # type: ignore[arg-type]
         base_url="http://test-app.com",
     )
+
+
+async def assert_unsupported_endpoint(
+    run: Callable[[], Awaitable[object]],
+) -> None:
+    with pytest.raises(anthropic.NotFoundError) as excinfo:
+        await run()
+    assert excinfo.value.status_code == 404
+    assert "not supported" in excinfo.value.message
 
 
 def split_sse_events(raw: bytes) -> list[bytes]:
@@ -93,6 +107,7 @@ class AnthropicAPIMock:
 @dataclass
 class AnthropicMocker(ABC):
     id: ClassVar[str]
+    cloud: ClassVar[MessagesAPICloud]
     # Not every backend exposes token counting and batching (the legacy Bedrock
     # runtime exposes neither, Vertex has no batches endpoint). When it doesn't,
     # the SDK raises before making any HTTP call and the proxy maps that to a 404.
@@ -183,6 +198,7 @@ def _messages_dispatch(
 
 class AnthropicPlatformMocker(AnthropicMocker):
     id = "platform"
+    cloud = MessagesAPICloud.PLATFORM
 
     @classmethod
     def create(cls) -> Self:
@@ -212,6 +228,7 @@ class AnthropicPlatformMocker(AnthropicMocker):
 
 class AnthropicFoundryMocker(AnthropicMocker):
     id = "foundry"
+    cloud = MessagesAPICloud.AZURE
 
     @classmethod
     def create(cls) -> Self:
@@ -246,6 +263,7 @@ class AnthropicFoundryMocker(AnthropicMocker):
 
 class AnthropicMantleMocker(AnthropicMocker):
     id = "bedrock-mantle"
+    cloud = MessagesAPICloud.AWS
 
     @classmethod
     def create(cls) -> Self:
@@ -283,6 +301,7 @@ class AnthropicMantleMocker(AnthropicMocker):
 
 class AnthropicBedrockLegacyMocker(AnthropicMocker):
     id = "bedrock-legacy"
+    cloud = MessagesAPICloud.AWS
     supports_count_tokens = False
     supports_batches = False
     reencodes_stream = True
@@ -323,6 +342,7 @@ class AnthropicBedrockLegacyMocker(AnthropicMocker):
 
 class AnthropicVertexMocker(AnthropicMocker):
     id = "vertex"
+    cloud = MessagesAPICloud.GCP
     supports_batches = False
 
     @classmethod

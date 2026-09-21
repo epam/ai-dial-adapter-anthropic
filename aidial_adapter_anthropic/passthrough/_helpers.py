@@ -7,25 +7,32 @@ stream conversion.
 """
 
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
+from enum import Enum
 
 import httpx
 from anthropic._streaming import ServerSentEvent
 from starlette.datastructures import Headers as StarletteHeaders
 
-# The only generating endpoint: the one that streams and takes part in the DIAL
-# upstream cache affinity.
-MESSAGES_PATH = "/v1/messages"
+BETA_HEADER = "anthropic-beta"
 
 
-def is_streaming_request(body: dict | None, path: str) -> bool:
+class MessagesAPIEndpoint(Enum):
+    MESSAGES = "/v1/messages"
+    BATCHES = "/v1/messages/batches"
+    COUNT_TOKENS = "/v1/messages/count_tokens"
+
+
+def is_streaming_request(
+    body: dict | None, endpoint: MessagesAPIEndpoint
+) -> bool:
     """Whether the request asks for a streamed response.
 
     Checking the response ``Content-Type`` header is not enough: the Bedrock
     backend returns the stream in its own event stream format
     (``application/vnd.amazon.eventstream``) rather than ``text/event-stream``.
     """
-    if path == MESSAGES_PATH and isinstance(body, dict):
+    if endpoint is MessagesAPIEndpoint.MESSAGES and isinstance(body, dict):
         return bool(body.get("stream"))
 
     return False
@@ -97,16 +104,3 @@ def build_request_headers(headers: StarletteHeaders) -> dict[str, str]:
         return header.startswith("anthropic-") or header == "accept-encoding"
 
     return {k.lower(): v for (k, v) in headers.items() if _keep_header(k)}
-
-
-def apply_anthropic_beta_features(
-    headers: dict[str, str],
-    transform: Callable[[list[str]], list[str]],
-) -> None:
-    raw = headers.get("anthropic-beta")
-    features = [f for f in raw.split(",") if f] if raw else []
-    features = transform(features)
-    if features:
-        headers["anthropic-beta"] = ",".join(features)
-    else:
-        headers.pop("anthropic-beta", None)
