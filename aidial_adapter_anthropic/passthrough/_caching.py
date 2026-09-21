@@ -37,10 +37,6 @@ class CacheBreakpointPath:
         return cls(f"prefix.body.messages[{idx}].content[{block_idx}]")
 
 
-def is_message_params(body: Any) -> TypeGuard[MessageCreateParamsBase]:
-    return isinstance(body, dict)
-
-
 _Block = (
     BetaToolUnionParam  # tools
     | BetaTextBlockParam  # system content

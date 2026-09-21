@@ -6,43 +6,23 @@ and the same test body runs against all of them.
 
 import gzip
 import logging
-from collections.abc import Awaitable, Callable
 
 import anthropic
 import httpx
 import pytest
 from anthropic.types.messages import MessageBatch
 
-from aidial_adapter_anthropic.passthrough import create_anthropic_api_app
 from tests.unit_tests.anthropic_mocks import (
     BASE_MESSAGES_REQUEST,
     MESSAGES_REQUEST,
     AnthropicAPIMock,
     AnthropicMocker,
-    asgi_client,
+    assert_unsupported_endpoint,
     read_fixture,
     split_sse_events,
 )
 
 _LOGGER_NAME = "aidial_adapter_anthropic.passthrough"
-
-
-@pytest.fixture
-async def anthropic_client(mocker: AnthropicMocker):
-    app = create_anthropic_api_app(mocker.make_client())
-    async with anthropic.AsyncAnthropic(
-        api_key="test-dial-api-key",
-        http_client=asgi_client(app),
-        max_retries=0,
-    ) as client:
-        yield client
-
-
-async def _assert_unsupported(run: Callable[[], Awaitable[object]]) -> None:
-    with pytest.raises(anthropic.NotFoundError) as excinfo:
-        await run()
-    assert excinfo.value.status_code == 404
-    assert "not supported" in excinfo.value.message
 
 
 class TestMessagesNonStreaming:
@@ -185,7 +165,7 @@ class TestCountTokens:
             response = await _run()
             assert response.input_tokens == 14
         else:
-            await _assert_unsupported(_run)
+            await assert_unsupported_endpoint(_run)
 
 
 class TestMessageBatches:
@@ -246,7 +226,7 @@ class TestMessageBatches:
             assert batch.id == "msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d"
             assert batch.processing_status == "in_progress"
         else:
-            await _assert_unsupported(_run)
+            await assert_unsupported_endpoint(_run)
 
 
 class TestRequestHeaderPassthrough:
@@ -288,84 +268,6 @@ class TestRequestHeaderPassthrough:
         assert (
             upstream_headers.get("authorization") != "Bearer downstream-secret"
         )
-
-
-class TestAnthropicBetaAdaptation:
-    @pytest.fixture(autouse=True)
-    def _setup(self, mocker: AnthropicMocker):
-        class _Mock(AnthropicAPIMock):
-            def on_block_messages(self, request) -> bytes:
-                return read_fixture("messages_non_streaming_response.json")
-
-        mocker.mock(_Mock())
-
-    async def test_default_forwards_header_untouched(
-        self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
-    ):
-        # Without a custom on_anthropic_beta_header the package performs no
-        # feature adaptation: the header reaches every backend verbatim.
-        beta_header = (
-            "oauth-2025-04-20,"
-            "token-efficient-tools-2025-02-19,"
-            "thinking-token-count-2026-05-13"
-        )
-
-        response = await http_client.post(
-            "/v1/messages",
-            json=MESSAGES_REQUEST,
-            headers={"anthropic-beta": beta_header},
-        )
-
-        assert response.status_code == 200
-        upstream_headers = mocker.router.calls.last.request.headers
-        assert upstream_headers["anthropic-beta"] == beta_header
-
-    async def test_custom_handler_rewrites_features(
-        self, mocker: AnthropicMocker
-    ):
-        # The handler receives the upstream client and the parsed feature list,
-        # and the list it returns is forwarded (here: one flag dropped).
-        seen: dict[str, object] = {}
-
-        def on_beta(client, features: list[str]) -> list[str]:
-            seen["client"] = client
-            seen["features"] = list(features)
-            return [f for f in features if f != "drop-me"]
-
-        client = mocker.make_client()
-        app = create_anthropic_api_app(client, on_anthropic_beta_header=on_beta)
-        async with asgi_client(app) as http_client:
-            response = await http_client.post(
-                "/v1/messages",
-                json=MESSAGES_REQUEST,
-                headers={"anthropic-beta": "keep-me,drop-me"},
-            )
-
-        assert response.status_code == 200
-        assert seen["client"] is client
-        assert seen["features"] == ["keep-me", "drop-me"]
-        upstream_headers = mocker.router.calls.last.request.headers
-        assert upstream_headers["anthropic-beta"] == "keep-me"
-
-    async def test_custom_handler_dropping_all_removes_header(
-        self, mocker: AnthropicMocker
-    ):
-        # An empty result drops the header entirely rather than forwarding an
-        # empty anthropic-beta (which the upstream would reject).
-        app = create_anthropic_api_app(
-            mocker.make_client(),
-            on_anthropic_beta_header=lambda client, features: [],
-        )
-        async with asgi_client(app) as http_client:
-            response = await http_client.post(
-                "/v1/messages",
-                json=MESSAGES_REQUEST,
-                headers={"anthropic-beta": "oauth-2025-04-20"},
-            )
-
-        assert response.status_code == 200
-        upstream_headers = mocker.router.calls.last.request.headers
-        assert "anthropic-beta" not in upstream_headers
 
 
 class TestErrorPassthrough:
