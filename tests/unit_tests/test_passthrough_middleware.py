@@ -46,17 +46,28 @@ _ADVISOR_FEATURE = "advisor-tool-2026-03-01"
 # A flag no backend objects to: the control in every stripping assertion.
 _UNIVERSAL_FEATURE = "token-efficient-tools-2025-02-19"
 
-_WEB_SEARCH = BetaWebSearchTool20250305Param(
+_SERVER_WEB_SEARCH_TOOL1 = BetaWebSearchTool20250305Param(
     type="web_search_20250305", name="web_search"
 )
-_WEB_SEARCH_NEXT = BetaWebSearchTool20260209Param(
+_SERVER_WEB_SEARCH_TOOL2 = BetaWebSearchTool20260209Param(
     type="web_search_20260209", name="web_search"
 )
-_ADVISOR = BetaAdvisorTool20260301Param(
+_SERVER_ADVISOR_TOOL = BetaAdvisorTool20260301Param(
     type="advisor_20260301", name="advisor", model="claude-opus-5"
 )
-_CUSTOM = BetaToolParam(
+_CLIENT_TOOL_WEATHER = BetaToolParam(
     name="get_weather", input_schema={"type": "object", "properties": {}}
+)
+
+# custom tools with names conflicting with the server-side tool;
+# the `type`` field is present in one and missing in another, since it's optional
+_CLIENT_WEB_SEARCH_TOOL = BetaToolParam(
+    name="web_search", input_schema={"type": "object", "properties": {}}
+)
+_CLIENT_ADVISOR_TOOL = BetaToolParam(
+    type="custom",
+    name="advisor",
+    input_schema={"type": "object", "properties": {}},
 )
 
 
@@ -206,10 +217,14 @@ class TestUnsupportedTools:
     ):
         # Bedrock offers no web search at all, whichever dated version of the
         # tool the caller asks for.
-        tools = [_WEB_SEARCH, _WEB_SEARCH_NEXT, _CUSTOM]
+        tools = [
+            _SERVER_WEB_SEARCH_TOOL1,
+            _SERVER_WEB_SEARCH_TOOL2,
+            _CLIENT_TOOL_WEATHER,
+        ]
         await self._create(anthropic_client, tools)
 
-        expected = [_CUSTOM] if mocker.cloud is _AWS else tools
+        expected = [_CLIENT_TOOL_WEATHER] if mocker.cloud is _AWS else tools
         assert _forwarded_body(mocker)["tools"] == expected
 
     async def test_advisor_dropped_wherever_its_flag_is(
@@ -219,10 +234,12 @@ class TestUnsupportedTools:
     ):
         # The advisor tool only runs alongside its beta flag, so it goes on
         # every cloud that rejects the flag.
-        tools = [_ADVISOR, _CUSTOM]
+        tools = [_SERVER_ADVISOR_TOOL, _CLIENT_TOOL_WEATHER]
         await self._create(anthropic_client, tools, betas=[_ADVISOR_FEATURE])
 
-        expected = tools if mocker.cloud is _PLATFORM else [_CUSTOM]
+        expected = (
+            tools if mocker.cloud is _PLATFORM else [_CLIENT_TOOL_WEATHER]
+        )
         assert _forwarded_body(mocker)["tools"] == expected
 
     async def test_advisor_dropped_even_without_its_flag(
@@ -232,10 +249,38 @@ class TestUnsupportedTools:
     ):
         # Whether the caller sent the flag changes nothing: on a cloud that
         # rejects it the tool could not have run either way.
-        tools = [_ADVISOR, _CUSTOM]
+        tools = [_SERVER_ADVISOR_TOOL, _CLIENT_TOOL_WEATHER]
         await self._create(anthropic_client, tools)
 
-        expected = tools if mocker.cloud is _PLATFORM else [_CUSTOM]
+        expected = (
+            tools if mocker.cloud is _PLATFORM else [_CLIENT_TOOL_WEATHER]
+        )
+        assert _forwarded_body(mocker)["tools"] == expected
+
+    async def test_custom_tool_named_after_a_server_tool_is_kept(
+        self,
+        mocker: AnthropicMocker,
+        anthropic_client: anthropic.AsyncAnthropic,
+    ):
+        # A custom tool is run by the caller, so the upstream's support for a
+        # server tool of the same name has nothing to do with it.
+        tools: list[BetaToolUnionParam] = [
+            _CLIENT_WEB_SEARCH_TOOL,
+            _CLIENT_ADVISOR_TOOL,
+        ]
+        await self._create(anthropic_client, tools, betas=[_ADVISOR_FEATURE])
+
+        assert _forwarded_body(mocker)["tools"] == tools
+
+    async def test_a_server_tool_still_goes_beside_its_custom_namesake(
+        self,
+        mocker: AnthropicMocker,
+        anthropic_client: anthropic.AsyncAnthropic,
+    ):
+        tools = [_SERVER_WEB_SEARCH_TOOL1, _CLIENT_WEB_SEARCH_TOOL]
+        await self._create(anthropic_client, tools)
+
+        expected = [_CLIENT_WEB_SEARCH_TOOL] if mocker.cloud is _AWS else tools
         assert _forwarded_body(mocker)["tools"] == expected
 
     async def test_toolless_request_is_untouched(
@@ -257,7 +302,7 @@ class TestEndpointsOtherThanMessages:
         anthropic_client: anthropic.AsyncAnthropic,
     ):
         mocker.mock(_CountTokensMock())
-        tools = [_WEB_SEARCH, _CUSTOM]
+        tools = [_SERVER_WEB_SEARCH_TOOL1, _CLIENT_TOOL_WEATHER]
 
         async def _run() -> object:
             return await anthropic_client.beta.messages.count_tokens(
@@ -266,7 +311,7 @@ class TestEndpointsOtherThanMessages:
 
         if mocker.supports_count_tokens:
             await _run()
-            expected = [_CUSTOM] if mocker.cloud is _AWS else tools
+            expected = [_CLIENT_TOOL_WEATHER] if mocker.cloud is _AWS else tools
             assert _forwarded_body(mocker)["tools"] == expected
         else:
             await assert_unsupported_endpoint(_run)
@@ -279,7 +324,7 @@ class TestEndpointsOtherThanMessages:
         # A batch nests one set of message params per queued request, so the
         # tools live a level down from where the other endpoints keep them.
         mocker.mock(_BatchesMock())
-        tools = [_WEB_SEARCH, _CUSTOM]
+        tools = [_SERVER_WEB_SEARCH_TOOL1, _CLIENT_TOOL_WEATHER]
 
         async def _run() -> object:
             return await anthropic_client.beta.messages.batches.create(
@@ -293,7 +338,7 @@ class TestEndpointsOtherThanMessages:
 
         if mocker.supports_batches:
             await _run()
-            expected = [_CUSTOM] if mocker.cloud is _AWS else tools
+            expected = [_CLIENT_TOOL_WEATHER] if mocker.cloud is _AWS else tools
             forwarded = _forwarded_body(mocker)["requests"][0]["params"]
             assert forwarded["tools"] == expected
         else:

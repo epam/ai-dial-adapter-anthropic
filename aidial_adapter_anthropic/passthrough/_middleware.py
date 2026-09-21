@@ -132,7 +132,9 @@ class RemoveTools(MessagesMiddleware):
         kept: list[BetaToolUnionParam] = []
         dropped: set[str] = set()
         for tool in tools:
-            if (name := tool.get("name")) in self.unsupported_tools:
+            name = tool.get("name")
+            ty = tool.get("type")
+            if name in self.unsupported_tools and ty not in (None, "custom"):
                 dropped.add(name)
             else:
                 kept.append(tool)
