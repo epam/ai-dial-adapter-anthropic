@@ -357,6 +357,44 @@ class TestResponseEncodingStripped:
         assert response.json()["type"] == "message"
 
 
+class TestNonForwardableHeadersStripped:
+    @pytest.fixture(autouse=True)
+    def _setup(self, mocker: AnthropicMocker):
+        content = read_fixture("messages_non_streaming_response.json")
+
+        class _Mock(AnthropicAPIMock):
+            def on_block_messages(self, request) -> httpx.Response:
+                return httpx.Response(
+                    200,
+                    content=content,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Transfer-Encoding": "chunked",
+                        "Connection": "keep-alive",
+                        "Server": "upstream-server",
+                        "Date": "Mon, 01 Jan 2024 00:00:00 GMT",
+                        "X-Request-Id": "req-1",
+                    },
+                )
+
+        mocker.mock(_Mock())
+
+    async def test_http_client(self, http_client: httpx.AsyncClient):
+        response = await http_client.post("/v1/messages", json=MESSAGES_REQUEST)
+
+        assert response.status_code == 200
+        # The relayed body gets a fresh content-length from the ASGI server;
+        # forwarding the upstream framing headers on top of it would produce a
+        # response a strict HTTP parser rejects.
+        assert "transfer-encoding" not in response.headers
+        assert "connection" not in response.headers
+        # Singleton fields the ASGI server supplies itself.
+        assert "server" not in response.headers
+        assert "date" not in response.headers
+        # Application headers are still relayed.
+        assert response.headers["x-request-id"] == "req-1"
+
+
 class TestDebugLogging:
     # The proxy logs the request/response only when DEBUG logging is enabled.
     @pytest.mark.parametrize(

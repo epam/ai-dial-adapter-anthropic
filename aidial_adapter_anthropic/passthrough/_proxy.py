@@ -37,6 +37,7 @@ from aidial_adapter_anthropic.passthrough._helpers import (
     is_streaming_request,
     sse_to_bytes_iterator,
     strip_content_headers,
+    strip_non_forwardable_headers,
     typecast_request_body,
 )
 from aidial_adapter_anthropic.passthrough._logging import logging_decorator
@@ -103,6 +104,8 @@ async def _proxy(
             # upstream has already produced: a body this logic fails to read
             # costs cache hits, it must never fail the request.
             _log.exception("Failed to compute the DIAL cache headers.")
+
+    strip_non_forwardable_headers(response.headers)
 
     if is_streaming:
 

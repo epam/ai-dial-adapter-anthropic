@@ -137,6 +137,34 @@ def strip_content_headers(response_headers: httpx.Headers) -> None:
     response_headers.pop("Content-Length", None)
 
 
+# Hop-by-hop headers (RFC 9110 7.6.1) describe the upstream connection, not
+# the response this app sends. Relaying "transfer-encoding" is the harmful one:
+# the ASGI server computes its own "content-length" for the relayed body, and
+# a message carrying both is rejected by a strict HTTP parser (RFC 9112 6.2) -
+# DIAL Core being one.
+_HOP_BY_HOP_HEADERS = {
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+}
+
+# The ASGI server prepends its own "server" and "date" to every response.
+# Both are singleton fields (RFC 9110 5.6.6), so the upstream's copy must go.
+_SERVER_MANAGED_HEADERS = {"server", "date"}
+
+_NON_FORWARDABLE_HEADERS = _HOP_BY_HOP_HEADERS | _SERVER_MANAGED_HEADERS
+
+
+def strip_non_forwardable_headers(response_headers: httpx.Headers) -> None:
+    for header in _NON_FORWARDABLE_HEADERS:
+        response_headers.pop(header, None)
+
+
 def build_request_headers(headers: StarletteHeaders) -> dict[str, str]:
     def _keep_header(header: str) -> bool:
         header = header.lower()
