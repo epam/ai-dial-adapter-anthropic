@@ -20,7 +20,11 @@ from aidial_adapter_anthropic.adapter._truncate_prompt import DiscardedMessages
 from aidial_adapter_anthropic.adapter.claude import create_adapter
 from aidial_adapter_anthropic.dial._message import AdapterMessage
 from aidial_adapter_anthropic.dial.request import AdapterRequest
-from aidial_adapter_anthropic.dial.tools import ToolsConfig, ToolsMode
+from aidial_adapter_anthropic.dial.tools import (
+    ToolDefinition,
+    ToolsConfig,
+    ToolsMode,
+)
 from tests.utils.openai import (
     ai,
     ai_tool_call,
@@ -124,7 +128,11 @@ def _index_range(start: int, end: int) -> list[int]:
 
 
 _TOOL_CONFIG = ToolsConfig(
-    tools=[Tool(type="function", function=Function(name="function"))],
+    tools=[
+        ToolDefinition(
+            0, Tool(type="function", function=Function(name="function")), None
+        )
+    ],
     static_tools=[],
     tool_choice="auto",
     tool_ids={},
