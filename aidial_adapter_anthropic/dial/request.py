@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Self, TypeVar
 
-from aidial_sdk.chat_completion import CacheBreakpoint
 from aidial_sdk.chat_completion.request import (
     ChatCompletionRequest,
     ReasoningEffort,
@@ -11,6 +10,7 @@ from aidial_sdk.exceptions import RequestValidationError
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
+from aidial_adapter_anthropic._utils.cache import CacheBreakpoint
 from aidial_adapter_anthropic._utils.list import ListProjection
 from aidial_adapter_anthropic.dial._message import (
     AdapterMessage,
@@ -56,7 +56,6 @@ class AdapterRequest:
 
         cf = request.custom_fields
         configuration = cf.configuration if cf is not None else None
-        cache_breakpoint = cf.cache_breakpoint if cf is not None else None
         messages = [parse_dial_message(m) for m in request.messages]
 
         return cls(
@@ -72,7 +71,7 @@ class AdapterRequest:
             tool_config=ToolsConfig.from_request(request),
             configuration=configuration,
             response_format=request.response_format,
-            cache_breakpoint=cache_breakpoint,
+            cache_breakpoint=_automatic_cache_breakpoint(request),
             reasoning_effort=request.reasoning_effort,
         )
 
@@ -94,3 +93,17 @@ class AdapterRequest:
                 msg = f"Invalid request. Path: 'custom_fields.configuration.{path}', error: {error['msg']}"
 
             raise RequestValidationError(msg) from None
+
+
+def _automatic_cache_breakpoint(
+    request: ChatCompletionRequest,
+) -> CacheBreakpoint | None:
+    """
+    The breakpoint enabling automatic caching of the whole prompt.
+    The native breakpoint wins over the DIAL breakpoint.
+    """
+    if (options := request.prompt_cache_options) is not None:
+        return CacheBreakpoint.from_native(options)
+
+    cf = request.custom_fields
+    return CacheBreakpoint.from_dial(cf.cache_breakpoint if cf else None)

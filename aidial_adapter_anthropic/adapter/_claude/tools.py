@@ -81,6 +81,7 @@ def function_to_tool_messages(
             return message
         case AIFunctionCallMessage():
             return AIToolCallMessage(
+                cache_breakpoints=message.cache_breakpoints,
                 content=message.content,
                 calls=[
                     ToolCall(
@@ -92,7 +93,9 @@ def function_to_tool_messages(
             )
         case HumanFunctionResultMessage():
             return HumanToolResultMessage(
-                id=message.name, content=message.content
+                cache_breakpoints=message.cache_breakpoints,
+                id=message.name,
+                content=message.content,
             )
         case _:
             assert_never(message)

@@ -6,11 +6,15 @@ from aidial_sdk.chat_completion import CustomContent
 from aidial_adapter_anthropic.adapter._claude.state import (
     get_message_content_from_state,
 )
-from aidial_adapter_anthropic.dial._message import AIRegularMessage
+from aidial_adapter_anthropic.dial._message import (
+    AIRegularMessage,
+    MessageCacheBreakpoints,
+)
 
 
 def _message(state: dict | None) -> AIRegularMessage:
     return AIRegularMessage(
+        cache_breakpoints=MessageCacheBreakpoints(),
         content="hello",
         custom_content=CustomContent(state=state) if state else None,
     )

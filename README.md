@@ -36,6 +36,7 @@
       - [Automatic caching](#automatic-caching)
       - [Explicit cache breakpoints](#explicit-cache-breakpoints)
       - [TTL support](#ttl-support)
+      - [Native OpenAI cache fields](#native-openai-cache-fields)
       - [DIAL Core configuration](#dial-core-configuration)
 - [Anthropic API](#anthropic-api)
   - [Usage](#usage)
@@ -564,6 +565,56 @@ A cache breakpoint may include an optional `ttl` field. Supported values are `5m
 ```
 
 </details>
+
+##### Native OpenAI cache fields
+
+The Chat Completion API also carries the OpenAI-native prompt caching fields, which are supported alongside the DIAL breakpoints. Where the two conflict, the native field wins.
+
+`prompt_cache_options` is the native counterpart of the top-level `custom_fields.cache_breakpoint`. Automatic caching is enabled unless the `mode` is `explicit`, following the OpenAI default of implicit caching. Its `ttl` is forwarded the same way the DIAL one is, so it must be a value Anthropic accepts (`5m` or `1h`).
+
+<details><summary>Native automatic caching</summary>
+
+```json
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "messages": [
+    {"role": "user", "content": "Hello!"}
+  ],
+  "prompt_cache_options": {
+    "mode": "implicit",
+    "ttl": "1h"
+  }
+}
+```
+
+</details>
+
+`messages[i].content[j].prompt_cache_breakpoint` is the native counterpart of the per-message `custom_fields.cache_breakpoint`, but it is finer-grained: the breakpoint is placed on the very content part it is attached to rather than on the last block of the message. If a message carries native breakpoints on its content parts, its DIAL `custom_fields.cache_breakpoint` is ignored. A native breakpoint has no TTL field of its own, so it uses the Anthropic default of 5 minutes.
+
+<details><summary>Native content part breakpoint</summary>
+
+```json
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Here is a long document: ...",
+          "prompt_cache_breakpoint": {"mode": "explicit"}
+        },
+        {"type": "text", "text": "Summarize it."}
+      ]
+    }
+  ]
+}
+```
+
+</details>
+
+Tool definitions have no native breakpoint field: use `tools[i].custom_fields.cache_breakpoint` for them.
 
 ##### DIAL Core configuration
 

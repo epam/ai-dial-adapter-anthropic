@@ -3,16 +3,13 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, assert_never
 
-from aidial_sdk.chat_completion import CacheBreakpoint, FinishReason, Tool
+from aidial_sdk.chat_completion import FinishReason, Tool
 from aidial_sdk.chat_completion import ToolChoice as DialToolChoice
 from aidial_sdk.chat_completion.request import (
     ResponseFormat,
     ResponseFormatJsonObject,
     ResponseFormatJsonSchema,
     ResponseFormatText,
-)
-from anthropic.types.beta import (
-    BetaCacheControlEphemeralParam as CacheControlEphemeralParam,
 )
 from anthropic.types.beta import BetaContentBlockParam as ContentBlockParam
 from anthropic.types.beta import (
@@ -30,12 +27,14 @@ from anthropic.types.beta import BetaToolChoiceToolParam as ToolChoiceToolParam
 from anthropic.types.beta import BetaToolParam as ToolParam
 from anthropic.types.beta import BetaUsage as Usage
 
+from aidial_adapter_anthropic._utils.cache import CacheBreakpoint
 from aidial_adapter_anthropic._utils.json import traverse_json
 from aidial_adapter_anthropic._utils.list import ListProjection, group_by
 from aidial_adapter_anthropic.adapter._claude.blocks import (
     create_text_block,
     create_tool_result_block,
     create_tool_use_block,
+    to_claude_cache_control,
 )
 from aidial_adapter_anthropic.adapter._claude.config import (
     ClaudeConfiguration,
@@ -50,6 +49,7 @@ from aidial_adapter_anthropic.adapter._claude.state import (
 from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.dial._attachments import (
     AttachmentProcessors,
+    PartContext,
     WithResources,
 )
 from aidial_adapter_anthropic.dial._message import (
@@ -71,29 +71,6 @@ _DialMessage = BaseMessage | HumanToolResultMessage | AIToolCallMessage
 _ClaudeMessagesElem = tuple[WithResources[MessageParam], set[int]]
 ClaudeMessagesList = list[_ClaudeMessagesElem]
 ClaudeMessages = ListProjection[WithResources[MessageParam]]
-
-
-def to_claude_cache_control(
-    cache_breakpoint: CacheBreakpoint,
-) -> CacheControlEphemeralParam:
-    extra = cache_breakpoint.model_extra or {}
-    return CacheControlEphemeralParam(type="ephemeral", **extra)
-
-
-def _add_cache_control(
-    message: _DialMessage, claude_messages: Sequence[ContentBlockParam]
-) -> None:
-    if (breakpoint := message.cache_breakpoint) is None:
-        return
-
-    for block in reversed(claude_messages):
-        if (
-            isinstance(block, dict)
-            and block["type"] != "thinking"
-            and block["type"] != "redacted_thinking"
-        ):
-            block["cache_control"] = to_claude_cache_control(breakpoint)
-            return
 
 
 def _get_claude_message_role(
@@ -177,6 +154,8 @@ async def _get_claude_blocks(
             # since it may include certain content blocks that
             # are missing from the DIAL message itself,
             # such as thinking signatures and redacted thinking blocks.
+            # The state blocks have no content parts to anchor the native
+            # breakpoints to, so those are dropped along with the blocks.
             if state := get_message_content_from_state(message_idx, message):
                 content.payload = state
 
@@ -185,7 +164,8 @@ async def _get_claude_blocks(
         case AIToolCallMessage():
             blocks = [create_tool_use_block(call) for call in message.calls]
             if text_content := message.content:
-                blocks.insert(0, create_text_block(text_content))
+                ctx = PartContext(breakpoints=message.cache_breakpoints)
+                blocks.insert(0, create_text_block(ctx, text_content))
 
             content = WithResources(payload=blocks)
             if state := get_message_content_from_state(message_idx, message):
@@ -207,19 +187,18 @@ async def to_claude_messages(
     claude_messages: ClaudeMessages = ListProjection()
 
     for idx, (message, indices) in enumerate(messages.lst):
+        role = _get_claude_message_role(message)
+
         if isinstance(message, SystemMessage) and not claude_messages:
             content = await handlers.process_system_message(message)
-            _add_cache_control(message, content)
             leading_sys_messages.extend(content)
         else:
             blocks = await _get_claude_blocks(handlers, message, idx)
-            _add_cache_control(message, blocks.payload)
-            role = _get_claude_message_role(message)
-            payload = MessageParam(role=role, content=blocks.payload)
-            claude_messages.append(
-                WithResources(payload=payload, resources=blocks.resources),
-                indices,
+            claude_message = WithResources(
+                payload=MessageParam(role=role, content=blocks.payload),
+                resources=blocks.resources,
             )
+            claude_messages.append(claude_message, indices)
 
     return leading_sys_messages, _merge_messages_with_same_role(claude_messages)
 
@@ -304,7 +283,9 @@ def to_dial_usage(usage: Usage) -> TokenUsage:
     )
 
 
-def _to_claude_tool(tool: Tool) -> ToolParam:
+def _to_claude_tool(
+    tool: Tool, breakpoint: CacheBreakpoint | None
+) -> ToolParam:
     function = tool.function
     tool_param = ToolParam(
         input_schema=function.parameters
@@ -313,9 +294,7 @@ def _to_claude_tool(tool: Tool) -> ToolParam:
         description=function.description or "",
     )
 
-    if tool.custom_fields and (
-        breakpoint := tool.custom_fields.cache_breakpoint
-    ):
+    if breakpoint is not None:
         tool_param["cache_control"] = to_claude_cache_control(breakpoint)
 
     return tool_param
@@ -353,7 +332,10 @@ def to_claude_tool_config(
     if tools_config is None:
         return None
 
-    function_tools = [_to_claude_tool(tool) for tool in tools_config.tools]
+    function_tools = [
+        _to_claude_tool(tool.tool, tool.cache_breakpoint)
+        for tool in tools_config.tools
+    ]
     static_tools = [
         parse_static_function(str(idx), tool.static_function)
         for idx, tool in enumerate(tools_config.static_tools)

@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from enum import Enum
 from typing import Literal, Self, assert_never
 
@@ -16,9 +17,21 @@ from aidial_sdk.chat_completion.request import (
 )
 from pydantic import BaseModel
 
+from aidial_adapter_anthropic._utils.cache import CacheBreakpoint
 from aidial_adapter_anthropic.adapter._errors import ValidationError
 
 _log = logging.getLogger(__name__)
+
+
+@dataclass
+class ToolDefinition:
+    index: int
+    """Position of the tool in the request `tools` field, which also holds the static tools."""
+
+    tool: Tool
+
+    cache_breakpoint: CacheBreakpoint | None
+    """The breakpoint after the tool definition. The native API has no such field."""
 
 
 class ToolsMode(Enum):
@@ -30,7 +43,7 @@ class ToolsMode(Enum):
 
 
 class ToolsConfig(BaseModel):
-    tools: list[Tool]
+    tools: list[ToolDefinition]
     """
     List of functions/tools.
     """
@@ -86,17 +99,23 @@ class ToolsConfig(BaseModel):
     @staticmethod
     def _split_tools(
         tools: list[Function] | list[Tool | StaticTool],
-    ) -> tuple[list[Tool], list[StaticTool]]:
-        function_tools: list[Tool] = []
+    ) -> tuple[list[ToolDefinition], list[StaticTool]]:
+        function_tools: list[ToolDefinition] = []
         static_tools: list[StaticTool] = []
-        for tool in tools:
+        for index, tool in enumerate(tools):
             match tool:
                 case StaticTool():
                     static_tools.append(tool)
                 case Function():
-                    function_tools.append(Tool(type="function", function=tool))
+                    function_tools.append(
+                        ToolDefinition(
+                            index, Tool(type="function", function=tool), None
+                        )
+                    )
                 case Tool():
-                    function_tools.append(tool)
+                    function_tools.append(
+                        ToolDefinition(index, tool, _cache_breakpoint(tool))
+                    )
                 case _:
                     assert_never(tool)
         return function_tools, static_tools
@@ -133,6 +152,11 @@ class ToolsConfig(BaseModel):
             tool_choice=tool_choice or "auto",
             tool_ids=tool_ids,
         )
+
+
+def _cache_breakpoint(tool: Tool) -> CacheBreakpoint | None:
+    cf = tool.custom_fields
+    return CacheBreakpoint.from_dial(cf.cache_breakpoint if cf else None)
 
 
 def validate_tools_usage(request: AzureChatCompletionRequest) -> None:

@@ -1,9 +1,12 @@
 import json
-from typing import cast
+from typing import TypeVar, cast
 
 from aidial_sdk.chat_completion import ToolCall
 from anthropic.types.beta import (
     BetaBase64PDFSourceParam as Base64PDFSourceParam,
+)
+from anthropic.types.beta import (
+    BetaCacheControlEphemeralParam as CacheControlEphemeralParam,
 )
 from anthropic.types.beta import (
     BetaCitationsConfigParam as CitationsConfigParam,
@@ -28,9 +31,32 @@ from anthropic.types.beta.beta_tool_result_block_param import (
     Content as ToolResultInnerContent,
 )
 
+from aidial_adapter_anthropic._utils.cache import CacheBreakpoint
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic.adapter._claude.config import Configuration
-from aidial_adapter_anthropic.dial._attachments import AttachmentProcessor
+from aidial_adapter_anthropic.dial._attachments import (
+    AttachmentProcessor,
+    PartContext,
+)
+
+_Block = TypeVar(
+    "_Block",
+    bound=TextBlockParam
+    | ImageBlockParam
+    | RequestDocumentBlockParam
+    | ToolResultBlockParam
+    | ToolUseBlockParam,
+)
+
+
+def to_claude_cache_control(
+    breakpoint: CacheBreakpoint,
+) -> CacheControlEphemeralParam:
+    cache_control = CacheControlEphemeralParam(type="ephemeral")
+    if breakpoint.ttl is not None:
+        # Claude accepts "5m" and "1h" only, and rejects anything else itself.
+        cache_control["ttl"] = breakpoint.ttl  # type: ignore
+    return cache_control
 
 
 def _citations_config(config: Configuration | None) -> CitationsConfigParam:
@@ -39,48 +65,76 @@ def _citations_config(config: Configuration | None) -> CitationsConfigParam:
     )
 
 
-def create_text_block(text: str) -> TextBlockParam:
-    return TextBlockParam(type="text", text=text)
+def _get_cache_control(
+    ctx: PartContext[Configuration],
+) -> CacheControlEphemeralParam | None:
+    if (breakpoint := ctx.cache_breakpoint) is not None:
+        return to_claude_cache_control(breakpoint)
+    return None
+
+
+def _add_cache_control(
+    ctx: PartContext[Configuration], block: _Block
+) -> _Block:
+    cache_control = _get_cache_control(ctx)
+    if cache_control is not None:
+        block["cache_control"] = cache_control
+    return block
+
+
+def create_text_block(
+    ctx: PartContext[Configuration], text: str
+) -> TextBlockParam:
+    return _add_cache_control(ctx, TextBlockParam(type="text", text=text))
 
 
 def create_image_block(
-    resource: Resource, config: Configuration | None
+    ctx: PartContext[Configuration], resource: Resource
 ) -> ImageBlockParam:
-    return ImageBlockParam(
-        type="image",
-        source=Base64ImageSourceParam(
-            type="base64",
-            media_type=resource.type,  # type: ignore
-            data=resource.data_base64,
+    return _add_cache_control(
+        ctx,
+        ImageBlockParam(
+            type="image",
+            source=Base64ImageSourceParam(
+                type="base64",
+                media_type=resource.type,  # type: ignore
+                data=resource.data_base64,
+            ),
         ),
     )
 
 
 def create_text_document_block(
-    resource: Resource, config: Configuration | None
+    ctx: PartContext[Configuration], resource: Resource
 ) -> RequestDocumentBlockParam:
-    return RequestDocumentBlockParam(
-        type="document",
-        source=PlainTextSourceParam(
-            type="text",
-            media_type="text/plain",
-            data=resource.data.decode("utf-8"),
+    return _add_cache_control(
+        ctx,
+        RequestDocumentBlockParam(
+            type="document",
+            source=PlainTextSourceParam(
+                type="text",
+                media_type="text/plain",
+                data=resource.data.decode("utf-8"),
+            ),
+            citations=_citations_config(ctx.config),
         ),
-        citations=_citations_config(config),
     )
 
 
 def create_pdf_document_block(
-    resource: Resource, config: Configuration | None
+    ctx: PartContext[Configuration], resource: Resource
 ) -> RequestDocumentBlockParam:
-    return RequestDocumentBlockParam(
-        type="document",
-        source=Base64PDFSourceParam(
-            type="base64",
-            media_type="application/pdf",
-            data=resource.data_base64,
+    return _add_cache_control(
+        ctx,
+        RequestDocumentBlockParam(
+            type="document",
+            source=Base64PDFSourceParam(
+                type="base64",
+                media_type="application/pdf",
+                data=resource.data_base64,
+            ),
+            citations=_citations_config(ctx.config),
         ),
-        citations=_citations_config(config),
     )
 
 
