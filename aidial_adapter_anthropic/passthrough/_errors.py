@@ -17,6 +17,7 @@ from functools import wraps
 
 import anthropic
 import fastapi
+import httpx
 from aidial_sdk.exceptions import HTTPException as DialException
 from fastapi.responses import JSONResponse
 
@@ -75,6 +76,17 @@ def _error_response(status_code: int, message: str) -> JSONResponse:
 def _classify_exception(e: Exception) -> tuple[int, str]:
     if isinstance(e, DialException):
         return e.status_code, e.message
+
+    if isinstance(e, httpx.PoolTimeout) or isinstance(
+        e.__cause__, httpx.PoolTimeout
+    ):
+        # The caller's httpx connection pool is saturated: a 503 lets
+        # DIAL Core fall back to another upstream instead of an opaque 500.
+        return (
+            503,
+            "No free upstream connection: "
+            "the adapter connection pool is exhausted",
+        )
 
     if isinstance(e, anthropic.AnthropicError) and (
         not isinstance(e, anthropic.APIError)

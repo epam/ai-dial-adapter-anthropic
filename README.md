@@ -603,6 +603,8 @@ The cache usage is reported in the `usage.prompt_tokens_details` object: `cached
 
 The package supports the native [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages) in the **passthrough** mode: the requests are forwarded to the upstream as-is and the upstream errors are relayed to the caller in the native [Anthropic error schema](https://platform.claude.com/docs/en/api/errors).
 
+When the connection pool of the upstream client's HTTP client is exhausted, the passthrough returns a `503` error.
+
 The exposed API is compatible with the vanilla client from the Anthropic SDK:
 
 ```py

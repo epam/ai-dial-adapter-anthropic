@@ -325,6 +325,31 @@ class TestUnexpectedError:
         }
 
 
+class TestPoolExhausted:
+    @pytest.fixture(autouse=True)
+    def _setup(self, mocker: AnthropicMocker):
+        class _Mock(AnthropicAPIMock):
+            def on_block_messages(self, request) -> httpx.Response:
+                raise httpx.PoolTimeout("pool exhausted")
+
+        mocker.mock(_Mock())
+
+    async def test_http_client(self, http_client: httpx.AsyncClient):
+        response = await http_client.post("/v1/messages", json=MESSAGES_REQUEST)
+
+        # The SDK wraps the pool timeout into an APITimeoutError; it must be
+        # reported as a retriable 503 rather than a generic 500.
+        assert response.status_code == 503
+        assert response.json() == {
+            "type": "error",
+            "error": {
+                "type": "api_error",
+                "message": "No free upstream connection: "
+                "the adapter connection pool is exhausted",
+            },
+        }
+
+
 class TestResponseEncodingStripped:
     @pytest.fixture(autouse=True)
     def _setup(self, mocker: AnthropicMocker):
