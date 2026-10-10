@@ -18,7 +18,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from http import HTTPStatus
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import httpx
 from anthropic import AsyncAnthropicBedrock
@@ -32,9 +32,12 @@ from aidial_adapter_anthropic.passthrough._errors import (
 )
 from aidial_adapter_anthropic.passthrough._helpers import (
     MessagesAPIEndpoint,
+    RawJSON,
     bedrock_stream_to_sse,
     build_request_headers,
+    dumps_with_raw,
     is_streaming_request,
+    parse_raw_fields,
     sse_to_bytes_iterator,
     strip_content_headers,
     strip_non_forwardable_headers,
@@ -52,15 +55,57 @@ ClientT = TypeVar("ClientT", bound=AnthropicClient)
 ClientFactory = Callable[[Request], Awaitable[ClientT]] | ClientT
 
 
+async def _with_raw_body(
+    client: AnthropicClient,
+    options: FinalRequestOptions,
+    headers: dict[str, str],
+    raw_fields: dict[str, tuple[Any, str]],
+) -> FinalRequestOptions:
+    """
+    Sends the body with the top-level containers left as received in their
+    source text: re-encoding a large prompt costs more CPU than the rest of the
+    request. The client still adapts the body to its cloud (Vertex and Bedrock
+    move "model" into the URL), but only ever sees the containers as opaque
+    stand-ins, which are cheap to copy.
+    """
+    assert isinstance(options.json_data, dict)
+    shell = {
+        k: RawJSON(raw[1])
+        if (raw := raw_fields.get(k)) is not None
+        and v is raw[0]
+        and isinstance(v, dict | list)
+        else v
+        for k, v in options.json_data.items()
+    }
+    prepared = await client._prepare_options(
+        FinalRequestOptions.construct(
+            method=options.method,
+            url=options.url,
+            json_data=shell,
+            headers=headers,
+        )
+    )
+    # The client prepares the options once more on sending: a rewritten URL and
+    # a body that isn't a dict make that second pass a no-op for the body. The
+    # original headers are kept so auth is added by that pass, on every retry.
+    return FinalRequestOptions.construct(
+        method=prepared.method,
+        url=prepared.url,
+        content=dumps_with_raw(prepared.json_data),
+        headers=headers,
+    )
+
+
 @anthropic_response_decorator
 @logging_decorator
 async def _proxy(
     request: Request, endpoint: MessagesAPIEndpoint, client: AnthropicClient
 ) -> Response:
     json_body = None
+    raw_fields: dict[str, tuple[Any, str]] = {}
     if content := await request.body():
         with contextlib.suppress(json.JSONDecodeError):
-            json_body = json.loads(content)
+            json_body, raw_fields = parse_raw_fields(content)
 
     is_streaming = is_streaming_request(json_body, endpoint)
 
@@ -81,6 +126,11 @@ async def _proxy(
         json_data=json_body,
         headers=headers,
     )
+
+    # The middlewares only ever replace a top-level field of these endpoints,
+    # unlike the batches one, whose tools sit inside "requests".
+    if raw_fields and endpoint is not MessagesAPIEndpoint.POST_BATCHES:
+        options = await _with_raw_body(client, options, headers, raw_fields)
 
     response = await client.request(
         cast_to=httpx.Response,

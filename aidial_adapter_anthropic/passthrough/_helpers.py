@@ -6,10 +6,12 @@ filtering, SSE (re)formatting, response-body decoding and the Bedrock event
 stream conversion.
 """
 
+import functools
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from enum import Enum
-from typing import Any, Literal, TypeGuard, assert_never, overload
+from json.scanner import make_scanner
+from typing import Any, Literal, TypeGuard, assert_never, cast, overload
 
 import httpx
 from anthropic._streaming import ServerSentEvent
@@ -60,6 +62,98 @@ def typecast_request_body(
 
 def typecast_request_body(body: Any, endpoint: MessagesAPIEndpoint) -> bool:
     return isinstance(body, dict)
+
+
+# The scanner `json.loads` parses with: a JSON value at an index of a string.
+_scan_once: Callable[[str, int], tuple[Any, int]] = make_scanner(
+    cast(Any, json.JSONDecoder())
+)
+
+
+def _skip_ws(s: str, idx: int) -> int:
+    # What `json` itself takes for whitespace.
+    while s.startswith((" ", "\t", "\n", "\r"), idx):
+        idx += 1
+    return idx
+
+
+def parse_raw_fields(content: bytes) -> tuple[Any, dict[str, tuple[Any, str]]]:
+    """
+    ``json.loads`` that also returns, for a JSON object, each top-level field's
+    value along with its source text. It costs no more than ``json.loads``:
+    the fields are parsed by the same scanner, one at a time.
+    """
+    s = content.decode(json.detect_encoding(content), "surrogatepass")
+    idx = _skip_ws(s, 0)
+    if not s.startswith("{", idx):
+        return json.loads(s), {}
+
+    obj: dict[str, Any] = {}
+    fields: dict[str, tuple[Any, str]] = {}
+    idx = _skip_ws(s, idx + 1)
+    if s.startswith("}", idx):
+        idx += 1
+    else:
+        while True:
+            if not s.startswith('"', idx):
+                raise json.JSONDecodeError(
+                    "Expecting property name enclosed in double quotes", s, idx
+                )
+            key, idx = _scan_once(s, idx)
+            idx = _skip_ws(s, idx)
+            if not s.startswith(":", idx):
+                raise json.JSONDecodeError("Expecting ':' delimiter", s, idx)
+            start = _skip_ws(s, idx + 1)
+            try:
+                value, idx = _scan_once(s, start)
+            except StopIteration as e:
+                raise json.JSONDecodeError(
+                    "Expecting value", s, e.value
+                ) from None
+            obj[key] = value
+            fields[key] = (value, s[start:idx])
+            idx = _skip_ws(s, idx)
+            if s.startswith(",", idx):
+                idx = _skip_ws(s, idx + 1)
+            elif s.startswith("}", idx):
+                idx += 1
+                break
+            else:
+                raise json.JSONDecodeError("Expecting ',' delimiter", s, idx)
+
+    if _skip_ws(s, idx) != len(s):
+        raise json.JSONDecodeError("Extra data", s, idx)
+    return obj, fields
+
+
+class RawJSON:
+    """Source text of a JSON value, to be written out as is."""
+
+    __slots__ = ("text",)
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def __deepcopy__(self, memo: dict) -> "RawJSON":
+        # Immutable: the clients deep-copy the body they adapt.
+        return self
+
+
+_dumps = functools.partial(
+    json.dumps, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+)
+
+
+def dumps_with_raw(body: Any) -> bytes:
+    """The SDK's JSON encoding of a dict whose ``RawJSON`` fields go verbatim."""
+    return (
+        "{"
+        + ",".join(
+            f"{_dumps(k)}:{v.text if isinstance(v, RawJSON) else _dumps(v)}"
+            for k, v in body.items()
+        )
+        + "}"
+    ).encode()
 
 
 def is_streaming_request(
