@@ -5,13 +5,16 @@ and the same test body runs against all of them.
 """
 
 import gzip
+import json
 import logging
 
 import anthropic
 import httpx
 import pytest
+from anthropic._models import FinalRequestOptions
 from anthropic.types.messages import MessageBatch
 
+from aidial_adapter_anthropic.passthrough._helpers import parse_raw_fields
 from tests.unit_tests.anthropic_mocks import (
     BASE_MESSAGES_REQUEST,
     MESSAGES_REQUEST,
@@ -530,3 +533,86 @@ class TestDebugLogging:
             assert captured["accept-encoding"] != "identity"
         else:
             assert captured["accept-encoding"] == expected_encoding
+
+
+class TestRawBody:
+    """The body is forwarded as received, not decoded and re-encoded.
+
+    Only the top-level fields the backend rewrites (e.g. Vertex moves "model"
+    into the URL) are re-encoded; every other field reaches the upstream as
+    the very bytes the caller sent.
+    """
+
+    # Spacing and a \u-escape the SDK's JSON encoder would never produce.
+    _MESSAGES = rb'[ {"role" : "user", "content" : "Say h\u00e9llo."} ]'
+    _TOOLS = b'[{"name": "t", "input_schema": {"type": "object"}}]'
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, mocker: AnthropicMocker):
+        class _Mock(AnthropicAPIMock):
+            def on_block_messages(self, request) -> bytes:
+                return read_fixture("messages_non_streaming_response.json")
+
+        mocker.mock(_Mock())
+
+    async def test_untouched_fields_are_relayed_verbatim(
+        self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
+    ):
+        content = (
+            b'{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024,'
+            b' "messages": '
+            + self._MESSAGES
+            + b', "tools": '
+            + self._TOOLS
+            + b"}"
+        )
+        headers = {"content-type": "application/json"}
+
+        response = await http_client.post(
+            "/v1/messages", content=content, headers=headers
+        )
+
+        assert response.status_code == 200
+        forwarded = mocker.router.calls.last.request.content
+        assert self._MESSAGES in forwarded
+        assert self._TOOLS in forwarded
+
+        # The same JSON the SDK would have sent after its own adaptation.
+        client = mocker.make_client()
+        options = await client._prepare_options(
+            FinalRequestOptions.construct(
+                method="post", url="/v1/messages", json_data=json.loads(content)
+            )
+        )
+        assert json.loads(forwarded) == options.json_data
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b'{"a": [1, {"b": "\\u00e9"}], "c" :null , "a2":"x"}',
+        b" \n{ }\t",
+        b'{"a": 1, "a": [2]}',  # the last duplicate wins, as in json.loads
+        '{"a": "é"}'.encode("utf-16"),
+        b"[1, 2]",
+        b'"text"',
+    ],
+)
+def test_parse_raw_fields_matches_json_loads(content: bytes):
+    value, fields = parse_raw_fields(content)
+
+    assert value == json.loads(content)
+    for key, (field, text) in fields.items():
+        assert field is value[key]
+        assert json.loads(text) == field
+
+
+@pytest.mark.parametrize(
+    "content",
+    [b"", b"{", b'{"a"}', b'{"a":}', b'{"a":1,}', b'{"a":1 "b":2}', b"{} x"],
+)
+def test_parse_raw_fields_rejects_what_json_loads_does(content: bytes):
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(content)
+    with pytest.raises(json.JSONDecodeError):
+        parse_raw_fields(content)
