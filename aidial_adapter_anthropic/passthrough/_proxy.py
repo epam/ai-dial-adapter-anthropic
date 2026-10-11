@@ -73,6 +73,8 @@ async def _with_raw_body(
         k: RawJSON(raw[1])
         if (raw := raw_fields.get(k)) is not None
         and v is raw[0]
+        # the clients route on these, and a stand-in is always truthy
+        and k not in ("model", "stream")
         and isinstance(v, dict | list)
         else v
         for k, v in options.json_data.items()

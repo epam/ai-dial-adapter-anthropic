@@ -586,6 +586,26 @@ class TestRawBody:
         )
         assert json.loads(forwarded) == options.json_data
 
+    async def test_routing_fields_are_seen_as_parsed(
+        self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
+    ):
+        # An empty container is falsy: the request must not go to a streaming URL.
+        content = b'{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1, "stream": {}, "messages": []}'
+
+        await http_client.post(
+            "/v1/messages",
+            content=content,
+            headers={"content-type": "application/json"},
+        )
+
+        client = mocker.make_client()
+        options = await client._prepare_options(
+            FinalRequestOptions.construct(
+                method="post", url="/v1/messages", json_data=json.loads(content)
+            )
+        )
+        assert mocker.router.calls.last.request.url.path.endswith(options.url)
+
 
 @pytest.mark.parametrize(
     "content",
