@@ -54,6 +54,9 @@ _log = logging.getLogger(__name__)
 ClientT = TypeVar("ClientT", bound=AnthropicClient)
 ClientFactory = Callable[[Request], Awaitable[ClientT]] | ClientT
 
+# The fields that make up nearly all of a large request.
+_PROMPT_FIELDS = ("messages", "system", "tools")
+
 
 async def _with_raw_body(
     client: AnthropicClient,
@@ -62,19 +65,19 @@ async def _with_raw_body(
     raw_fields: dict[str, tuple[Any, str]],
 ) -> FinalRequestOptions:
     """
-    Sends the body with the top-level containers left as received in their
-    source text: re-encoding a large prompt costs more CPU than the rest of the
-    request. The client still adapts the body to its cloud (Vertex and Bedrock
-    move "model" into the URL), but only ever sees the containers as opaque
-    stand-ins, which are cheap to copy.
+    Sends the prompt fields left as received in their source text: re-encoding
+    a large prompt costs more CPU than the rest of the request. The client
+    still adapts the body to its cloud (Vertex and Bedrock move "model" into
+    the URL), but only ever sees the prompt fields as opaque stand-ins, which
+    are cheap to copy. Every other field stays a plain value: the clients may
+    route on it, and a stand-in is always truthy.
     """
     assert isinstance(options.json_data, dict)
     shell = {
         k: RawJSON(raw[1])
-        if (raw := raw_fields.get(k)) is not None
+        if k in _PROMPT_FIELDS
+        and (raw := raw_fields.get(k)) is not None
         and v is raw[0]
-        # the clients route on these, and a stand-in is always truthy
-        and k not in ("model", "stream")
         and isinstance(v, dict | list)
         else v
         for k, v in options.json_data.items()

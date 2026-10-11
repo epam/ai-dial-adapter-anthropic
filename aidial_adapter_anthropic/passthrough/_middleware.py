@@ -65,9 +65,9 @@ _ToolContainer = MessageCreateParamsBase | MessageCountTokensParams
 class MessagesMiddleware(ABC):
     """
     Changes the request before it is sent. A body change must replace the
-    whole top-level field: the proxy forwards the source text of every
-    top-level list/dict it still finds unchanged, so an in-place edit inside
-    one would be lost.
+    whole top-level field: the proxy forwards the source text of "messages",
+    "system" and "tools" when it still finds them unchanged, so an in-place
+    edit inside one would be lost.
     """
 
     @abstractmethod
