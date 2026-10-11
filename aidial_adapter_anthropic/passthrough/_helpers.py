@@ -71,10 +71,8 @@ _scan_once: Callable[[str, int], tuple[Any, int]] = make_scanner(
 
 
 def _skip_ws(s: str, idx: int) -> int:
-    # What `json` itself takes for whitespace.
-    while s.startswith((" ", "\t", "\n", "\r"), idx):
-        idx += 1
-    return idx
+    # The regex `json` itself skips whitespace with: a Python loop is ~100x slower.
+    return json.decoder.WHITESPACE.match(s, idx).end()  # type: ignore
 
 
 def parse_raw_fields(content: bytes) -> tuple[Any, dict[str, tuple[Any, str]]]:

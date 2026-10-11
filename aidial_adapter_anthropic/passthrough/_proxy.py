@@ -107,7 +107,12 @@ async def _proxy(
     raw_fields: dict[str, tuple[Any, str]] = {}
     if content := await request.body():
         with contextlib.suppress(json.JSONDecodeError):
-            json_body, raw_fields = parse_raw_fields(content)
+            # The middlewares only ever replace a top-level field of the other
+            # endpoints, unlike the batches one, whose tools sit inside "requests".
+            if endpoint is MessagesAPIEndpoint.POST_BATCHES:
+                json_body = json.loads(content)
+            else:
+                json_body, raw_fields = parse_raw_fields(content)
 
     is_streaming = is_streaming_request(json_body, endpoint)
 
@@ -129,9 +134,7 @@ async def _proxy(
         headers=headers,
     )
 
-    # The middlewares only ever replace a top-level field of these endpoints,
-    # unlike the batches one, whose tools sit inside "requests".
-    if raw_fields and endpoint is not MessagesAPIEndpoint.POST_BATCHES:
+    if raw_fields:
         options = await _with_raw_body(client, options, headers, raw_fields)
 
     response = await client.request(
