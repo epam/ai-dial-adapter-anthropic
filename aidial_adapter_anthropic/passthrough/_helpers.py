@@ -7,6 +7,7 @@ stream conversion.
 """
 
 import functools
+import itertools
 import json
 from collections.abc import AsyncIterator, Callable
 from enum import Enum
@@ -97,7 +98,7 @@ def parse_raw_fields(content: bytes) -> tuple[Any, dict[str, tuple[Any, str]]]:
     if s.startswith("}", idx):
         idx += 1
     else:
-        while True:
+        for parsed in itertools.count(1):
             if not s.startswith('"', idx):
                 raise json.JSONDecodeError(
                     "Expecting property name enclosed in double quotes", s, idx
@@ -117,9 +118,9 @@ def parse_raw_fields(content: bytes) -> tuple[Any, dict[str, tuple[Any, str]]]:
             fields[key] = (value, s[start:idx])
             idx = _skip_ws(s, idx)
             if s.startswith(",", idx):
-                if len(obj) == _MAX_RAW_FIELDS:
+                if parsed == _MAX_RAW_FIELDS:
                     # Not a Messages API body: a Python loop over many keys
-                    # costs several times what json.loads does.
+                    # costs several times what json.loads does (repeated keys too).
                     return json.loads(s), {}
                 idx = _skip_ws(s, idx + 1)
             elif s.startswith("}", idx):

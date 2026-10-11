@@ -627,9 +627,10 @@ def test_parse_raw_fields_matches_json_loads(content: bytes):
         assert json.loads(text) == field
 
 
-def test_parse_raw_fields_skips_source_texts_of_a_wide_object():
+@pytest.mark.parametrize("key", ["k{}", "k"], ids=["distinct", "repeated"])
+def test_parse_raw_fields_skips_source_texts_of_a_wide_object(key: str):
     content = (
-        "{" + ",".join(f'"k{i}": [{i}]' for i in range(100)) + "}"
+        "{" + ",".join(f'"{key.format(i)}": [{i}]' for i in range(100)) + "}"
     ).encode()
 
     assert parse_raw_fields(content) == (json.loads(content), {})
