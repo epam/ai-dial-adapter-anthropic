@@ -70,6 +70,10 @@ _scan_once: Callable[[str, int], tuple[Any, int]] = make_scanner(
 )
 
 
+# Well above the number of Messages API params.
+_MAX_RAW_FIELDS = 64
+
+
 def _skip_ws(s: str, idx: int) -> int:
     # The regex `json` itself skips whitespace with: a Python loop is ~100x slower.
     return json.decoder.WHITESPACE.match(s, idx).end()  # type: ignore
@@ -79,7 +83,8 @@ def parse_raw_fields(content: bytes) -> tuple[Any, dict[str, tuple[Any, str]]]:
     """
     ``json.loads`` that also returns, for a JSON object, each top-level field's
     value along with its source text. It costs no more than ``json.loads``:
-    the fields are parsed by the same scanner, one at a time.
+    the fields are parsed by the same scanner, one at a time. An object with
+    more than ``_MAX_RAW_FIELDS`` fields gets no source texts.
     """
     s = content.decode(json.detect_encoding(content), "surrogatepass")
     idx = _skip_ws(s, 0)
@@ -112,6 +117,10 @@ def parse_raw_fields(content: bytes) -> tuple[Any, dict[str, tuple[Any, str]]]:
             fields[key] = (value, s[start:idx])
             idx = _skip_ws(s, idx)
             if s.startswith(",", idx):
+                if len(obj) == _MAX_RAW_FIELDS:
+                    # Not a Messages API body: a Python loop over many keys
+                    # costs several times what json.loads does.
+                    return json.loads(s), {}
                 idx = _skip_ws(s, idx + 1)
             elif s.startswith("}", idx):
                 idx += 1

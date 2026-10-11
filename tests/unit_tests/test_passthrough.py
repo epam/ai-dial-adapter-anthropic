@@ -538,9 +538,9 @@ class TestDebugLogging:
 class TestRawBody:
     """The body is forwarded as received, not decoded and re-encoded.
 
-    Only the top-level fields the backend rewrites (e.g. Vertex moves "model"
-    into the URL) are re-encoded; every other field reaches the upstream as
-    the very bytes the caller sent.
+    The prompt containers ("messages", "system", "tools") reach the upstream
+    as the very text the caller sent; the other fields are re-encoded, since
+    the backend may rewrite them (e.g. Vertex moves "model" into the URL).
     """
 
     # Spacing and a \u-escape the SDK's JSON encoder would never produce.
@@ -625,6 +625,14 @@ def test_parse_raw_fields_matches_json_loads(content: bytes):
     for key, (field, text) in fields.items():
         assert field is value[key]
         assert json.loads(text) == field
+
+
+def test_parse_raw_fields_skips_source_texts_of_a_wide_object():
+    content = (
+        "{" + ",".join(f'"k{i}": [{i}]' for i in range(100)) + "}"
+    ).encode()
+
+    assert parse_raw_fields(content) == (json.loads(content), {})
 
 
 @pytest.mark.parametrize(

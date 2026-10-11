@@ -82,6 +82,8 @@ async def _with_raw_body(
         else v
         for k, v in options.json_data.items()
     }
+    if not any(isinstance(v, RawJSON) for v in shell.values()):
+        return options
     prepared = await client._prepare_options(
         FinalRequestOptions.construct(
             method=options.method,
@@ -110,8 +112,8 @@ async def _proxy(
     raw_fields: dict[str, tuple[Any, str]] = {}
     if content := await request.body():
         with contextlib.suppress(json.JSONDecodeError):
-            # The middlewares only ever replace a top-level field of the other
-            # endpoints, unlike the batches one, whose tools sit inside "requests".
+            # A batch carries its prompts inside "requests", which is never sent
+            # raw: slicing out its source text would only copy the body.
             if endpoint is MessagesAPIEndpoint.POST_BATCHES:
                 json_body = json.loads(content)
             else:
