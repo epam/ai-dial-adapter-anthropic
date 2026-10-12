@@ -12,7 +12,15 @@ import json
 from collections.abc import AsyncIterator, Callable
 from enum import Enum
 from json.scanner import make_scanner
-from typing import Any, Literal, TypeGuard, assert_never, cast, overload
+from typing import (
+    Any,
+    Literal,
+    Self,
+    TypeGuard,
+    assert_never,
+    cast,
+    overload,
+)
 
 import httpx
 from anthropic._streaming import ServerSentEvent
@@ -71,7 +79,8 @@ _scan_once: Callable[[str, int], tuple[Any, int]] = make_scanner(
 )
 
 
-# Well above the number of Messages API params.
+# Well above the number of Messages API params:
+# https://platform.claude.com/docs/en/api/python/messages/create
 _MAX_RAW_FIELDS = 64
 
 
@@ -142,7 +151,7 @@ class RawJSON:
     def __init__(self, text: str) -> None:
         self.text = text
 
-    def __deepcopy__(self, memo: dict) -> "RawJSON":
+    def __deepcopy__(self, memo: dict) -> Self:
         # Immutable: the clients deep-copy the body they adapt.
         return self
 
@@ -152,7 +161,7 @@ _dumps = functools.partial(
 )
 
 
-def dumps_with_raw(body: Any) -> bytes:
+def dumps_with_raw(body: dict[str, Any]) -> bytes:
     """The SDK's JSON encoding of a dict whose ``RawJSON`` fields go verbatim."""
     return (
         "{"

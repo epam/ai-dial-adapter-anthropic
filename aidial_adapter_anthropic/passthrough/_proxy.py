@@ -72,7 +72,8 @@ async def _with_raw_body(
     are cheap to copy. Every other field stays a plain value: the clients may
     route on it, and a stand-in is always truthy.
     """
-    assert isinstance(options.json_data, dict)
+    if not isinstance(options.json_data, dict):
+        return options
     shell = {
         k: RawJSON(raw[1])
         if k in _PROMPT_FIELDS
@@ -92,6 +93,8 @@ async def _with_raw_body(
             headers=headers,
         )
     )
+    if not isinstance(prepared.json_data, dict):
+        return options
     # The client prepares the options once more on sending: a rewritten URL and
     # a body that isn't a dict make that second pass a no-op for the body. The
     # original headers are kept so auth is added by that pass, on every retry.
