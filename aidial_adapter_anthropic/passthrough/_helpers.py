@@ -9,16 +9,14 @@ stream conversion.
 import functools
 import itertools
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from enum import Enum
-from json.scanner import make_scanner
 from typing import (
     Any,
     Literal,
     Self,
     TypeGuard,
     assert_never,
-    cast,
     overload,
 )
 
@@ -73,10 +71,8 @@ def typecast_request_body(body: Any, endpoint: MessagesAPIEndpoint) -> bool:
     return isinstance(body, dict)
 
 
-# The scanner `json.loads` parses with: a JSON value at an index of a string.
-_scan_once: Callable[[str, int], tuple[Any, int]] = make_scanner(
-    cast(Any, json.JSONDecoder())
-)
+# Parses a JSON value at an index of a string, with the scanner `json.loads` uses.
+_raw_decode = json.JSONDecoder().raw_decode
 
 
 # Well above the number of Messages API params:
@@ -112,17 +108,12 @@ def parse_raw_fields(content: bytes) -> tuple[Any, dict[str, tuple[Any, str]]]:
                 raise json.JSONDecodeError(
                     "Expecting property name enclosed in double quotes", s, idx
                 )
-            key, idx = _scan_once(s, idx)
+            key, idx = _raw_decode(s, idx)
             idx = _skip_ws(s, idx)
             if not s.startswith(":", idx):
                 raise json.JSONDecodeError("Expecting ':' delimiter", s, idx)
             start = _skip_ws(s, idx + 1)
-            try:
-                value, idx = _scan_once(s, start)
-            except StopIteration as e:
-                raise json.JSONDecodeError(
-                    "Expecting value", s, e.value
-                ) from None
+            value, idx = _raw_decode(s, start)
             obj[key] = value
             fields[key] = (value, s[start:idx])
             idx = _skip_ws(s, idx)
