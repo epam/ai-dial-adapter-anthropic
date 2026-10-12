@@ -9,6 +9,8 @@ Rules from code-owner reviews. Follow them in new code.
 - Annotate a method that returns its own class with `typing.Self`, not a quoted class name.
 - Use the precise type a function relies on, not `Any`: a function that calls
   `.items()` and needs string keys takes `dict[str, Any]`.
+- Prefer a public stdlib API over its internals when it does the same job:
+  `json.JSONDecoder().raw_decode`, not `json.scanner.make_scanner`.
 
 ## Comments
 
