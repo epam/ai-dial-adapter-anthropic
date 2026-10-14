@@ -266,6 +266,39 @@ async def test_truncate_first_turn(model):
     assert discarded_messages == [0, 1]
 
 
+async def test_truncate_first_turn_with_dropped_empty_ai_message(model):
+    messages = [
+        user("11"),
+        ai(""),
+        user("22"),
+        ai("33"),
+        user("44"),
+    ]
+
+    discarded_messages = await compute_discarded_messages(
+        model, messages, _PER_MESSAGE_TOKENS + 44
+    )
+
+    # The dropped empty message is discarded along with the following one
+    assert discarded_messages == [0, 1, 2, 3]
+
+
+async def test_truncate_first_turn_with_trailing_empty_ai_message(model):
+    messages = [
+        user("11"),
+        ai("22"),
+        user("33"),
+        ai(""),
+    ]
+
+    discarded_messages = await compute_discarded_messages(
+        model, messages, _PER_MESSAGE_TOKENS + 33
+    )
+
+    # The trailing empty message is attributed to the last kept message
+    assert discarded_messages == [0, 1]
+
+
 async def test_truncate_first_turn_with_system(model):
     messages = [
         sys("11"),
