@@ -6,10 +6,19 @@ filtering, SSE (re)formatting, response-body decoding and the Bedrock event
 stream conversion.
 """
 
+import functools
+import itertools
 import json
 from collections.abc import AsyncIterator
 from enum import Enum
-from typing import Any, Literal, TypeGuard, assert_never, overload
+from typing import (
+    Any,
+    Literal,
+    Self,
+    TypeGuard,
+    assert_never,
+    overload,
+)
 
 import httpx
 from anthropic._streaming import ServerSentEvent
@@ -60,6 +69,99 @@ def typecast_request_body(
 
 def typecast_request_body(body: Any, endpoint: MessagesAPIEndpoint) -> bool:
     return isinstance(body, dict)
+
+
+# Parses a JSON value at an index of a string, with the scanner `json.loads` uses.
+_raw_decode = json.JSONDecoder().raw_decode
+
+
+# Well above the number of Messages API params:
+# https://platform.claude.com/docs/en/api/python/messages/create
+_MAX_RAW_FIELDS = 64
+
+
+def _skip_ws(s: str, idx: int) -> int:
+    # The regex `json` itself skips whitespace with: a Python loop is ~100x slower.
+    return json.decoder.WHITESPACE.match(s, idx).end()  # type: ignore
+
+
+def parse_raw_fields(content: bytes) -> tuple[Any, dict[str, tuple[Any, str]]]:
+    """
+    ``json.loads`` that also returns, for a JSON object, each top-level field's
+    value along with its source text. It costs no more than ``json.loads``:
+    the fields are parsed by the same scanner, one at a time. An object with
+    more than ``_MAX_RAW_FIELDS`` fields gets no source texts.
+    """
+    s = content.decode(json.detect_encoding(content), "surrogatepass")
+    idx = _skip_ws(s, 0)
+    if not s.startswith("{", idx):
+        return json.loads(s), {}
+
+    obj: dict[str, Any] = {}
+    fields: dict[str, tuple[Any, str]] = {}
+    idx = _skip_ws(s, idx + 1)
+    if s.startswith("}", idx):
+        idx += 1
+    else:
+        for parsed in itertools.count(1):
+            if not s.startswith('"', idx):
+                raise json.JSONDecodeError(
+                    "Expecting property name enclosed in double quotes", s, idx
+                )
+            key, idx = _raw_decode(s, idx)
+            idx = _skip_ws(s, idx)
+            if not s.startswith(":", idx):
+                raise json.JSONDecodeError("Expecting ':' delimiter", s, idx)
+            start = _skip_ws(s, idx + 1)
+            value, idx = _raw_decode(s, start)
+            obj[key] = value
+            fields[key] = (value, s[start:idx])
+            idx = _skip_ws(s, idx)
+            if s.startswith(",", idx):
+                if parsed == _MAX_RAW_FIELDS:
+                    # Not a Messages API body: a Python loop over many keys
+                    # costs several times what json.loads does (repeated keys too).
+                    return json.loads(s), {}
+                idx = _skip_ws(s, idx + 1)
+            elif s.startswith("}", idx):
+                idx += 1
+                break
+            else:
+                raise json.JSONDecodeError("Expecting ',' delimiter", s, idx)
+
+    if _skip_ws(s, idx) != len(s):
+        raise json.JSONDecodeError("Extra data", s, idx)
+    return obj, fields
+
+
+class RawJSON:
+    """Source text of a JSON value, to be written out as is."""
+
+    __slots__ = ("text",)
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def __deepcopy__(self, memo: dict) -> Self:
+        # Immutable: the clients deep-copy the body they adapt.
+        return self
+
+
+_dumps = functools.partial(
+    json.dumps, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+)
+
+
+def dumps_with_raw(body: dict[str, Any]) -> bytes:
+    """The SDK's JSON encoding of a dict whose ``RawJSON`` fields go verbatim."""
+    return (
+        "{"
+        + ",".join(
+            f"{_dumps(k)}:{v.text if isinstance(v, RawJSON) else _dumps(v)}"
+            for k, v in body.items()
+        )
+        + "}"
+    ).encode()
 
 
 def is_streaming_request(
