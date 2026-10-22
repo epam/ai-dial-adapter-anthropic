@@ -12,6 +12,7 @@ from aidial_adapter_anthropic.adapter._claude.converters import (
 from aidial_adapter_anthropic.dial._attachments import AttachmentProcessors
 from aidial_adapter_anthropic.dial._message import (
     HumanToolResultMessage,
+    MessageCacheBreakpoints,
     parse_dial_message,
 )
 
@@ -29,6 +30,7 @@ def image_handlers() -> AttachmentProcessors:
 
 async def test_tool_result_round_trip_preserves_custom_content():
     original = HumanToolResultMessage(
+        cache_breakpoints=MessageCacheBreakpoints(),
         id="tool-call-id1",
         content="tool result",
         custom_content=CustomContent(attachments=[_PNG_ATTACHMENT]),
@@ -44,6 +46,7 @@ async def test_tool_result_round_trip_preserves_custom_content():
 
 async def test_tool_result_text_and_image(image_handlers: AttachmentProcessors):
     msg = HumanToolResultMessage(
+        cache_breakpoints=MessageCacheBreakpoints(),
         id="tool-call-id1",
         content="tool result",
         custom_content=CustomContent(attachments=[_PNG_ATTACHMENT]),
@@ -75,7 +78,11 @@ async def test_tool_result_text_and_image(image_handlers: AttachmentProcessors):
 
 
 async def test_tool_result_text_only(image_handlers: AttachmentProcessors):
-    msg = HumanToolResultMessage(id="tool-call-id1", content="tool result")
+    msg = HumanToolResultMessage(
+        cache_breakpoints=MessageCacheBreakpoints(),
+        id="tool-call-id1",
+        content="tool result",
+    )
     system, claude_msgs = await to_claude_messages(
         image_handlers, ListProjection.create([msg])
     )

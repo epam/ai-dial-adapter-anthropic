@@ -103,6 +103,7 @@ from aidial_adapter_anthropic.adapter._claude.blocks import (
     PDF_ATTACHMENT_PROCESSOR,
     PLAIN_TEXT_ATTACHMENT_PROCESSOR,
     create_text_block,
+    to_claude_cache_control,
 )
 from aidial_adapter_anthropic.adapter._claude.citations import create_citations
 from aidial_adapter_anthropic.adapter._claude.config import (
@@ -112,7 +113,6 @@ from aidial_adapter_anthropic.adapter._claude.config import (
 from aidial_adapter_anthropic.adapter._claude.converters import (
     ClaudeMessages,
     split_leading_system_messages,
-    to_claude_cache_control,
     to_claude_effort,
     to_claude_messages,
     to_claude_output_config,
@@ -370,8 +370,8 @@ class Adapter(ChatCompletionAdapter):
         )
 
         cache_control: CacheControlEphemeralParam | Omit = omit
-        if request.cache_breakpoint:
-            cache_control = to_claude_cache_control(request.cache_breakpoint)
+        if (breakpoint := request.cache_breakpoint) is not None:
+            cache_control = to_claude_cache_control(breakpoint)
 
         claude_params = ClaudeParameters(
             max_tokens=request.max_tokens or self.default_max_tokens,

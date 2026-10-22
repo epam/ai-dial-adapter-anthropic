@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from typing import Literal, Self, TypeGuard, assert_never
 
 from aidial_sdk.chat_completion import (
     Attachment,
-    CacheBreakpoint,
     CustomContent,
     FunctionCall,
     MessageContentAudioPart,
@@ -12,13 +12,16 @@ from aidial_sdk.chat_completion import (
     MessageContentPart,
     MessageContentTextPart,
     MessageCustomFields,
+    PromptCacheBreakpoint,
     Role,
     ToolCall,
 )
+from aidial_sdk.chat_completion import CacheBreakpoint as DialCacheBreakpoint
 from aidial_sdk.chat_completion import Message as DialMessage
 from aidial_sdk.chat_completion.request import MessageContentRefusalPart
 from pydantic import BaseModel
 
+from aidial_adapter_anthropic._utils.cache import CacheBreakpoint
 from aidial_adapter_anthropic.adapter._errors import ValidationError
 
 MessageContent = str | list[MessageContentPart] | None
@@ -29,14 +32,65 @@ MessageContentSpecialized = (
 )
 
 
+class MessageCacheBreakpoints(BaseModel):
+    """The cache breakpoints of a single message."""
+
+    trailing: CacheBreakpoint | None = None
+    """DIAL cache breakpoint - per message"""
+
+    parts: dict[int, CacheBreakpoint | None] = {}
+    """Native cache breakpoints - per content part"""
+
+    def __bool__(self) -> bool:
+        return self.trailing is not None or bool(self.parts)
+
+    def all(self) -> Iterator[CacheBreakpoint]:
+        if self.trailing is not None:
+            yield self.trailing
+        yield from (brk for brk in self.parts.values() if brk is not None)
+
+    def to_custom_fields(self) -> MessageCustomFields | None:
+        # The native breakpoints round-trip within the content parts themselves.
+        if (breakpoint := self.trailing) is None:
+            return None
+        # The DIAL breakpoint carries the TTL as an undeclared extra field.
+        ttl = {} if breakpoint.ttl is None else {"ttl": breakpoint.ttl}
+        return MessageCustomFields(cache_breakpoint=DialCacheBreakpoint(**ttl))
+
+    @classmethod
+    def parse(cls, message: DialMessage) -> Self:
+        parts = {
+            idx: None if brk is None else CacheBreakpoint()
+            for idx, brk in _native_cache_breakpoints(message.content)
+        }
+        if parts:
+            return cls(parts=parts)
+
+        cf = message.custom_fields
+        return cls(
+            trailing=CacheBreakpoint.from_dial(
+                cf.cache_breakpoint if cf else None
+            )
+        )
+
+
+def _native_cache_breakpoints(
+    content: MessageContent,
+) -> Iterator[tuple[int, PromptCacheBreakpoint | None]]:
+    if not isinstance(content, list):
+        return
+
+    for idx, part in enumerate(content):
+        if not isinstance(part, MessageContentRefusalPart):
+            yield (idx, part.prompt_cache_breakpoint)
+
+
 class MessageABC(ABC, BaseModel):
-    cache_breakpoint: CacheBreakpoint | None = None
+    cache_breakpoints: MessageCacheBreakpoints = MessageCacheBreakpoints()
 
     @property
     def custom_fields(self) -> MessageCustomFields | None:
-        if self.cache_breakpoint:
-            return MessageCustomFields(cache_breakpoint=self.cache_breakpoint)
-        return None
+        return self.cache_breakpoints.to_custom_fields()
 
     @abstractmethod
     def to_message(self) -> DialMessage: ...
@@ -50,12 +104,6 @@ class BaseMessageABC(MessageABC):
     @property
     @abstractmethod
     def text_content(self) -> str: ...
-
-
-def _get_cache_breakpoint(message: DialMessage) -> CacheBreakpoint | None:
-    if message.custom_fields is None:
-        return None
-    return message.custom_fields.cache_breakpoint
 
 
 class SystemMessage(BaseMessageABC):
@@ -82,8 +130,8 @@ class SystemMessage(BaseMessageABC):
             )
 
         return cls(
+            cache_breakpoints=MessageCacheBreakpoints.parse(message),
             is_developer=message.role == Role.DEVELOPER,
-            cache_breakpoint=_get_cache_breakpoint(message),
             content=content,
         )
 
@@ -116,9 +164,9 @@ class HumanRegularMessage(BaseMessageABC):
             )
 
         return cls(
+            cache_breakpoints=MessageCacheBreakpoints.parse(message),
             content=content,
             custom_content=message.custom_content,
-            cache_breakpoint=_get_cache_breakpoint(message),
         )
 
     @property
@@ -162,10 +210,10 @@ class HumanToolResultMessage(MessageABC):
             )
 
         return cls(
+            cache_breakpoints=MessageCacheBreakpoints.parse(message),
             id=message.tool_call_id,
             content=message.content,
             custom_content=message.custom_content,
-            cache_breakpoint=_get_cache_breakpoint(message),
         )
 
     @property
@@ -203,9 +251,9 @@ class HumanFunctionResultMessage(MessageABC):
             )
 
         return cls(
+            cache_breakpoints=MessageCacheBreakpoints.parse(message),
             name=message.name,
             content=message.content,
-            cache_breakpoint=_get_cache_breakpoint(message),
         )
 
 
@@ -242,9 +290,9 @@ class AIRegularMessage(BaseMessageABC):
             )
 
         return cls(
+            cache_breakpoints=MessageCacheBreakpoints.parse(message),
             content=content,
             custom_content=message.custom_content,
-            cache_breakpoint=_get_cache_breakpoint(message),
         )
 
     @property
@@ -286,10 +334,10 @@ class AIToolCallMessage(MessageABC):
             )
 
         return cls(
+            cache_breakpoints=MessageCacheBreakpoints.parse(message),
             calls=message.tool_calls,
             content=message.content,
             custom_content=message.custom_content,
-            cache_breakpoint=_get_cache_breakpoint(message),
         )
 
 
@@ -319,9 +367,9 @@ class AIFunctionCallMessage(MessageABC):
             )
 
         return cls(
+            cache_breakpoints=MessageCacheBreakpoints.parse(message),
             call=message.function_call,
             content=message.content,
-            cache_breakpoint=_get_cache_breakpoint(message),
         )
 
 

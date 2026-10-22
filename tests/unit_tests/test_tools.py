@@ -57,7 +57,7 @@ def _run_schema_references_check(tool: ChatCompletionToolParam, has_refs: bool):
 
     dial_tools = ToolsConfig.from_request(request)
     assert dial_tools is not None
-    parameters = dial_tools.tools[0].function.parameters
+    parameters = dial_tools.tools[0].tool.function.parameters
     assert parameters is not None
     assert (parameters.get("$defs") is not None) == has_refs
 
