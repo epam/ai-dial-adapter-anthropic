@@ -197,6 +197,15 @@ async def _get_claude_blocks(
             assert_never(message)
 
 
+def _is_blank_content(blocks: Sequence[ContentBlockParam]) -> bool:
+    return all(
+        isinstance(block, dict)
+        and block["type"] == "text"
+        and block["text"].strip() == ""
+        for block in blocks
+    )
+
+
 async def to_claude_messages(
     handlers: AttachmentProcessors[
         TextBlockParam, ContentBlockParam, Configuration
@@ -205,6 +214,7 @@ async def to_claude_messages(
 ) -> tuple[list[TextBlockParam], ClaudeMessages]:
     leading_sys_messages: list[TextBlockParam] = []
     claude_messages: ClaudeMessages = ListProjection()
+    dropped_indices: set[int] = set()
 
     for idx, (message, indices) in enumerate(messages.lst):
         if isinstance(message, SystemMessage) and not claude_messages:
@@ -213,13 +223,30 @@ async def to_claude_messages(
             leading_sys_messages.extend(content)
         else:
             blocks = await _get_claude_blocks(handlers, message, idx)
+
+            # Claude rejects assistant messages with blank text only,
+            # e.g. a failed response kept in the DIAL Chat history.
+            # A dropped message is attributed to the message that follows it.
+            if isinstance(message, AIRegularMessage) and _is_blank_content(
+                blocks.payload
+            ):
+                dropped_indices |= indices
+                continue
+
             _add_cache_control(message, blocks.payload)
             role = _get_claude_message_role(message)
             payload = MessageParam(role=role, content=blocks.payload)
             claude_messages.append(
                 WithResources(payload=payload, resources=blocks.resources),
-                indices,
+                indices | dropped_indices,
             )
+            dropped_indices = set()
+
+    if dropped_indices:
+        if not claude_messages:
+            raise ValidationError("List of messages must not be empty")
+        # Trailing dropped messages are attributed to the last message.
+        claude_messages.lst[-1][1].update(dropped_indices)
 
     return leading_sys_messages, _merge_messages_with_same_role(claude_messages)
 
