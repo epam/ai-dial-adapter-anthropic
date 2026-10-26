@@ -2,14 +2,14 @@
 
 [[package]]
 name = "aidial-sdk"
-version = "0.41.0"
+version = "0.46.0"
 description = "Framework to create applications and model adapters for AI DIAL"
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "aidial_sdk-0.41.0-py3-none-any.whl", hash = "sha256:18e50202fdb97789b3500d9b0506f6b49dbede663a6e2945369ef22e09b2b2c1"},
-    {file = "aidial_sdk-0.41.0.tar.gz", hash = "sha256:9c355e2b7d6cba34311fe48fac1b24fb796db0c755525b62994331890d949a6d"},
+    {file = "aidial_sdk-0.46.0-py3-none-any.whl", hash = "sha256:a681e8753fdb14fe8cf930a8aaf444bdbfd5e2df232f4926c64a980b76785cf4"},
+    {file = "aidial_sdk-0.46.0.tar.gz", hash = "sha256:1fe075f71bcfac25af0657449f1a1c178b03a604a8290f8724de4fee7536056c"},
 ]
 
 [package.dependencies]
@@ -20,7 +20,7 @@ wrapt = ">=1.10,<3"
 
 [package.extras]
 httpx = ["httpx (>=0.25.0,<1.0)"]
-telemetry = ["opentelemetry-api (>=1.22.0,<2.0)", "opentelemetry-exporter-otlp-proto-grpc (>=1.22.0,<2.0)", "opentelemetry-exporter-prometheus (>=0.43b0)", "opentelemetry-instrumentation-aiohttp-client (>=0.43b0)", "opentelemetry-instrumentation-fastapi (>=0.43b0)", "opentelemetry-instrumentation-httpx (>=0.43b0)", "opentelemetry-instrumentation-logging (>=0.43b0)", "opentelemetry-instrumentation-requests (>=0.43b0)", "opentelemetry-instrumentation-system-metrics (>=0.43b0)", "opentelemetry-instrumentation-urllib (>=0.43b0)", "opentelemetry-sdk (>=1.22.0,<2.0)", "prometheus-client (>=0.17.1,<1.0)"]
+telemetry = ["opentelemetry-api (>=1.22.0,<2.0)", "opentelemetry-exporter-otlp-proto-grpc (>=1.22.0,<2.0)", "opentelemetry-exporter-prometheus (>=0.64b0)", "opentelemetry-instrumentation-aiohttp-client (>=0.64b0)", "opentelemetry-instrumentation-fastapi (>=0.64b0)", "opentelemetry-instrumentation-httpx (>=0.64b0)", "opentelemetry-instrumentation-logging (>=0.64b0)", "opentelemetry-instrumentation-requests (>=0.64b0)", "opentelemetry-instrumentation-system-metrics (>=0.64b0)", "opentelemetry-instrumentation-urllib (>=0.64b0)", "opentelemetry-sdk (>=1.22.0,<2.0)", "prometheus-client (>=0.17.1,<1.0)"]
 
 [[package]]
 name = "aiohappyeyeballs"
