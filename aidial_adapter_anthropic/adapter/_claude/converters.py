@@ -244,7 +244,7 @@ async def to_claude_messages(
 
     if dropped_indices:
         if not claude_messages:
-            raise ValidationError("List of messages must not be empty")
+            raise ValidationError("Messages must contain non-whitespace text")
         # Trailing dropped messages are attributed to the last message.
         claude_messages.lst[-1][1].update(dropped_indices)
 

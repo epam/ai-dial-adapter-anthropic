@@ -36,7 +36,7 @@ async def test_empty_message_is_replaced_with_space(adapter: Adapter):
 
 async def test_only_empty_assistant_message_is_rejected(adapter: Adapter):
     with pytest.raises(
-        ValidationError, match="List of messages must not be empty"
+        ValidationError, match="Messages must contain non-whitespace text"
     ):
         await adapter._prepare_claude_request(
             AdapterRequest(messages=prompt(ai("")))
