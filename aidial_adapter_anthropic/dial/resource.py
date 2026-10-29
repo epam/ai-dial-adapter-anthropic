@@ -1,4 +1,5 @@
 import base64
+import binascii
 import mimetypes
 from abc import ABC, abstractmethod
 
@@ -8,15 +9,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic._utils.text import truncate_string
 from aidial_adapter_anthropic._utils.url import download_public_file
+from aidial_adapter_anthropic.adapter._errors import ValidationError
 from aidial_adapter_anthropic.dial.storage import FileStorage
-
-
-class ValidationError(Exception):
-    message: str
-
-    def __init__(self, message: str):
-        self.message = message
-        super().__init__(message)
 
 
 class MissingContentType(ValidationError):
@@ -134,7 +128,12 @@ class AttachmentResource(DialResource):
         type = await self.get_content_type()
 
         if self.attachment.data:
-            data = base64.b64decode(self.attachment.data)
+            try:
+                data = base64.b64decode(self.attachment.data)
+            except binascii.Error:
+                raise ValidationError(
+                    f"The {self.entity_name} data must be base64 encoded"
+                ) from None
         elif self.attachment.url:
             data = await _download_url(storage, self.attachment.url)
         else:
@@ -184,6 +183,10 @@ async def _download_url(file_storage: FileStorage | None, url: str) -> bytes:
     if (resource := Resource.from_data_url(url)) is not None:
         return resource.data
 
-    if file_storage:
-        return await file_storage.download_file(url)
-    return await download_public_file(url)
+    # Both urllib and aiohttp reject a malformed URL with a ValueError.
+    try:
+        if file_storage:
+            return await file_storage.download_file(url)
+        return await download_public_file(url)
+    except ValueError:
+        raise ValidationError(f"Invalid file URL: {url}") from None

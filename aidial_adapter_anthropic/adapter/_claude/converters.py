@@ -77,7 +77,8 @@ def to_claude_cache_control(
     cache_breakpoint: CacheBreakpoint,
 ) -> CacheControlEphemeralParam:
     extra = cache_breakpoint.model_extra or {}
-    return CacheControlEphemeralParam(type="ephemeral", **extra)
+    # A client-supplied "type" is passed through for Claude to validate.
+    return CacheControlEphemeralParam(**{"type": "ephemeral", **extra})
 
 
 def _add_cache_control(

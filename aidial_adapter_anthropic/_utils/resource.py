@@ -5,6 +5,8 @@ import re
 
 from pydantic import BaseModel
 
+from aidial_adapter_anthropic.adapter._errors import ValidationError
+
 
 class Resource(BaseModel):
     type: str
@@ -15,7 +17,7 @@ class Resource(BaseModel):
         try:
             data = base64.b64decode(data_base64, validate=True)
         except Exception:
-            raise ValueError("Invalid base64 data") from None
+            raise ValidationError("Invalid base64 data") from None
 
         return cls(type=type, data=data)
 

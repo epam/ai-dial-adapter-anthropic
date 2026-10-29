@@ -61,6 +61,13 @@ def test_to_claude_cache_control_proxy_extra_fields():
     assert result == {"type": "ephemeral", "foo": "bar"}
 
 
+def test_to_claude_cache_control_proxy_type():
+    result = to_claude_cache_control(
+        CacheBreakpoint.model_construct(type="persistent")
+    )
+    assert result == {"type": "persistent"}
+
+
 async def test_top_level_cache_breakpoint(adapter: Adapter):
     request = await _to_clade_request(
         adapter,
