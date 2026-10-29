@@ -30,6 +30,7 @@ from anthropic.types.beta.beta_tool_result_block_param import (
 
 from aidial_adapter_anthropic._utils.resource import Resource
 from aidial_adapter_anthropic.adapter._claude.config import Configuration
+from aidial_adapter_anthropic.adapter._errors import UserError, ValidationError
 from aidial_adapter_anthropic.dial._attachments import AttachmentProcessor
 
 
@@ -59,12 +60,19 @@ def create_image_block(
 def create_text_document_block(
     resource: Resource, config: Configuration | None
 ) -> RequestDocumentBlockParam:
+    try:
+        text = resource.data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise UserError(
+            f"The {resource.type} document must be UTF-8 encoded"
+        ) from None
+
     return RequestDocumentBlockParam(
         type="document",
         source=PlainTextSourceParam(
             type="text",
             media_type="text/plain",
-            data=resource.data.decode("utf-8"),
+            data=text,
         ),
         citations=_citations_config(config),
     )
@@ -85,11 +93,15 @@ def create_pdf_document_block(
 
 
 def create_tool_use_block(call: ToolCall) -> ContentBlockParam:
+    try:
+        arguments = json.loads(call.function.arguments)
+    except json.JSONDecodeError as e:
+        raise ValidationError(
+            f"The arguments of the tool call '{call.id}' must be a valid JSON: {e}"
+        ) from None
+
     return ToolUseBlockParam(
-        type="tool_use",
-        id=call.id,
-        name=call.function.name,
-        input=json.loads(call.function.arguments),
+        type="tool_use", id=call.id, name=call.function.name, input=arguments
     )
 
 

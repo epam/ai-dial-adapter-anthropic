@@ -5,12 +5,21 @@ from aidial_sdk.chat_completion import (
     Attachment,
     CacheBreakpoint,
     CustomContent,
+    FunctionCall,
+    MessageContentImagePart,
     MessageContentTextPart,
+    ToolCall,
 )
+from aidial_sdk.chat_completion.request import ImageURL
 
 from aidial_adapter_anthropic.adapter._claude.adapter import Adapter
-from aidial_adapter_anthropic.adapter._errors import ValidationError
-from aidial_adapter_anthropic.dial._message import AIRegularMessage
+from aidial_adapter_anthropic.adapter._errors import UserError, ValidationError
+from aidial_adapter_anthropic.dial._message import (
+    AdapterMessage,
+    AIRegularMessage,
+    AIToolCallMessage,
+    HumanRegularMessage,
+)
 from aidial_adapter_anthropic.dial.request import AdapterRequest
 from tests.utils.openai import ai, prompt, sys, user
 
@@ -287,3 +296,86 @@ async def test_empty_assistant_message_with_image_attachment_is_kept(
             }
         ],
     }
+
+
+def _user_with_attachment(**kwargs) -> HumanRegularMessage:
+    return HumanRegularMessage(
+        content="Hi",
+        custom_content=CustomContent(attachments=[Attachment(**kwargs)]),
+    )
+
+
+def _user_with_image_url(url: str) -> HumanRegularMessage:
+    return HumanRegularMessage(
+        content=[
+            MessageContentImagePart(
+                type="image_url", image_url=ImageURL(url=url)
+            )
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    "message, error",
+    [
+        (
+            AIToolCallMessage(
+                calls=[
+                    ToolCall(
+                        id="call_1",
+                        type="function",
+                        function=FunctionCall(
+                            name="f", arguments='{"a": 1 "b"}'
+                        ),
+                    )
+                ]
+            ),
+            ValidationError(
+                "The arguments of the tool call 'call_1' must be a valid JSON: "
+                "Expecting ',' delimiter: line 1 column 9 (char 8)"
+            ),
+        ),
+        (
+            _user_with_attachment(type="image/png", data="A"),
+            ValidationError("The attachment data must be base64 encoded"),
+        ),
+        (
+            _user_with_image_url("data:image/png;base64,A"),
+            ValidationError("Invalid base64 data"),
+        ),
+        (
+            _user_with_image_url("https://example.com/image"),
+            ValidationError(
+                "Can't derive content type of the image content part"
+            ),
+        ),
+        (
+            _user_with_attachment(
+                type="image/png", url="http://[::1/image.png"
+            ),
+            ValidationError("Invalid file URL: http://[::1/image.png"),
+        ),
+        (
+            _user_with_attachment(
+                type="text/plain", data=base64.b64encode(b"\xff").decode()
+            ),
+            UserError("The text/plain document must be UTF-8 encoded"),
+        ),
+    ],
+    ids=[
+        "tool-call-invalid-json",
+        "attachment-invalid-base64",
+        "data-url-invalid-base64",
+        "image-url-unknown-content-type",
+        "attachment-malformed-url",
+        "text-document-not-utf8",
+    ],
+)
+async def test_malformed_request_is_client_error(
+    adapter: Adapter, message: AdapterMessage, error: Exception
+):
+    with pytest.raises(type(error)) as e:
+        await adapter._prepare_claude_request(
+            AdapterRequest(messages=prompt(user("Hi"), message))
+        )
+    assert str(e.value) == str(error)
