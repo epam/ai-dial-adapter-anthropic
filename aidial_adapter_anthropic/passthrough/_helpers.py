@@ -21,6 +21,7 @@ from typing import (
 )
 
 import httpx
+import orjson
 from anthropic._streaming import ServerSentEvent
 from anthropic.types.beta.message_count_tokens_params import (
     MessageCountTokensParams,
@@ -162,6 +163,48 @@ def dumps_with_raw(body: dict[str, Any]) -> bytes:
         )
         + "}"
     ).encode()
+
+
+class Opaque:
+    """A parsed JSON value the clients pass along by reference."""
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+    def __deepcopy__(self, memo: dict) -> Self:
+        # The clients deep-copy the body they adapt, but never change a prompt.
+        return self
+
+
+def _opaque_value(obj: Any) -> Any:
+    if isinstance(obj, Opaque):
+        return obj.value
+    raise TypeError(f"Type is not JSON serializable: {type(obj).__name__}")
+
+
+def dumps_opaque(body: dict[str, Any]) -> bytes:
+    """orjson's encoding of a dict whose ``Opaque`` fields stand for their value."""
+    return orjson.dumps(body, default=_opaque_value)
+
+
+def has_huge_float(value: Any) -> bool:
+    """
+    Whether a parsed JSON value holds a float beyond the 64-bit integers:
+    what orjson makes of a longer integer.
+    """
+    stack = [value]
+    while stack:
+        v = stack.pop()
+        if isinstance(v, float):
+            if abs(v) >= 2.0**63:
+                return True
+        elif isinstance(v, dict):
+            stack.extend(v.values())
+        elif isinstance(v, list):
+            stack.extend(v)
+    return False
 
 
 def is_streaming_request(

@@ -21,6 +21,7 @@ from http import HTTPStatus
 from typing import Any, TypeVar
 
 import httpx
+import orjson
 from anthropic import AsyncAnthropicBedrock
 from anthropic._models import FinalRequestOptions
 from fastapi import FastAPI, Request
@@ -32,10 +33,13 @@ from aidial_adapter_anthropic.passthrough._errors import (
 )
 from aidial_adapter_anthropic.passthrough._helpers import (
     MessagesAPIEndpoint,
+    Opaque,
     RawJSON,
     bedrock_stream_to_sse,
     build_request_headers,
+    dumps_opaque,
     dumps_with_raw,
+    has_huge_float,
     is_streaming_request,
     parse_raw_fields,
     sse_to_bytes_iterator,
@@ -58,6 +62,29 @@ ClientFactory = Callable[[Request], Awaitable[ClientT]] | ClientT
 _PROMPT_FIELDS = ("messages", "system", "tools")
 
 
+async def _with_orjson_body(
+    client: AnthropicClient,
+    options: FinalRequestOptions,
+    headers: dict[str, str],
+) -> FinalRequestOptions:
+    """
+    Sends the body encoded by orjson, which re-encodes a large prompt faster
+    than `_with_raw_body` slices it out of its source text, and ~10x faster
+    than the client's own encoder. As there, the client adapts the body to its
+    cloud but sees the prompt fields only as stand-ins: Vertex and Bedrock
+    deep-copy the body they adapt.
+    """
+    if not isinstance(options.json_data, dict):
+        return options
+    shell = {
+        k: Opaque(v)
+        if k in _PROMPT_FIELDS and isinstance(v, dict | list)
+        else v
+        for k, v in options.json_data.items()
+    }
+    return await _with_content(client, options, headers, shell, dumps_opaque)
+
+
 async def _with_raw_body(
     client: AnthropicClient,
     options: FinalRequestOptions,
@@ -66,11 +93,11 @@ async def _with_raw_body(
 ) -> FinalRequestOptions:
     """
     Sends the prompt fields left as received in their source text: re-encoding
-    a large prompt costs more CPU than the rest of the request. The client
-    still adapts the body to its cloud (Vertex and Bedrock move "model" into
-    the URL), but only ever sees the prompt fields as opaque stand-ins, which
-    are cheap to copy. Every other field stays a plain value: the clients may
-    route on it, and a stand-in is always truthy.
+    a large prompt with json costs more CPU than the rest of the request. The
+    client still adapts the body to its cloud (Vertex and Bedrock move "model"
+    into the URL), but only ever sees the prompt fields as opaque stand-ins,
+    which are cheap to copy. Every other field stays a plain value: the
+    clients may route on it, and a stand-in is always truthy.
     """
     if not isinstance(options.json_data, dict):
         return options
@@ -85,6 +112,16 @@ async def _with_raw_body(
     }
     if not any(isinstance(v, RawJSON) for v in shell.values()):
         return options
+    return await _with_content(client, options, headers, shell, dumps_with_raw)
+
+
+async def _with_content(
+    client: AnthropicClient,
+    options: FinalRequestOptions,
+    headers: dict[str, str],
+    shell: dict[str, Any],
+    encode: Callable[[dict[str, Any]], bytes],
+) -> FinalRequestOptions:
     prepared = await client._prepare_options(
         FinalRequestOptions.construct(
             method=options.method,
@@ -101,7 +138,7 @@ async def _with_raw_body(
     return FinalRequestOptions.construct(
         method=prepared.method,
         url=prepared.url,
-        content=dumps_with_raw(prepared.json_data),
+        content=encode(prepared.json_data),
         headers=headers,
     )
 
@@ -113,14 +150,24 @@ async def _proxy(
 ) -> Response:
     json_body = None
     raw_fields: dict[str, tuple[Any, str]] = {}
+    by_orjson = False
     if content := await request.body():
-        with contextlib.suppress(json.JSONDecodeError):
-            # A batch carries its prompts inside "requests", which is never sent
-            # raw: slicing out its source text would only copy the body.
-            if endpoint is MessagesAPIEndpoint.POST_BATCHES:
-                json_body = json.loads(content)
-            else:
-                json_body, raw_fields = parse_raw_fields(content)
+        with contextlib.suppress(orjson.JSONDecodeError):
+            json_body = orjson.loads(content)
+            # orjson reads an integer beyond 64 bits as a float, losing digits.
+            by_orjson = not has_huge_float(json_body)
+        if not by_orjson:
+            # Such a body goes the json way, as does what orjson rejects and
+            # json takes: lone surrogates, NaN and infinities, UTF-16 and -32,
+            # a BOM. Its prompt fields are sent raw as received.
+            json_body = None
+            with contextlib.suppress(json.JSONDecodeError):
+                # A batch carries its prompts inside "requests", which is never
+                # sent raw: slicing out its source text would only copy the body.
+                if endpoint is MessagesAPIEndpoint.POST_BATCHES:
+                    json_body = json.loads(content)
+                else:
+                    json_body, raw_fields = parse_raw_fields(content)
 
     is_streaming = is_streaming_request(json_body, endpoint)
 
@@ -142,7 +189,9 @@ async def _proxy(
         headers=headers,
     )
 
-    if raw_fields:
+    if by_orjson:
+        options = await _with_orjson_body(client, options, headers)
+    elif raw_fields:
         options = await _with_raw_body(client, options, headers, raw_fields)
 
     response = await client.request(

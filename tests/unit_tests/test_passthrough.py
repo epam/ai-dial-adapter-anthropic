@@ -536,15 +536,16 @@ class TestDebugLogging:
 
 
 class TestRawBody:
-    """The body is forwarded as received, not decoded and re-encoded.
+    """A body orjson rejects is forwarded as received, not decoded and re-encoded.
 
     The prompt containers ("messages", "system", "tools") reach the upstream
     as the very text the caller sent; the other fields are re-encoded, since
     the backend may rewrite them (e.g. Vertex moves "model" into the URL).
     """
 
-    # Spacing and a \u-escape the SDK's JSON encoder would never produce.
-    _MESSAGES = rb'[ {"role" : "user", "content" : "Say h\u00e9llo."} ]'
+    # Spacing and a \u-escape the SDK's JSON encoder would never produce, and a
+    # lone surrogate, which json takes and orjson rejects.
+    _MESSAGES = rb'[ {"role" : "user", "content" : "Say h\u00e9llo \ud83d."} ]'
     _TOOLS = b'[{"name": "t", "input_schema": {"type": "object"}}]'
 
     @pytest.fixture(autouse=True)
@@ -585,6 +586,78 @@ class TestRawBody:
             )
         )
         assert json.loads(forwarded) == options.json_data
+
+    async def test_a_body_orjson_takes_is_sent_as_the_sdk_would_send_it(
+        self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
+    ):
+        messages = rb'[ {"role" : "user", "content" : "Say h\u00e9llo."} ]'
+        content = (
+            b'{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024,'
+            b' "messages": ' + messages + b', "tools": ' + self._TOOLS + b"}"
+        )
+
+        response = await http_client.post(
+            "/v1/messages",
+            content=content,
+            headers={"content-type": "application/json"},
+        )
+
+        assert response.status_code == 200
+        forwarded = mocker.router.calls.last.request.content
+        # Re-encoded by orjson: compact, and UTF-8 rather than \u-escapes.
+        assert messages not in forwarded
+        assert '"Say h\u00e9llo."'.encode() in forwarded
+
+        client = mocker.make_client()
+        options = await client._prepare_options(
+            FinalRequestOptions.construct(
+                method="post", url="/v1/messages", json_data=json.loads(content)
+            )
+        )
+        assert json.loads(forwarded) == options.json_data
+
+    async def test_an_integer_beyond_64_bits_keeps_its_digits(
+        self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
+    ):
+        # orjson would read it as a float: 1.2345678901234568e+29.
+        tools = (
+            b'[{"name": "t", "input_schema": {"type": "integer",'
+            b' "maximum": 123456789012345678901234567890}}]'
+        )
+        content = (
+            b'{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024,'
+            b' "messages": [], "tools": ' + tools + b"}"
+        )
+
+        response = await http_client.post(
+            "/v1/messages",
+            content=content,
+            headers={"content-type": "application/json"},
+        )
+
+        assert response.status_code == 200
+        assert tools in mocker.router.calls.last.request.content
+
+    async def test_long_digits_in_a_string_keep_the_orjson_path(
+        self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
+    ):
+        # A nanosecond timestamp in a pasted log, as prompts often carry.
+        messages = b'[ {"role": "user", "content": "at 1788495631692000000"} ]'
+        content = (
+            b'{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024,'
+            b' "messages": ' + messages + b"}"
+        )
+
+        response = await http_client.post(
+            "/v1/messages",
+            content=content,
+            headers={"content-type": "application/json"},
+        )
+
+        assert response.status_code == 200
+        forwarded = mocker.router.calls.last.request.content
+        assert messages not in forwarded
+        assert b'"at 1788495631692000000"' in forwarded
 
     async def test_routing_fields_are_seen_as_parsed(
         self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
