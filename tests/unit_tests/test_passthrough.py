@@ -14,7 +14,7 @@ import pytest
 from anthropic._models import FinalRequestOptions
 from anthropic.types.messages import MessageBatch
 
-from aidial_adapter_anthropic.passthrough._helpers import parse_raw_fields
+from aidial_adapter_anthropic.passthrough._request_body import RequestBody
 from tests.unit_tests.anthropic_mocks import (
     BASE_MESSAGES_REQUEST,
     MESSAGES_REQUEST,
@@ -538,7 +538,7 @@ class TestDebugLogging:
 class TestRawBody:
     """The body is forwarded as received, not decoded and re-encoded.
 
-    The prompt containers ("messages", "system", "tools") reach the upstream
+    The prompt fields ("messages", "system", "tools") reach the upstream
     as the very text the caller sent; the other fields are re-encoded, since
     the backend may rewrite them (e.g. Vertex moves "model" into the URL).
     """
@@ -580,7 +580,7 @@ class TestRawBody:
         # The same JSON the SDK would have sent after its own adaptation.
         client = mocker.make_client()
         options = await client._prepare_options(
-            FinalRequestOptions.construct(
+            FinalRequestOptions(
                 method="post", url="/v1/messages", json_data=json.loads(content)
             )
         )
@@ -600,48 +600,136 @@ class TestRawBody:
 
         client = mocker.make_client()
         options = await client._prepare_options(
-            FinalRequestOptions.construct(
+            FinalRequestOptions(
                 method="post", url="/v1/messages", json_data=json.loads(content)
             )
         )
         assert mocker.router.calls.last.request.url.path.endswith(options.url)
 
 
-@pytest.mark.parametrize(
-    "content",
-    [
-        b'{"a": [1, {"b": "\\u00e9"}], "c" :null , "a2":"x"}',
-        b" \n{ }\t",
-        b'{"a": 1, "a": [2]}',  # the last duplicate wins, as in json.loads
-        '{"a": "é"}'.encode("utf-16"),
-        b"[1, 2]",
-        b'"text"',
-    ],
-)
-def test_parse_raw_fields_matches_json_loads(content: bytes):
-    value, fields = parse_raw_fields(content)
+class TestRequestBody:
+    """Parsed like ``json.loads``; the prompt fields go out as received."""
 
-    assert value == json.loads(content)
-    for key, (field, text) in fields.items():
-        assert field is value[key]
-        assert json.loads(text) == field
+    @staticmethod
+    async def _send(body: RequestBody) -> FinalRequestOptions:
+        # The platform client sends the body exactly as it's given.
+        client = anthropic.AsyncAnthropic(api_key="key")
+        return await body.to_request_options(
+            client, method="post", url="/v1/messages", headers={}
+        )
 
+    @pytest.mark.parametrize(
+        "content",
+        [
+            b'{"a": [1, {"b": "\\u00e9"}], "c" :null , "a2":"x"}',
+            b" \n{ }\t",
+            b'{"a": 1, "a": [2]}',
+            '{"a": "é"}'.encode("utf-16"),
+            b"[1, 2]",
+            b'"text"',
+        ],
+        ids=["object", "empty", "duplicate", "utf-16", "array", "string"],
+    )
+    def test_value_matches_json_loads(self, content: bytes):
+        assert RequestBody.parse(content).json_data == json.loads(content)
 
-@pytest.mark.parametrize("key", ["k{}", "k"], ids=["distinct", "repeated"])
-def test_parse_raw_fields_skips_source_texts_of_a_wide_object(key: str):
-    content = (
-        "{" + ",".join(f'"{key.format(i)}": [{i}]' for i in range(100)) + "}"
-    ).encode()
+    @pytest.mark.parametrize(
+        "content, sent",
+        [
+            (
+                b'{"messages" :[ 1 ] , "system": "h\\u00e9llo", "model": "m"}',
+                b'{"messages":[ 1 ],"system":"h\\u00e9llo","model":"m"}',
+            ),
+            # The last duplicate wins, as in json.loads.
+            (b'{"tools": [1], "tools": [ 2 ]}', b'{"tools":[ 2 ]}'),
+            # Multi-byte characters shift the bytes off the characters.
+            (
+                '{"system": "é", "messages" : [ "ü😀" ]}'.encode(),
+                '{"system":"é","messages":[ "ü😀" ]}'.encode(),
+            ),
+            (
+                '{"messages": [ "é" ]}'.encode("utf-16"),
+                '{"messages":[ "é" ]}'.encode(),
+            ),
+        ],
+        ids=["spacing-and-escapes", "duplicate", "non-ascii", "utf-16"],
+    )
+    async def test_sends_prompt_fields_as_received(
+        self, content: bytes, sent: bytes
+    ):
+        options = await self._send(RequestBody.parse(content))
 
-    assert parse_raw_fields(content) == (json.loads(content), {})
+        assert options.content == sent
 
+    async def test_re_encodes_a_replaced_field(self):
+        body = RequestBody.parse(b'{"messages": [ ], "tools": [ ]}')
+        body.json_data["tools"] = []
 
-@pytest.mark.parametrize(
-    "content",
-    [b"", b"{", b'{"a"}', b'{"a":}', b'{"a":1,}', b'{"a":1 "b":2}', b"{} x"],
-)
-def test_parse_raw_fields_rejects_what_json_loads_does(content: bytes):
-    with pytest.raises(json.JSONDecodeError):
-        json.loads(content)
-    with pytest.raises(json.JSONDecodeError):
-        parse_raw_fields(content)
+        options = await self._send(body)
+
+        assert options.content == b'{"messages":[ ],"tools":[]}'
+
+    @pytest.mark.parametrize(
+        "content, sent",
+        [
+            (b'{"model": "m"}', b'{"model":"m"}'),
+            (
+                (
+                    "{"
+                    + ",".join(f'"{k}": []' for k in ["messages", *range(99)])
+                    + "}"
+                ).encode(),
+                (
+                    "{"
+                    + ",".join(f'"{k}":[]' for k in ["messages", *range(99)])
+                    + "}"
+                ).encode(),
+            ),
+            (
+                ("{" + ",".join(['"messages": []'] * 100) + "}").encode(),
+                b'{"messages":[]}',
+            ),
+        ],
+        ids=["no-prompt-fields", "wide", "wide-repeated"],
+    )
+    async def test_re_encodes_an_object_with_no_field_to_reuse(
+        self, content: bytes, sent: bytes
+    ):
+        options = await self._send(RequestBody.parse(content))
+
+        assert options.content == sent
+
+    @pytest.mark.parametrize(
+        "content", [b"[1, 2]", b"null"], ids=["array", "null"]
+    )
+    async def test_sends_a_non_object_as_received(self, content: bytes):
+        options = await self._send(RequestBody.parse(content))
+
+        assert options.content == content
+        assert options.json_data is None
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            b"",
+            b"{",
+            b'{"a"}',
+            b'{"a":}',
+            b'{"a":1,}',
+            b'{"a":1 "b":2}',
+            b"{} x",
+            b"\xff",
+        ],
+    )
+    async def test_sends_what_json_loads_rejects_as_received(
+        self, content: bytes
+    ):
+        with pytest.raises(ValueError):
+            json.loads(content)
+        body = RequestBody.parse(content)
+
+        options = await self._send(body)
+
+        assert body.json_data is None
+        assert options.content == content
+        assert options.json_data is None
