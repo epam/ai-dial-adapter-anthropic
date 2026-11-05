@@ -6,7 +6,6 @@ it was parsed from, and sends the prompt fields nothing has replaced as that
 very text.
 """
 
-import functools
 import itertools
 import json
 from dataclasses import dataclass
@@ -116,9 +115,10 @@ class _RawJSON:
         return self
 
 
-_dumps = functools.partial(
-    json.dumps, ensure_ascii=False, separators=(",", ":"), allow_nan=False
-)
+def _dumps_compact(value: Any) -> str:
+    return json.dumps(
+        value, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
 
 
 def _dumps_with_raw(body: dict[str, Any]) -> bytes:
@@ -126,15 +126,11 @@ def _dumps_with_raw(body: dict[str, Any]) -> bytes:
     return (
         "{"
         + ",".join(
-            f"{_dumps(k)}:{v.text if isinstance(v, _RawJSON) else _dumps(v)}"
+            f"{_dumps_compact(k)}:{v.text if isinstance(v, _RawJSON) else _dumps_compact(v)}"
             for k, v in body.items()
         )
         + "}"
     ).encode()
-
-
-# Parses a JSON value at an index of a string, with the scanner `json.loads` uses.
-_raw_decode = json.JSONDecoder().raw_decode
 
 
 # Well above the number of Messages API params:
@@ -169,12 +165,12 @@ def _parse(s: str) -> tuple[Any, dict[str, slice]]:
                 raise json.JSONDecodeError(
                     "Expecting property name enclosed in double quotes", s, idx
                 )
-            key, idx = _raw_decode(s, idx)
+            key, idx = json.JSONDecoder().raw_decode(s, idx)
             idx = _skip_ws(s, idx)
             if not s.startswith(":", idx):
                 raise json.JSONDecodeError("Expecting ':' delimiter", s, idx)
             start = _skip_ws(s, idx + 1)
-            value, idx = _raw_decode(s, start)
+            value, idx = json.JSONDecoder().raw_decode(s, start)
             obj[key] = value
             spans[key] = slice(start, idx)
             idx = _skip_ws(s, idx)
