@@ -75,17 +75,20 @@ async def test_thinking_effort_from_config(adapter: Adapter, effort: str):
     assert request.params["output_config"] == {"effort": effort}
 
 
-async def test_thinking_effort_from_model_params(adapter: Adapter):
+@pytest.mark.parametrize("effort", list(ReasoningEffort))
+async def test_thinking_effort_from_model_params(
+    adapter: Adapter, effort: ReasoningEffort
+):
     config = {"thinking": {"type": "adaptive"}}
     request = await adapter._prepare_claude_request(
         AdapterRequest(
             configuration=config,
-            reasoning_effort=ReasoningEffort.MEDIUM,
+            reasoning_effort=effort,
             messages=prompt(user("hello")),
         )
     )
     assert request.params["thinking"] == {"type": "adaptive"}
-    assert request.params["output_config"] == {"effort": "medium"}
+    assert request.params["output_config"] == {"effort": effort.value}
 
 
 async def test_thinking_effort_both_provided(adapter: Adapter):

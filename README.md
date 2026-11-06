@@ -194,7 +194,7 @@ The relative URLs are resolved against the DIAL file storage and downloaded with
 
 #### Reasoning effort
 
-The `reasoning_effort` field sets the [effort level](https://platform.claude.com/docs/en/build-with-claude/effort) of the response. It only accepts the OpenAI values, so the Claude-specific `xhigh` and `max` levels are reachable via the [configuration](#reasoning-level) alone.
+The `reasoning_effort` field sets the [effort level](https://platform.claude.com/docs/en/build-with-claude/effort) of the response: `low`, `medium`, `high`, `xhigh` or `max`. The `none` and `minimal` values have no Claude counterpart and are rejected by the Anthropic API.
 
 ### DIAL extensions
 
@@ -317,7 +317,7 @@ The thinking blocks are reported in a dedicated `Thinking` stage and preserved a
 
 ##### Reasoning level
 
-The `effort` field extends the [reasoning effort](#reasoning-effort) with the Claude-specific levels: `low`, `medium`, `high`, `xhigh` and `max`. The value is relayed to the Anthropic API as-is, so the levels added later work without an adapter update.
+The `effort` field is an alternative to the [reasoning effort](#reasoning-effort) and accepts the same Claude levels. The value is relayed to the Anthropic API as-is, so the levels added later work without an adapter update.
 
 Setting both `effort` and `reasoning_effort` to different values is a validation error.
 
