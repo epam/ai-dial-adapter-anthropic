@@ -2,14 +2,14 @@
 
 [[package]]
 name = "aidial-sdk"
-version = "0.48.0.dev2"
+version = "0.47.0"
 description = "Framework to create applications and model adapters for AI DIAL"
 optional = false
 python-versions = "<4.0,>=3.11"
 groups = ["main"]
 files = [
-    {file = "aidial_sdk-0.48.0.dev2-py3-none-any.whl", hash = "sha256:8e55ea16f490c0ce973d6bb84e2ad452418c9254fda30e27f1a3828f5001261b"},
-    {file = "aidial_sdk-0.48.0.dev2.tar.gz", hash = "sha256:7598ad90ca270a39c4e51f2da3615a84d591a580437c739cc6f38bfe0440bc72"},
+    {file = "aidial_sdk-0.47.0-py3-none-any.whl", hash = "sha256:2cd7eebf25921086dc861a950bb1165f26306dd0a96cc0c2026b097e4a79047c"},
+    {file = "aidial_sdk-0.47.0.tar.gz", hash = "sha256:1fd54aa360f7c54b73a50c30b67c835f468131b1caae0918e8f74b074d52cf85"},
 ]
 
 [package.dependencies]
@@ -2442,4 +2442,4 @@ bedrock = ["botocore"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "27c2e74570ff68255eb31f66fc9696be207e605b6d626308992f503425ab71b3"
+content-hash = "31ee79ca0a1fd294a130114c81b41f49968b48e5ba98894d2f22674cf65deaaa"
