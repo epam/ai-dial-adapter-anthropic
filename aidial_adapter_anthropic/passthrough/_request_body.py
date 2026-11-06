@@ -123,13 +123,16 @@ def _json_dumps(body: Any) -> bytes:
     return json.dumps(body, default=_unwrap, separators=(",", ":")).encode()
 
 
+_HUGE_FLOAT = 2.0**63
+
+
 def _has_huge_float(value: Any) -> bool:
     """Whether a parsed JSON value holds a float beyond the 64-bit integers."""
     stack = [value]
     while stack:
         v = stack.pop()
         if isinstance(v, float):
-            if abs(v) >= 2.0**63:
+            if abs(v) >= _HUGE_FLOAT:
                 return True
         elif isinstance(v, dict):
             stack.extend(v.values())
