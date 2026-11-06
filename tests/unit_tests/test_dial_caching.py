@@ -64,7 +64,7 @@ def _request(request: dict) -> ChatCompletionRequest:
 def _response(request: ChatCompletionRequest) -> Response:
     return Response(
         Request(
-            headers={},
+            headers={"X-DIAL-DEPLOYMENT-ID": "test-deployment"},
             api_key_secret=SecretStr("test"),
             deployment_id="test-deployment",
             original_request=StarletteRequest(

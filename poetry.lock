@@ -2,14 +2,14 @@
 
 [[package]]
 name = "aidial-sdk"
-version = "0.46.0"
+version = "0.48.0.dev2"
 description = "Framework to create applications and model adapters for AI DIAL"
 optional = false
-python-versions = "<4.0,>=3.10"
+python-versions = "<4.0,>=3.11"
 groups = ["main"]
 files = [
-    {file = "aidial_sdk-0.46.0-py3-none-any.whl", hash = "sha256:a681e8753fdb14fe8cf930a8aaf444bdbfd5e2df232f4926c64a980b76785cf4"},
-    {file = "aidial_sdk-0.46.0.tar.gz", hash = "sha256:1fe075f71bcfac25af0657449f1a1c178b03a604a8290f8724de4fee7536056c"},
+    {file = "aidial_sdk-0.48.0.dev2-py3-none-any.whl", hash = "sha256:8e55ea16f490c0ce973d6bb84e2ad452418c9254fda30e27f1a3828f5001261b"},
+    {file = "aidial_sdk-0.48.0.dev2.tar.gz", hash = "sha256:7598ad90ca270a39c4e51f2da3615a84d591a580437c739cc6f38bfe0440bc72"},
 ]
 
 [package.dependencies]
@@ -21,6 +21,7 @@ wrapt = ">=1.10,<3"
 [package.extras]
 httpx = ["httpx (>=0.25.0,<1.0)"]
 telemetry = ["opentelemetry-api (>=1.22.0,<2.0)", "opentelemetry-exporter-otlp-proto-grpc (>=1.22.0,<2.0)", "opentelemetry-exporter-prometheus (>=0.64b0)", "opentelemetry-instrumentation-aiohttp-client (>=0.64b0)", "opentelemetry-instrumentation-fastapi (>=0.64b0)", "opentelemetry-instrumentation-httpx (>=0.64b0)", "opentelemetry-instrumentation-logging (>=0.64b0)", "opentelemetry-instrumentation-requests (>=0.64b0)", "opentelemetry-instrumentation-system-metrics (>=0.64b0)", "opentelemetry-instrumentation-urllib (>=0.64b0)", "opentelemetry-sdk (>=1.22.0,<2.0)", "prometheus-client (>=0.17.1,<1.0)"]
+translators = ["anthropic (>=0.105.0,<1.0)", "httpx (>=0.25.0,<1.0)", "openai (>=2.46.0,<3.0)"]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -2372,4 +2373,4 @@ bedrock = ["botocore"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "97816ce56df5857c4b406dd1296bc7c3cb904fbc68e391dedfbc3cf5c8deab6b"
+content-hash = "a346a01f93406d6fddedaaad0edaced256ddac3bac5e0ba4783b9ec44a20efbf"
