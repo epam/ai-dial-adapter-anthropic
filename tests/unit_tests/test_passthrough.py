@@ -535,17 +535,8 @@ class TestDebugLogging:
             assert captured["accept-encoding"] == expected_encoding
 
 
-class TestRawBody:
-    """The body is forwarded as received, not decoded and re-encoded.
-
-    The prompt fields ("messages", "system", "tools") reach the upstream
-    as the very text the caller sent; the other fields are re-encoded, since
-    the backend may rewrite them (e.g. Vertex moves "model" into the URL).
-    """
-
-    # Spacing and a \u-escape the SDK's JSON encoder would never produce.
-    _MESSAGES = rb'[ {"role" : "user", "content" : "Say h\u00e9llo."} ]'
-    _TOOLS = b'[{"name": "t", "input_schema": {"type": "object"}}]'
+class TestForwardedBody:
+    """The body reaches the upstream as the JSON the SDK would have sent."""
 
     @pytest.fixture(autouse=True)
     def _setup(self, mocker: AnthropicMocker):
@@ -555,29 +546,38 @@ class TestRawBody:
 
         mocker.mock(_Mock())
 
-    async def test_untouched_fields_are_relayed_verbatim(
-        self, mocker: AnthropicMocker, http_client: httpx.AsyncClient
+    @pytest.mark.parametrize(
+        "fields",
+        [
+            rb'"messages": [ {"role" : "user", "content" : "Say h\u00e9llo."} ]',
+            # A lone surrogate, which json takes and orjson rejects.
+            rb'"messages": [{"role": "user", "content": "\ud83d"}]',
+            # orjson would read it as a float: 1.2345678901234568e+29.
+            b'"messages": [], "tools": [{"name": "t", "input_schema":'
+            b' {"type": "integer", "maximum": 123456789012345678901234567890}}]',
+        ],
+        ids=["plain", "lone-surrogate", "huge-int"],
+    )
+    async def test_sends_the_json_the_sdk_would_send(
+        self,
+        mocker: AnthropicMocker,
+        http_client: httpx.AsyncClient,
+        fields: bytes,
     ):
         content = (
-            b'{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024,'
-            b' "messages": '
-            + self._MESSAGES
-            + b', "tools": '
-            + self._TOOLS
+            b'{"model": "claude-3-5-sonnet-20241022", "max_tokens": 1024, '
+            + fields
             + b"}"
         )
-        headers = {"content-type": "application/json"}
 
         response = await http_client.post(
-            "/v1/messages", content=content, headers=headers
+            "/v1/messages",
+            content=content,
+            headers={"content-type": "application/json"},
         )
 
         assert response.status_code == 200
         forwarded = mocker.router.calls.last.request.content
-        assert self._MESSAGES in forwarded
-        assert self._TOOLS in forwarded
-
-        # The same JSON the SDK would have sent after its own adaptation.
         client = mocker.make_client()
         options = await client._prepare_options(
             FinalRequestOptions(
@@ -608,7 +608,7 @@ class TestRawBody:
 
 
 class TestRequestBody:
-    """Parsed like ``json.loads``; the prompt fields go out as received."""
+    """Parsed like ``json.loads``, sent as compact JSON."""
 
     @staticmethod
     async def _send(body: RequestBody) -> FinalRequestOptions:
@@ -625,10 +625,21 @@ class TestRequestBody:
             b" \n{ }\t",
             b'{"a": 1, "a": [2]}',
             '{"a": "é"}'.encode("utf-16"),
+            rb'{"a": "\ud83d"}',
+            b'{"a": 123456789012345678901234567890}',
             b"[1, 2]",
             b'"text"',
         ],
-        ids=["object", "empty", "duplicate", "utf-16", "array", "string"],
+        ids=[
+            "object",
+            "empty",
+            "duplicate",
+            "utf-16",
+            "lone-surrogate",
+            "huge-int",
+            "array",
+            "string",
+        ],
     )
     def test_value_matches_json_loads(self, content: bytes):
         assert RequestBody.parse(content).json_data == json.loads(content)
@@ -637,67 +648,48 @@ class TestRequestBody:
         "content, sent",
         [
             (
-                b'{"messages" :[ 1 ] , "system": "h\\u00e9llo", "model": "m"}',
-                b'{"messages":[ 1 ],"system":"h\\u00e9llo","model":"m"}',
+                b'{"system" : "h\\u00e9llo", "messages": [ 1 ], "model": "m"}',
+                '{"system":"h\u00e9llo","messages":[1],"model":"m"}'.encode(),
             ),
             # The last duplicate wins, as in json.loads.
-            (b'{"tools": [1], "tools": [ 2 ]}', b'{"tools":[ 2 ]}'),
-            # Multi-byte characters shift the bytes off the characters.
+            (b'{"tools": [1], "tools": [ 2 ]}', b'{"tools":[2]}'),
+            # What orjson can't take is sent ASCII-escaped.
             (
-                '{"system": "é", "messages" : [ "ü😀" ]}'.encode(),
-                '{"system":"é","messages":[ "ü😀" ]}'.encode(),
+                rb'{"messages": [ "\ud83d\u00e9" ]}',
+                rb'{"messages":["\ud83d\u00e9"]}',
             ),
             (
                 '{"messages": [ "é" ]}'.encode("utf-16"),
-                '{"messages":[ "é" ]}'.encode(),
+                rb'{"messages":["\u00e9"]}',
+            ),
+            (b'{"messages": [ NaN ]}', b'{"messages":[NaN]}'),
+            (
+                b'{"messages": [ 123456789012345678901234567890 ]}',
+                b'{"messages":[123456789012345678901234567890]}',
             ),
         ],
-        ids=["spacing-and-escapes", "duplicate", "non-ascii", "utf-16"],
+        ids=[
+            "spacing-and-escapes",
+            "duplicate",
+            "lone-surrogate",
+            "utf-16",
+            "nan",
+            "huge-int",
+        ],
     )
-    async def test_sends_prompt_fields_as_received(
-        self, content: bytes, sent: bytes
-    ):
+    async def test_sends_compact_json(self, content: bytes, sent: bytes):
         options = await self._send(RequestBody.parse(content))
 
         assert options.content == sent
 
-    async def test_re_encodes_a_replaced_field(self):
-        body = RequestBody.parse(b'{"messages": [ ], "tools": [ ]}')
-        body.json_data["tools"] = []
+    async def test_sends_the_body_as_changed(self):
+        body = RequestBody.parse(b'{"messages": [ 1 ], "tools": [ ]}')
+        body.json_data["messages"].append(2)
+        body.json_data["tools"] = [3]
 
         options = await self._send(body)
 
-        assert options.content == b'{"messages":[ ],"tools":[]}'
-
-    @pytest.mark.parametrize(
-        "content, sent",
-        [
-            (b'{"model": "m"}', b'{"model":"m"}'),
-            (
-                (
-                    "{"
-                    + ",".join(f'"{k}": []' for k in ["messages", *range(99)])
-                    + "}"
-                ).encode(),
-                (
-                    "{"
-                    + ",".join(f'"{k}":[]' for k in ["messages", *range(99)])
-                    + "}"
-                ).encode(),
-            ),
-            (
-                ("{" + ",".join(['"messages": []'] * 100) + "}").encode(),
-                b'{"messages":[]}',
-            ),
-        ],
-        ids=["no-prompt-fields", "wide", "wide-repeated"],
-    )
-    async def test_re_encodes_an_object_with_no_field_to_reuse(
-        self, content: bytes, sent: bytes
-    ):
-        options = await self._send(RequestBody.parse(content))
-
-        assert options.content == sent
+        assert options.content == b'{"messages":[1,2],"tools":[3]}'
 
     @pytest.mark.parametrize(
         "content", [b"[1, 2]", b"null"], ids=["array", "null"]
