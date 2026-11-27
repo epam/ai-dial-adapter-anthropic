@@ -195,3 +195,62 @@ def test_web_search_static_tool_kept_out_of_function_tools():
     assert claude_tools.tools == [
         {"type": "web_search_20250305", "name": "web_search"}
     ]
+
+
+def _claude_tool_choice(
+    tool_choice: Any, parallel_tool_calls: bool | None
+) -> Any:
+    request = AzureChatCompletionRequest.model_validate(
+        {
+            "messages": [],
+            "tools": [GET_WEATHER_TOOL],
+            "tool_choice": tool_choice,
+            "parallel_tool_calls": parallel_tool_calls,
+        }
+    )
+    claude_tools = to_claude_tool_config(ToolsConfig.from_request(request))
+    assert claude_tools is not None
+    return claude_tools.tool_choice
+
+
+_NAMED_TOOL_CHOICE = {
+    "type": "function",
+    "function": {"name": "get_temperature"},
+}
+
+
+@pytest.mark.parametrize(
+    "tool_choice, expected",
+    [
+        ("auto", {"type": "auto"}),
+        ("required", {"type": "any"}),
+        (_NAMED_TOOL_CHOICE, {"type": "tool", "name": "get_temperature"}),
+    ],
+    ids=["auto", "required", "named"],
+)
+def test_parallel_tool_calls_disabled(tool_choice: Any, expected: dict):
+    assert _claude_tool_choice(tool_choice, False) == {
+        **expected,
+        "disable_parallel_tool_use": True,
+    }
+
+
+@pytest.mark.parametrize("parallel_tool_calls", [None, True])
+@pytest.mark.parametrize(
+    "tool_choice, expected",
+    [
+        ("auto", {"type": "auto"}),
+        ("required", {"type": "any"}),
+        (_NAMED_TOOL_CHOICE, {"type": "tool", "name": "get_temperature"}),
+        ("none", {"type": "none"}),
+    ],
+    ids=["auto", "required", "named", "none"],
+)
+def test_parallel_tool_calls_not_disabled(
+    tool_choice: Any, expected: dict, parallel_tool_calls: bool | None
+):
+    assert _claude_tool_choice(tool_choice, parallel_tool_calls) == expected
+
+
+def test_parallel_tool_calls_disabled_with_tool_choice_none():
+    assert _claude_tool_choice("none", False) == {"type": "none"}

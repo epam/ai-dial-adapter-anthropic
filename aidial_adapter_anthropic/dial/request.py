@@ -66,7 +66,7 @@ class AdapterRequest:
             n=request.n or 1,
             stop=stop,
             seed=request.seed,
-            max_tokens=request.max_tokens,
+            max_tokens=request.max_completion_tokens or request.max_tokens,
             max_prompt_tokens=request.max_prompt_tokens,
             stream=request.stream,
             tool_config=ToolsConfig.from_request(request),
