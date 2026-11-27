@@ -351,22 +351,29 @@ def _to_claude_tool(tool: Tool) -> ToolParam:
 
 def _to_claude_tool_choice(
     tool_choice: Literal["auto", "none", "required"] | DialToolChoice,
+    parallel_tool_calls: bool | None,
 ) -> ToolChoice:
-    # NOTE tool_choice.disable_parallel_tool_use=True option isn't supported
-    # by older Claude3 versions, so we limit the number of generated function calls
-    # to one in the adapter itself for the functions mode.
+    # NOTE tool_choice.disable_parallel_tool_use=True is only set when
+    # the request explicitly disables parallel tool calls.
+    # Independently, the adapter limits the number of generated function calls
+    # to one in the functions mode.
 
     match tool_choice:
         case DialToolChoice(function=function):
-            return ToolChoiceToolParam(type="tool", name=function.name)
+            ret = ToolChoiceToolParam(type="tool", name=function.name)
         case "required":
-            return ToolChoiceAnyParam(type="any")
+            ret = ToolChoiceAnyParam(type="any")
         case "auto":
-            return ToolChoiceAutoParam(type="auto")
+            ret = ToolChoiceAutoParam(type="auto")
         case "none":
             return ToolChoiceNoneParam(type="none")
         case _:
             assert_never(tool_choice)
+
+    if parallel_tool_calls is False:
+        ret["disable_parallel_tool_use"] = True
+
+    return ret
 
 
 @dataclass
@@ -391,7 +398,9 @@ def to_claude_tool_config(
         return None
 
     tool_choice = (
-        _to_claude_tool_choice(tools_config.tool_choice)
+        _to_claude_tool_choice(
+            tools_config.tool_choice, tools_config.parallel_tool_calls
+        )
         if function_tools
         else None
     )

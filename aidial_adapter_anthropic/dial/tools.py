@@ -45,6 +45,8 @@ class ToolsConfig(BaseModel):
 
     tool_choice: Literal["auto", "none", "required"] | ToolChoice
 
+    parallel_tool_calls: bool | None = None
+
     tool_ids: dict[str, str]
     """
     Mapping from tool call IDs to corresponding tool names.
@@ -131,6 +133,7 @@ class ToolsConfig(BaseModel):
             static_tools=static_tools,
             tools_mode=tools_mode,
             tool_choice=tool_choice or "auto",
+            parallel_tool_calls=request.parallel_tool_calls,
             tool_ids=tool_ids,
         )
 
