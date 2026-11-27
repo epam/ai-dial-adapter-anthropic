@@ -358,7 +358,6 @@ def _to_claude_tool_choice(
     # Independently, the adapter limits the number of generated function calls
     # to one in the functions mode.
 
-    ret: ToolChoiceToolParam | ToolChoiceAnyParam | ToolChoiceAutoParam
     match tool_choice:
         case DialToolChoice(function=function):
             ret = ToolChoiceToolParam(type="tool", name=function.name)
