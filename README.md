@@ -643,6 +643,8 @@ The following Anthropic endpoints are forwarded (relative to the mount path):
 
 The cache breakpoints are the native Anthropic [`cache_control`](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) markers and are forwarded to the upstream as-is: they may be placed on a `tools[i]`, a `system[i]` or a `messages[i].content[j]` block, or on the request body itself for [automatic caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#automatic-caching).
 
+One exception on Vertex AI. Google serves a request from the region that holds its cache only when the request carries `cache_control` [in the same blocks](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/partner-models/claude/prompt-caching) as the one that wrote it, while clients such as Claude Code move the marker to the newest message on every turn. So when DIAL Core sends the `X-DIAL-CACHE-BREAKPOINT-PATH` request header (the end of the cached prefix it matched, where the previous request had its last marker), the passthrough puts a marker back on that block, with the longest TTL among the markers after it, so the TTLs stay in a valid order. It does so only when the request asks for caching after that block, the block has no marker, and the request has fewer than 4 markers in all, nested ones included. Set the environment variable `RESTORE_CACHE_MARKER=false` to switch it off.
+
 ### Supported backends
 
 The client factory may return any of the Anthropic SDK's async clients: `AsyncAnthropic`, `AsyncAnthropicBedrock`, `AsyncAnthropicBedrockMantle`, `AsyncAnthropicVertex`, and `AsyncAnthropicFoundry`.
