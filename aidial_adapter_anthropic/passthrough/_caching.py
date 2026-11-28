@@ -163,7 +163,7 @@ def restore_cache_marker(
     block = (
         value[idx]
         if isinstance(value, list)
-        else {"type": "text", "text": value}
+        else {"text": value, "type": "text"}
     )
     if (
         not isinstance(block, dict)
@@ -190,8 +190,17 @@ def restore_cache_marker(
     # has at least the TTL of every marker after it, so the longest TTL after
     # it fits on both sides.
     template = max(after, key=lambda c: parse_ttl_sec(c.get("ttl")))
-    block["cache_control"] = dict(template)
-    if not isinstance(value, list):
+    keys = list(block)
+    block = {**block, "cache_control": dict(template)}
+    # Vertex AI matches the request by its bytes, so the block must read as in
+    # the request that wrote the cache. DIAL Core forwards message blocks with
+    # their keys sorted (cache_control first); other blocks keep the client's
+    # order, where the marker comes last.
+    if keys == sorted(keys):
+        block = dict(sorted(block.items()))
+    if isinstance(value, list):
+        value[idx] = block
+    else:
         parent[key] = [block]
     return True
 

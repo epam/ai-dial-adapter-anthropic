@@ -6,6 +6,7 @@ supported Anthropic backend (see ``anthropic_mocks.py``).
 
 import json
 import logging
+from typing import Any
 
 import httpx
 import pytest
@@ -638,3 +639,48 @@ class TestCacheMarkerRestore:
             expected_first = restored_first
         assert seen[0]["messages"][0]["content"] == expected_first
         assert seen[0]["messages"][1:] == body["messages"][1:]
+
+    @pytest.mark.parametrize(
+        "first, system, path, keys",
+        [
+            pytest.param(
+                [{"text": "doc", "type": "text"}],
+                None,
+                _FIRST_BLOCK,
+                ["cache_control", "text", "type"],
+                id="message-block-as-core-forwards-it",
+            ),
+            pytest.param(
+                "doc",
+                None,
+                _FIRST_BLOCK,
+                ["cache_control", "text", "type"],
+                id="string-content",
+            ),
+            pytest.param(
+                "doc",
+                [_text("sys")],
+                "prefix.body.system[0]",
+                ["type", "text", "cache_control"],
+                id="block-in-client-order",
+            ),
+        ],
+    )
+    def test_key_order_of_restored_block(
+        self, first: object, system: list | None, path: str, keys: list
+    ):
+        """Vertex AI matches the bytes of the request: the restored block must
+        read as in the request that wrote the cache. DIAL Core forwards message
+        blocks with sorted keys; other blocks keep the client's order."""
+        body: Any = _messages_request(
+            messages=_turns(first), **({"system": system} if system else {})
+        )
+        assert caching_module.restore_cache_marker(
+            body, httpx.Headers({_DIAL_CACHE_BREAKPOINT_PATH: path})
+        )
+        section, index = (
+            (body["system"], 0)
+            if system
+            else (body["messages"][0]["content"], 0)
+        )
+        assert list(section[index]) == keys
