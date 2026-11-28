@@ -1,5 +1,6 @@
+import os
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from typing import Any, Self, TypeGuard
 
 from anthropic.types.beta import (
@@ -14,6 +15,12 @@ from aidial_adapter_anthropic._utils.cache import parse_ttl_sec
 
 _DIAL_CACHE_BREAKPOINT_PATH = "X-DIAL-CACHE-BREAKPOINT-PATH"
 _DIAL_CACHE_EXPIRE_AT = "X-DIAL-CACHE-EXPIRE-AT"
+
+# Switches restore_cache_marker on (the default) or off
+_RESTORE_CACHE_MARKER_ENV = "RESTORE_CACHE_MARKER"
+
+# Anthropic's limit of cache breakpoints per request
+_MAX_MARKERS = 4
 
 
 class CacheBreakpointPath:
@@ -119,3 +126,121 @@ def get_cache_headers(request: MessageCreateParamsBase) -> dict[str, str]:
         _DIAL_CACHE_BREAKPOINT_PATH: breakpoint_path.path,
         _DIAL_CACHE_EXPIRE_AT: str(int(time.time()) + ttl),
     }
+
+
+def restore_cache_marker(
+    request: MessageCreateParamsBase, headers: Mapping[str, str]
+) -> bool:
+    """
+    Puts `cache_control` back on the block DIAL Core names in
+    X-DIAL-CACHE-BREAKPOINT-PATH: the end of the prefix it pinned, where the
+    request this one continues had its last marker. Vertex AI serves a request
+    from the region holding its cache only when the request carries
+    `cache_control` in the same blocks, while clients like Claude Code move
+    the marker to the newest message on every turn.
+
+    Only when RESTORE_CACHE_MARKER isn't switched off, the request asks for
+    caching after that block and has a marker slot left. Returns whether a
+    marker was added.
+    """
+
+    path = headers.get(_DIAL_CACHE_BREAKPOINT_PATH)
+    enabled = os.getenv(_RESTORE_CACHE_MARKER_ENV, "true").lower()
+    if not path or enabled not in ("1", "true"):
+        return False
+
+    # Plain JSON from here: the typed params don't index or mix block types.
+    body: Any = request
+    blocks = list(_prompt_blocks(body))
+    at = next((n for n, (p, *_) in enumerate(blocks) if p == path), None)
+    if at is None:
+        return False
+
+    _, parent, key, idx = blocks[at]
+    value = parent[key]
+    # A string is the same tokens as one text block: DIAL Core hashes both as
+    # content[0].
+    block = (
+        value[idx]
+        if isinstance(value, list)
+        else {"text": value, "type": "text"}
+    )
+    if (
+        not isinstance(block, dict)
+        or "cache_control" in block
+        or block.get("type") in ("thinking", "redacted_thinking")
+    ):
+        return False
+
+    top = body.get("cache_control")
+    after = _markers(
+        [
+            p[k][i] if isinstance(p[k], list) else None
+            for _, p, k, i in blocks[at + 1 :]
+        ]
+    )
+    after += [top] if _is_ephemeral(top) else []
+    everything = _markers(
+        [body.get(f) for f in ("tools", "system", "messages")]
+    )
+    if not after or len(everything) + _is_ephemeral(top) >= _MAX_MARKERS:
+        return False
+
+    # A longer TTL may not follow a shorter one. Every marker before this block
+    # has at least the TTL of every marker after it, so the longest TTL after
+    # it fits on both sides.
+    template = max(after, key=lambda c: parse_ttl_sec(c.get("ttl")))
+    keys = list(block)
+    block = {**block, "cache_control": dict(template)}
+    # Vertex AI matches the request by its bytes, so the block must read as in
+    # the request that wrote the cache. DIAL Core forwards message blocks with
+    # their keys sorted (cache_control first); other blocks keep the client's
+    # order, where the marker comes last.
+    if keys == sorted(keys):
+        block = dict(sorted(block.items()))
+    if isinstance(value, list):
+        value[idx] = block
+    else:
+        parent[key] = [block]
+    return True
+
+
+def _prompt_blocks(body: Any) -> Iterator[tuple[str, Any, str, int]]:
+    """
+    (path, parent, key, index) of every block in the order of the prompt, with
+    the paths of DIAL Core: a scalar where an array is expected is content[0].
+    """
+    sections = [("prefix.body.tools", body, "tools")]
+    sections.append(("prefix.body.system", body, "system"))
+    messages = body.get("messages")
+    for i, message in enumerate(messages if isinstance(messages, list) else []):
+        if isinstance(message, dict):
+            sections.append(
+                (f"prefix.body.messages[{i}].content", message, "content")
+            )
+    for prefix, parent, key in sections:
+        value = parent.get(key)
+        count = (
+            len(value) if isinstance(value, list) else int(value is not None)
+        )
+        for i in range(count):
+            yield f"{prefix}[{i}]", parent, key, i
+
+
+def _markers(value: Any) -> list[BetaCacheControlEphemeralParam]:
+    """
+    The markers at any depth, e.g. also on a block inside a tool result: all of
+    them count toward Anthropic's limit. Counting one too many only skips a
+    restore; one too few would get the request rejected.
+    """
+    found: list[BetaCacheControlEphemeralParam] = []
+    stack = [value]
+    while stack:
+        v = stack.pop()
+        if isinstance(v, dict):
+            if _is_ephemeral(control := v.get("cache_control")):
+                found.append(control)
+            stack.extend(v.values())
+        elif isinstance(v, list):
+            stack.extend(v)
+    return found

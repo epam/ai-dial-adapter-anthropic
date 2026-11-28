@@ -23,7 +23,10 @@ from anthropic import AsyncAnthropicBedrock
 from fastapi import FastAPI, Request
 from fastapi.responses import Response, StreamingResponse
 
-from aidial_adapter_anthropic.passthrough._caching import get_cache_headers
+from aidial_adapter_anthropic.passthrough._caching import (
+    get_cache_headers,
+    restore_cache_marker,
+)
 from aidial_adapter_anthropic.passthrough._errors import (
     anthropic_response_decorator,
 )
@@ -40,7 +43,9 @@ from aidial_adapter_anthropic.passthrough._helpers import (
 from aidial_adapter_anthropic.passthrough._logging import logging_decorator
 from aidial_adapter_anthropic.passthrough._middleware import (
     AnthropicClient,
+    MessagesAPICloud,
     apply_middlewares,
+    get_cloud,
 )
 from aidial_adapter_anthropic.passthrough._request_body import RequestBody
 
@@ -64,6 +69,17 @@ async def _proxy(
     headers = build_request_headers(request.headers)
 
     apply_middlewares(client, headers, json_body, endpoint)
+
+    if (
+        endpoint is MessagesAPIEndpoint.POST_MESSAGES
+        and get_cloud(client) is MessagesAPICloud.GCP
+        and typecast_request_body(json_body, endpoint)
+    ):
+        try:
+            restore_cache_marker(json_body, request.headers)
+        except Exception:
+            # Like the cache headers below: costs cache hits, never the request.
+            _log.exception("Failed to restore the cache marker.")
 
     if _log.isEnabledFor(logging.DEBUG):
         # Ask the upstream not to compress the response so its body (and

@@ -4,13 +4,16 @@ Like the rest of the passthrough tests, every test body runs against each
 supported Anthropic backend (see ``anthropic_mocks.py``).
 """
 
+import json
 import logging
+from typing import Any
 
 import httpx
 import pytest
 
 from aidial_adapter_anthropic.passthrough import _caching as caching_module
 from aidial_adapter_anthropic.passthrough import _proxy as proxy_module
+from aidial_adapter_anthropic.passthrough._middleware import MessagesAPICloud
 from tests.unit_tests.anthropic_mocks import (
     BASE_MESSAGES_REQUEST,
     MESSAGES_REQUEST,
@@ -403,3 +406,281 @@ class TestCacheBreakpointReporting:
 
         assert response.status_code == 200
         assert _DIAL_CACHE_BREAKPOINT_PATH not in response.headers
+
+
+_ONE_HOUR = {"type": "ephemeral", "ttl": "1h"}
+_FIRST_BLOCK = "prefix.body.messages[0].content[0]"
+
+
+def _turns(first: object, *, last_control: dict | None = _EPHEMERAL) -> list:
+    """A user turn, the assistant's answer and a new user turn: the shape of
+    the request that continues the one which had its marker on the first."""
+    last = {} if last_control is None else {"cache_control": last_control}
+    return [
+        {"role": "user", "content": first},
+        {"role": "assistant", "content": [_text("answer")]},
+        {"role": "user", "content": [_text("next", **last)]},
+    ]
+
+
+def _tool_turns(first: object) -> list:
+    """Like `_turns`, with a marker on a block inside the tool result."""
+    return [
+        {"role": "user", "content": first},
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": "t1", "name": "f", "input": {}}
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "t1",
+                    "content": [_text("out", cache_control=_EPHEMERAL)],
+                },
+                _text("next", cache_control=_EPHEMERAL),
+            ],
+        },
+    ]
+
+
+class TestCacheMarkerRestore:
+    """Vertex AI routes a request to the region holding its cache only when the
+    request carries cache_control in the same blocks as the one that wrote it.
+    Unless RESTORE_CACHE_MARKER is switched off, the passthrough puts the
+    marker back on the block DIAL Core names in X-DIAL-CACHE-BREAKPOINT-PATH:
+    the last marker of the request this one continues.
+    """
+
+    @pytest.mark.parametrize(
+        "body, path, env, restored_first",
+        [
+            pytest.param(
+                _messages_request(messages=_turns([_text("doc")])),
+                _FIRST_BLOCK,
+                None,
+                [_text("doc", cache_control=_EPHEMERAL)],
+                id="on-by-default",
+            ),
+            pytest.param(
+                _messages_request(messages=_turns("doc")),
+                _FIRST_BLOCK,
+                None,
+                [_text("doc", cache_control=_EPHEMERAL)],
+                id="string-content-becomes-a-block",
+            ),
+            pytest.param(
+                _messages_request(
+                    messages=_turns([_text("doc")], last_control=_ONE_HOUR)
+                ),
+                _FIRST_BLOCK,
+                None,
+                [_text("doc", cache_control=_ONE_HOUR)],
+                id="copies-the-ttl-of-the-last-marker",
+            ),
+            pytest.param(
+                _messages_request(
+                    messages=[
+                        {"role": "user", "content": [_text("doc")]},
+                        {"role": "assistant", "content": [_text("answer")]},
+                        {
+                            "role": "user",
+                            "content": [
+                                _text("new", cache_control=_ONE_HOUR),
+                                _text("next", cache_control=_EPHEMERAL),
+                            ],
+                        },
+                    ]
+                ),
+                _FIRST_BLOCK,
+                None,
+                [_text("doc", cache_control=_ONE_HOUR)],
+                id="longest-ttl-after-the-block-keeps-the-order",
+            ),
+            pytest.param(
+                _messages_request(
+                    system=[_text("sys", cache_control=_EPHEMERAL)],
+                    messages=_turns([_text("doc")], last_control=None),
+                ),
+                _FIRST_BLOCK,
+                None,
+                None,
+                id="markers-only-before-the-block",
+            ),
+            pytest.param(
+                {
+                    **_messages_request(
+                        messages=_turns([_text("doc")], last_control=None)
+                    ),
+                    "cache_control": _EPHEMERAL,
+                },
+                _FIRST_BLOCK,
+                None,
+                [_text("doc", cache_control=_EPHEMERAL)],
+                id="automatic-caching",
+            ),
+            pytest.param(
+                _messages_request(messages=_turns([_text("doc")])),
+                _FIRST_BLOCK,
+                "true",
+                [_text("doc", cache_control=_EPHEMERAL)],
+                id="switched-on",
+            ),
+            pytest.param(
+                _messages_request(messages=_turns([_text("doc")])),
+                _FIRST_BLOCK,
+                "false",
+                None,
+                id="switched-off",
+            ),
+            pytest.param(
+                _messages_request(messages=_turns([_text("doc")])),
+                None,
+                None,
+                None,
+                id="no-pinned-path",
+            ),
+            pytest.param(
+                _messages_request(
+                    messages=_turns([_text("doc", cache_control=_ONE_HOUR)])
+                ),
+                _FIRST_BLOCK,
+                None,
+                None,
+                id="already-marked",
+            ),
+            pytest.param(
+                _messages_request(
+                    messages=_turns([_text("doc")], last_control=None)
+                ),
+                _FIRST_BLOCK,
+                None,
+                None,
+                id="request-asks-for-no-caching",
+            ),
+            pytest.param(
+                _messages_request(
+                    system=[
+                        _text(f"s{i}", cache_control=_EPHEMERAL)
+                        for i in range(3)
+                    ],
+                    messages=_turns([_text("doc")]),
+                ),
+                _FIRST_BLOCK,
+                None,
+                None,
+                id="four-markers-already",
+            ),
+            pytest.param(
+                _messages_request(
+                    system=[
+                        _text(f"s{i}", cache_control=_EPHEMERAL)
+                        for i in range(2)
+                    ],
+                    messages=_tool_turns([_text("doc")]),
+                ),
+                _FIRST_BLOCK,
+                None,
+                None,
+                id="four-markers-with-one-inside-a-tool-result",
+            ),
+            pytest.param(
+                _messages_request(messages=_turns([_text("doc")])),
+                "prefix.body.messages[7].content[0]",
+                None,
+                None,
+                id="path-out-of-range",
+            ),
+            pytest.param(
+                _messages_request(messages=_turns([_text("doc")])),
+                "prefix.body.messages",
+                None,
+                None,
+                id="unknown-path",
+            ),
+        ],
+    )
+    async def test_restored_marker(
+        self,
+        mocker: AnthropicMocker,
+        http_client: httpx.AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+        body: dict,
+        path: str | None,
+        env: str | None,
+        restored_first: list | None,
+    ):
+        if env is None:
+            monkeypatch.delenv("RESTORE_CACHE_MARKER", raising=False)
+        else:
+            monkeypatch.setenv("RESTORE_CACHE_MARKER", env)
+
+        seen: list[dict] = []
+
+        class _Mock(AnthropicAPIMock):
+            def on_block_messages(self, request) -> bytes:
+                seen.append(json.loads(request.content))
+                return read_fixture("messages_non_streaming_response.json")
+
+        mocker.mock(_Mock())
+
+        response = await http_client.post(
+            "/v1/messages",
+            json=body,
+            headers={} if path is None else {_DIAL_CACHE_BREAKPOINT_PATH: path},
+        )
+
+        assert response.status_code == 200
+        expected_first = body["messages"][0]["content"]
+        if restored_first is not None and mocker.cloud is MessagesAPICloud.GCP:
+            expected_first = restored_first
+        assert seen[0]["messages"][0]["content"] == expected_first
+        assert seen[0]["messages"][1:] == body["messages"][1:]
+
+    @pytest.mark.parametrize(
+        "first, system, path, keys",
+        [
+            pytest.param(
+                [{"text": "doc", "type": "text"}],
+                None,
+                _FIRST_BLOCK,
+                ["cache_control", "text", "type"],
+                id="message-block-as-core-forwards-it",
+            ),
+            pytest.param(
+                "doc",
+                None,
+                _FIRST_BLOCK,
+                ["cache_control", "text", "type"],
+                id="string-content",
+            ),
+            pytest.param(
+                "doc",
+                [_text("sys")],
+                "prefix.body.system[0]",
+                ["type", "text", "cache_control"],
+                id="block-in-client-order",
+            ),
+        ],
+    )
+    def test_key_order_of_restored_block(
+        self, first: object, system: list | None, path: str, keys: list
+    ):
+        """Vertex AI matches the bytes of the request: the restored block must
+        read as in the request that wrote the cache. DIAL Core forwards message
+        blocks with sorted keys; other blocks keep the client's order."""
+        body: Any = _messages_request(
+            messages=_turns(first), **({"system": system} if system else {})
+        )
+        assert caching_module.restore_cache_marker(
+            body, httpx.Headers({_DIAL_CACHE_BREAKPOINT_PATH: path})
+        )
+        section, index = (
+            (body["system"], 0)
+            if system
+            else (body["messages"][0]["content"], 0)
+        )
+        assert list(section[index]) == keys
